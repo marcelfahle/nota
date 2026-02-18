@@ -146,3 +146,34 @@ Notes:
 - numeric columns use drizzle-orm v0.45.1 config syntax: numeric({ precision: X, scale: Y }) or numeric("col_name", { precision: X, scale: Y })
 - lineItems has onDelete: "cascade" on invoiceId FK — deleting an invoice cascades to its line items
 - ESLint + eslint-config-next still in devDependencies — remove when adding Oxlint in 1.2
+
+## 2026-02-18 — Feature 2.4: Create activity_log table and Drizzle relations
+
+Completed:
+- Added activityLog table to src/lib/db/schema.ts with all columns from PRD:
+  - id (uuid, defaultRandom, primaryKey)
+  - invoiceId (uuid, references invoices.id) — mapped to "invoice_id"
+  - action (text, notNull)
+  - metadata (jsonb)
+  - createdAt (timestamp, defaultNow) — mapped to "created_at"
+- Imported `relations` from drizzle-orm and `jsonb` from drizzle-orm/pg-core
+- Defined all Drizzle relations:
+  - usersRelations: users hasMany clients, users hasMany invoices
+  - clientsRelations: clients belongsTo user, clients hasMany invoices
+  - invoicesRelations: invoices belongsTo user, invoices belongsTo client, invoices hasMany lineItems, invoices hasMany activityLog
+  - lineItemsRelations: lineItems belongsTo invoice
+  - activityLogRelations: activityLog belongsTo invoice
+- TypeScript compiles clean, `bun run build` succeeds
+
+Prioritization note:
+- Chose 2.4 (activity_log + relations) as highest priority because it completes the entire Phase 2 database schema. Feature 2.5 (generate and run migration) depends on having all tables and relations defined. Features 1.2 (Oxlint) and 1.3 (shadcn/ui) remain non-blocking tooling/UI setup.
+
+Next up:
+- Feature 2.5: Generate and run initial migration (now unblocked — all 5 tables are defined)
+- Feature 1.2: Configure tsgo, Oxlint, and Oxfmt (non-blocking, but needed for code quality)
+- Feature 1.3: Initialize shadcn/ui and configure DM Sans font (needed before UI work in Phase 3+)
+
+Notes:
+- All 5 tables now defined: users, clients, invoices, lineItems, activityLog
+- Relations enable Drizzle's relational query API (db.query.invoices.findMany({ with: { client: true, lineItems: true } }))
+- ESLint + eslint-config-next still in devDependencies — remove when adding Oxlint in 1.2

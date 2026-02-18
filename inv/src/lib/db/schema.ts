@@ -1,6 +1,8 @@
+import { relations } from "drizzle-orm";
 import {
   date,
   integer,
+  jsonb,
   numeric,
   pgEnum,
   pgTable,
@@ -89,3 +91,47 @@ export const lineItems = pgTable("line_items", {
   amount: numeric({ precision: 12, scale: 2 }).notNull(),
   sortOrder: integer("sort_order").default(0),
 });
+
+export const activityLog = pgTable("activity_log", {
+  id: uuid().defaultRandom().primaryKey(),
+  invoiceId: uuid("invoice_id").references(() => invoices.id),
+  action: text().notNull(),
+  metadata: jsonb(),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+// Relations
+
+export const usersRelations = relations(users, ({ many }) => ({
+  clients: many(clients),
+  invoices: many(invoices),
+}));
+
+export const clientsRelations = relations(clients, ({ one, many }) => ({
+  user: one(users, { fields: [clients.userId], references: [users.id] }),
+  invoices: many(invoices),
+}));
+
+export const invoicesRelations = relations(invoices, ({ one, many }) => ({
+  user: one(users, { fields: [invoices.userId], references: [users.id] }),
+  client: one(clients, {
+    fields: [invoices.clientId],
+    references: [clients.id],
+  }),
+  lineItems: many(lineItems),
+  activityLog: many(activityLog),
+}));
+
+export const lineItemsRelations = relations(lineItems, ({ one }) => ({
+  invoice: one(invoices, {
+    fields: [lineItems.invoiceId],
+    references: [invoices.id],
+  }),
+}));
+
+export const activityLogRelations = relations(activityLog, ({ one }) => ({
+  invoice: one(invoices, {
+    fields: [activityLog.invoiceId],
+    references: [invoices.id],
+  }),
+}));
