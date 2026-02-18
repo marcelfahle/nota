@@ -21,3 +21,19 @@ export const users = pgTable("users", {
   nextInvoiceNumber: integer("next_invoice_number").default(1),
   createdAt: timestamp("created_at").defaultNow(),
 });
+
+export const clients = pgTable("clients", {
+  id: uuid().defaultRandom().primaryKey(),
+  userId: uuid("user_id")
+    .notNull()
+    .references(() => users.id),
+  name: text().notNull(),
+  email: text().notNull(),
+  company: text(),
+  address: text(),
+  vatNumber: text("vat_number"),
+  notes: text(),
+  defaultCurrency: text("default_currency").default("EUR"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});

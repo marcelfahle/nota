@@ -71,3 +71,33 @@ Next up:
 Notes:
 - Using drizzle-orm 0.45.1 pg-core API
 - ESLint + eslint-config-next still in devDependencies — remove when adding Oxlint in 1.2
+
+## 2026-02-18 — Feature 2.2: Create clients table schema
+
+Completed:
+- Added clients table to src/lib/db/schema.ts with all columns from PRD:
+  - id (uuid, defaultRandom, primaryKey)
+  - userId (uuid, notNull, references users.id) — mapped to snake_case "user_id"
+  - name (text, notNull)
+  - email (text, notNull)
+  - company (text, optional)
+  - address (text, optional)
+  - vatNumber (text, optional) — mapped to snake_case "vat_number"
+  - notes (text, optional)
+  - defaultCurrency (text, default 'EUR') — mapped to snake_case "default_currency"
+  - createdAt (timestamp, defaultNow) — mapped to snake_case "created_at"
+  - updatedAt (timestamp, defaultNow) — mapped to snake_case "updated_at"
+- Foreign key: userId references users.id
+- TypeScript compiles clean, `bun run build` succeeds
+
+Prioritization note:
+- Chose 2.2 (clients schema) as highest priority because it's the next table on the critical path. Invoices (2.3) references clients, and all functional features (Phase 3+) depend on the schema being complete. Features 1.2 (Oxlint) and 1.3 (shadcn/ui) remain non-blocking tooling/UI setup.
+
+Next up:
+- Feature 2.3: Create invoices and line_items table schemas (now unblocked by 2.2)
+- Feature 2.4: Activity log table and Drizzle relations
+- Feature 2.5: Generate and run initial migration
+
+Notes:
+- All column names use snake_case in the DB via explicit column name strings (same pattern as users table)
+- ESLint + eslint-config-next still in devDependencies — remove when adding Oxlint in 1.2
