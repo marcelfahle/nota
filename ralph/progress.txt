@@ -101,3 +101,48 @@ Next up:
 Notes:
 - All column names use snake_case in the DB via explicit column name strings (same pattern as users table)
 - ESLint + eslint-config-next still in devDependencies — remove when adding Oxlint in 1.2
+
+## 2026-02-18 — Feature 2.3: Create invoices and line_items table schemas
+
+Completed:
+- Added invoiceStatusEnum pgEnum with values: draft, sent, paid, overdue, cancelled
+- Added invoices table to src/lib/db/schema.ts with all columns from PRD:
+  - id (uuid, defaultRandom, primaryKey)
+  - userId (uuid, notNull, references users.id) — mapped to "user_id"
+  - clientId (uuid, notNull, references clients.id) — mapped to "client_id"
+  - number (text, notNull, unique)
+  - status (invoiceStatusEnum, default 'draft')
+  - currency (text, default 'EUR')
+  - issuedAt (date, notNull) — mapped to "issued_at"
+  - dueAt (date, notNull) — mapped to "due_at"
+  - paidAt (date) — mapped to "paid_at"
+  - sentAt (timestamp) — mapped to "sent_at"
+  - subtotal (numeric 12,2)
+  - taxRate (numeric 5,2) — mapped to "tax_rate"
+  - taxAmount (numeric 12,2) — mapped to "tax_amount"
+  - total (numeric 12,2)
+  - stripePaymentLinkId, stripePaymentLinkUrl, stripePaymentIntentId (text, optional)
+  - notes, internalNotes (text, optional)
+  - reverseCharge (text, default 'false')
+  - createdAt, updatedAt (timestamp, defaultNow)
+- Added lineItems table (mapped to "line_items") with all columns from PRD:
+  - id (uuid, defaultRandom, primaryKey)
+  - invoiceId (uuid, notNull, references invoices.id, onDelete cascade) — mapped to "invoice_id"
+  - description (text, notNull)
+  - quantity (numeric 10,2, notNull)
+  - unitPrice (numeric 12,2, notNull) — mapped to "unit_price"
+  - amount (numeric 12,2, notNull)
+  - sortOrder (integer, default 0) — mapped to "sort_order"
+- TypeScript compiles clean, `bun run build` succeeds
+
+Prioritization note:
+- Chose 2.3 (invoices + line_items schemas) as highest priority because invoices are the core domain entity. Everything from Phase 3 onward depends on the schema being complete. Features 1.2 (Oxlint) and 1.3 (shadcn/ui) remain non-blocking.
+
+Next up:
+- Feature 2.4: Activity log table and Drizzle relations
+- Feature 2.5: Generate and run initial migration
+
+Notes:
+- numeric columns use drizzle-orm v0.45.1 config syntax: numeric({ precision: X, scale: Y }) or numeric("col_name", { precision: X, scale: Y })
+- lineItems has onDelete: "cascade" on invoiceId FK — deleting an invoice cascades to its line items
+- ESLint + eslint-config-next still in devDependencies — remove when adding Oxlint in 1.2
