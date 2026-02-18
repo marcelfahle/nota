@@ -17,3 +17,28 @@ Next up:
 Notes:
 - The .env at project root has a real Neon DATABASE_URL. Other secrets are placeholders.
 - ESLint + eslint-config-next are still in devDependencies — remove them when adding Oxlint in 1.2.
+
+## 2026-02-18 — Feature 1.4: Set up Drizzle ORM with Neon Postgres
+
+Completed:
+- Installed drizzle-orm (v0.45.1) and @neondatabase/serverless (v1.0.2) as dependencies
+- Installed drizzle-kit (v0.31.9) as dev dependency
+- Created inv/.env with DATABASE_URL (real Neon connection), SESSION_SECRET, RESEND_API_KEY, NEXT_PUBLIC_URL, and empty STRIPE placeholders
+- Created drizzle.config.ts pointing to schema at src/lib/db/schema.ts, output to drizzle/, postgresql dialect
+- Created src/lib/db/index.ts — initializes Neon HTTP client and exports drizzle instance
+- Created src/lib/db/schema.ts — placeholder for Phase 2 schema definitions
+- Added package.json scripts: db:generate, db:migrate, db:studio
+- Verified: TypeScript compiles clean, `bun run build` succeeds, `bun run db:studio` launches and connects to Neon
+
+Prioritization note:
+- Chose 1.4 over 1.2 and 1.3 because Drizzle/DB setup unblocks Phase 2 (schemas) and all subsequent functionality. Linting (1.2) and UI fonts (1.3) are non-blocking.
+
+Next up:
+- Feature 1.2: Configure tsgo, Oxlint, and Oxfmt (non-blocking, but needed for code quality)
+- Feature 1.3: Initialize shadcn/ui and configure DM Sans font (needed before UI work in Phase 3+)
+- Feature 2.1+: Database schema definitions (now unblocked by 1.4)
+
+Notes:
+- inv/.env is gitignored (via `.env*` pattern in .gitignore) — safe
+- The neon driver uses HTTP mode (neon-http), suitable for serverless/edge environments
+- ESLint + eslint-config-next still in devDependencies — remove when adding Oxlint in 1.2

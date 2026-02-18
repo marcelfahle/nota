@@ -79,7 +79,7 @@
             "Add scripts to package.json: \"db:generate\": \"drizzle-kit generate\", \"db:migrate\": \"drizzle-kit migrate\", \"db:studio\": \"drizzle-kit studio\"",
             "Verify: bun run db:studio launches (will error on connection if no DATABASE_URL yet, that's fine)"
           ],
-          "passes": false
+          "passes": true
         }
       ]
     },
