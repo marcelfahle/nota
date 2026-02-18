@@ -177,3 +177,28 @@ Notes:
 - All 5 tables now defined: users, clients, invoices, lineItems, activityLog
 - Relations enable Drizzle's relational query API (db.query.invoices.findMany({ with: { client: true, lineItems: true } }))
 - ESLint + eslint-config-next still in devDependencies — remove when adding Oxlint in 1.2
+
+## 2026-02-18 — Feature 2.5: Generate and run initial migration
+
+Completed:
+- Ran `bun run db:generate` — generated migration file drizzle/0000_classy_chamber.sql
+- Verified generated SQL creates all 5 tables (users, clients, invoices, line_items, activity_log) with correct columns, types, defaults, constraints, and foreign keys
+- Verified invoice_status enum is created with values: draft, sent, paid, overdue, cancelled
+- Verified foreign keys: clients→users, invoices→users, invoices→clients, line_items→invoices (CASCADE), activity_log→invoices
+- Verified unique constraints on users.email and invoices.number
+- Ran `bun run db:migrate` — all migrations applied successfully to Neon Postgres
+- Verified `bun run build` still succeeds after migration
+
+Prioritization note:
+- Chose 2.5 (generate and run migration) as highest priority because all 5 tables were defined (2.1–2.4 complete) but not yet created in the database. Without the migration, no Phase 3+ features (auth, CRUD, UI) can function. This was the critical-path bottleneck.
+
+Next up:
+- Feature 1.3: Initialize shadcn/ui and configure DM Sans font (needed before any UI work in Phase 3+)
+- Feature 1.2: Configure tsgo, Oxlint, and Oxfmt (non-blocking but needed for code quality)
+- Feature 3.1+: Auth & Layout (now unblocked — database tables exist)
+
+Notes:
+- Migration file: drizzle/0000_classy_chamber.sql
+- Migration metadata: drizzle/meta/_journal.json and drizzle/meta/0000_snapshot.json
+- The drizzle/ directory contains generated files that should be committed (they track migration state)
+- ESLint + eslint-config-next still in devDependencies — remove when adding Oxlint in 1.2

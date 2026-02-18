@@ -156,7 +156,7 @@
             "Run: bun run db:migrate",
             "Verify: All migrations show as applied, tables exist in database"
           ],
-          "passes": false
+          "passes": true
         }
       ]
     },
