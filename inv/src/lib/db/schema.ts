@@ -1,1 +1,23 @@
-// Schema definitions will be added in Phase 2
+import {
+  integer,
+  pgTable,
+  text,
+  timestamp,
+  uuid,
+} from "drizzle-orm/pg-core";
+
+export const users = pgTable("users", {
+  id: uuid().defaultRandom().primaryKey(),
+  email: text().notNull().unique(),
+  name: text().notNull(),
+  passwordHash: text("password_hash").notNull(),
+  businessName: text("business_name"),
+  businessAddress: text("business_address"),
+  vatNumber: text("vat_number"),
+  bankDetails: text("bank_details"),
+  logoUrl: text("logo_url"),
+  defaultCurrency: text("default_currency").default("EUR"),
+  invoicePrefix: text("invoice_prefix").default("INV"),
+  nextInvoiceNumber: integer("next_invoice_number").default(1),
+  createdAt: timestamp("created_at").defaultNow(),
+});

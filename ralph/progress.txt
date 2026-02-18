@@ -42,3 +42,32 @@ Notes:
 - inv/.env is gitignored (via `.env*` pattern in .gitignore) — safe
 - The neon driver uses HTTP mode (neon-http), suitable for serverless/edge environments
 - ESLint + eslint-config-next still in devDependencies — remove when adding Oxlint in 1.2
+
+## 2026-02-18 — Feature 2.1: Create users table schema
+
+Completed:
+- Defined users table in src/lib/db/schema.ts with all columns from PRD:
+  - id (uuid, defaultRandom, primaryKey)
+  - email (text, notNull, unique)
+  - name (text, notNull)
+  - passwordHash (text, notNull) — mapped to snake_case "password_hash" column
+  - businessName, businessAddress, vatNumber, bankDetails, logoUrl (all optional text)
+  - defaultCurrency (text, default 'EUR')
+  - invoicePrefix (text, default 'INV')
+  - nextInvoiceNumber (integer, default 1)
+  - createdAt (timestamp, defaultNow)
+- All column names use snake_case in the DB via explicit column name strings
+- TypeScript compiles clean, `bun run build` succeeds
+
+Prioritization note:
+- Chose 2.1 (users schema) as highest priority because it's the foundational table referenced by clients, invoices, and all subsequent features. Without the users table, nothing in Phase 2-10 can proceed. Features 1.2 (Oxlint) and 1.3 (shadcn/ui) are tooling/UI that don't block functionality.
+
+Next up:
+- Feature 2.2: Create clients table schema (references users)
+- Feature 2.3: Create invoices and line_items table schemas
+- Feature 2.4: Activity log table and Drizzle relations
+- Feature 2.5: Generate and run initial migration
+
+Notes:
+- Using drizzle-orm 0.45.1 pg-core API
+- ESLint + eslint-config-next still in devDependencies — remove when adding Oxlint in 1.2
