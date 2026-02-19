@@ -331,7 +331,7 @@
             "Run: bun run dev",
             "Verify: Can create an invoice with line items, saved to database"
           ],
-          "passes": false
+          "passes": true
         },
         {
           "id": "5.4",

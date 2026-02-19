@@ -527,3 +527,45 @@ Notes:
 - /invoices/[id] doesn't exist yet — will 404 until Feature 5.4 is built
 - ESLint + eslint-config-next still in devDependencies — remove when adding Oxlint in 1.2
 - No test framework configured yet — verification is via TypeScript compilation and build success
+
+## 2026-02-19 — Feature 5.3: Build invoice creation form
+
+Completed:
+- Created src/components/invoice-form.tsx — reusable Client Component with full invoice form:
+  - Client selector dropdown (populated from DB via server component)
+  - Currency select (EUR/USD/GBP) with live state
+  - Issue date (defaults to today) and due date (defaults to 30 days from today)
+  - Dynamic line items section with add/remove rows:
+    - Each row: Description (required), Qty/Hrs (number), Rate (number), auto-calculated Amount
+    - Trash icon to remove rows (disabled when only 1 row)
+    - "+Add line item" button below the table
+  - Live total calculation: subtotal, tax rate (editable %) with computed tax amount, total
+  - Notes field (visible on invoice) and Internal Notes field
+  - Reverse charge checkbox
+  - Action buttons: Cancel (navigates to /invoices) and Save Draft (submits form)
+- Created src/app/(dashboard)/invoices/new/page.tsx — Server Component
+  - Fetches all clients from DB ordered by name
+  - Passes clients list and createInvoice server action to InvoiceForm
+  - Back link to /invoices, heading "New Invoice"
+- Form uses useActionState with createInvoice server action
+  - Line items serialized as JSON in FormData (matching server action's parseInvoiceFormData)
+  - Currency and taxRate managed as controlled state for live total calculation
+  - On success, redirects to /invoices
+- TypeScript compiles clean, `bun run build` succeeds
+- Route: /invoices/new renders as static page
+
+Prioritization note:
+- Chose 5.3 (invoice creation form) as highest priority because invoice CRUD actions (5.1) and the list page (5.2) are done but there's no way to actually create invoices through the UI. Without this form, the entire app is non-functional for its core purpose — it's an invoicing app with no way to create invoices. Everything downstream (5.4 detail page, 5.5 duplication, 6.x PDF, 7.x Stripe, 8.x email) depends on invoices existing. This is the critical-path bottleneck.
+
+Next up:
+- Feature 5.4: Build invoice detail page (now the top priority — needed to view/manage created invoices)
+- Feature 5.5: Implement invoice duplication
+- Feature 1.2: Configure tsgo, Oxlint, and Oxfmt (non-blocking tooling)
+
+Notes:
+- The "Send Invoice" button is not included yet — it requires Phase 7 (Stripe) and Phase 8 (email). Save Draft is the only submit action for now.
+- The "Enable Stripe payment link" checkbox from the PRD is deferred to Phase 7 when Stripe is integrated.
+- InvoiceForm is designed for reuse by Feature 5.4's edit page — accepts defaultValues prop and configurable action/submitLabel.
+- /invoices/[id] doesn't exist yet — will 404 until Feature 5.4 is built.
+- ESLint + eslint-config-next still in devDependencies — remove when adding Oxlint in 1.2
+- No test framework configured yet — verification is via TypeScript compilation and build success
