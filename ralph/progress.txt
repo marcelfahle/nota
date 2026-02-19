@@ -923,6 +923,34 @@ Notes:
 - Loading skeletons use plain div with animate-pulse instead of a separate Skeleton component — keeps it simple
 - The clients page already had a "New Client" button in the header; the empty state adds a second CTA in the empty content area for discoverability
 
+## 2026-02-19 — Feature 7.1: Set up Stripe client and payment link creation
+
+Completed:
+- Installed stripe@20.3.1 as a dependency
+- Created src/lib/stripe.ts:
+  - Initializes Stripe client with STRIPE_SECRET_KEY env var
+  - Exports createPaymentLink(invoice) function:
+    - Accepts invoice object with id, number, total, currency
+    - Creates a one-time Stripe Price with product_data (product name = "Invoice INV-0042")
+    - Converts total from decimal string to integer cents (Math.round(parseFloat * 100))
+    - Creates a Stripe Payment Link using the price, with invoiceId in metadata
+    - Returns the full payment link object (includes id and url)
+- All checks pass: `bun run check` (tsc + lint + format:check) — 0 errors
+
+Prioritization note:
+- Chose 7.1 (Stripe client) as highest priority because it's a foundational dependency that unblocks both 7.2 (Stripe webhook handler) and 8.2 (sendInvoice action). The sendInvoice flow requires a payment link to be created before the email is sent. 7.1 is also a small, focused feature that can be written, type-checked, and verified without a real API key being configured yet. The remaining features (8.1 Resend, 8.2 sendInvoice, 9.2 reminders) all depend on 7.1 being done first.
+
+Next up:
+- Feature 7.2: Stripe webhook handler (now unblocked by 7.1)
+- Feature 8.1: Set up Resend and email templates (independent of 7.1)
+- Feature 8.2: sendInvoice action (needs both 7.1 + 8.1)
+
+Notes:
+- Uses Stripe's price + payment link two-step approach: first creates a Price with product_data (one-time, no persistent product needed), then creates a PaymentLink referencing that price
+- Payment link metadata includes invoiceId — this is how the webhook (7.2) will correlate payments back to invoices
+- STRIPE_SECRET_KEY must be set in .env for the client to work at runtime; the code compiles fine without it
+- Currency is lowercased for Stripe API (e.g., "EUR" → "eur")
+
 ## 2026-02-19 — Feature 11.2: Mobile responsive pass
 
 Completed:
