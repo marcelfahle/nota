@@ -750,3 +750,41 @@ Notes:
 - Buffer must be wrapped in `new Uint8Array(buffer)` because tsgo's strict typing doesn't accept Node.js Buffer as BodyInit
 - The endpoint is at /api/invoices/[id]/pdf — accessible via same-origin requests which include the session cookie automatically
 - No test framework configured yet — verification is via TypeScript compilation and check suite
+
+## 2026-02-19 — Feature 10.1: Build settings page for business details
+
+Completed:
+- Created src/actions/settings.ts with 'use server' directive
+  - Defined settingsSchema with zod: businessName, businessAddress, vatNumber, bankDetails, defaultCurrency (default EUR), invoicePrefix (default INV)
+  - Implemented getUserId() helper (same pattern as clients.ts/invoices.ts)
+  - Implemented updateSettings action (useActionState-compatible): validates with zod, updates user record, revalidates /settings
+- Created src/components/settings-form.tsx — Client Component form with all fields:
+  - Business Name (Input), VAT Number (Input) in 2-column grid
+  - Business Address (textarea, 3 rows)
+  - Bank Details / IBAN/BIC (textarea, 3 rows)
+  - Default Currency (Select: EUR/USD/GBP), Invoice Prefix (Input) in 2-column grid
+  - Helper text below invoice prefix explaining PREFIX-0001 format
+  - Success feedback: "Settings saved" shown when state.success is true
+  - Error display for validation failures
+- Created src/app/(dashboard)/settings/page.tsx — Server Component
+  - Queries current user's business details from DB
+  - Falls back to sensible defaults if no user exists
+  - Passes settings to SettingsForm client component
+- Added Settings gear icon (lucide-react Settings) to dashboard header navigation
+  - Ghost variant button placed next to "New Invoice" button
+  - Links to /settings
+- All checks pass: `bun run check` (tsc + lint + format:check) — 0 errors
+
+Prioritization note:
+- Chose 10.1 (settings page) as highest priority because it has zero external dependencies (unlike Phase 7 Stripe and Phase 8 Resend which require API keys), is core functionality (business details appear on PDFs which are already built), and enables users to customize their invoicing experience immediately. Phase 9.1 (overdue cron) was also independent but less impactful.
+
+Next up:
+- Feature 10.2: Seed initial user and wire up user context (no external deps, improves auth correctness)
+- Feature 9.1: Overdue detection cron job (DB-only, no API keys needed)
+- Feature 11.3: Activity log on invoice detail (DB-only, UI feature)
+
+Notes:
+- Used plain HTML textarea with shadcn Input-matching styles for address and bank details fields (no shadcn Textarea component installed)
+- Avoided useEffect + useState for "saved" feedback due to oxlint react-hooks-js/set-state-in-effect rule — derived directly from action state instead
+- Settings gear icon uses ghost variant to visually separate it from the primary "New Invoice" action
+- No test framework configured yet — verification is via TypeScript compilation and check suite

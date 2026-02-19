@@ -1,6 +1,6 @@
 "use client";
 
-import { Plus } from "lucide-react";
+import { Plus, Settings } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
@@ -45,12 +45,19 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             </nav>
           </div>
 
-          <Button asChild size="sm">
-            <Link href="/invoices/new">
-              <Plus />
-              New Invoice
-            </Link>
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button asChild size="sm">
+              <Link href="/invoices/new">
+                <Plus />
+                New Invoice
+              </Link>
+            </Button>
+            <Button asChild size="sm" variant="ghost">
+              <Link href="/settings">
+                <Settings className="h-4 w-4" />
+              </Link>
+            </Button>
+          </div>
         </div>
       </header>
 

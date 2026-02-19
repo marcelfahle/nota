@@ -528,7 +528,7 @@
             "Run: bun run dev",
             "Verify: Can update business details, values persist on reload"
           ],
-          "passes": false
+          "passes": true
         },
         {
           "id": "10.2",
