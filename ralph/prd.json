@@ -209,7 +209,7 @@
             "Run: bun run dev",
             "Verify: Layout renders with header, navigation works between tabs"
           ],
-          "passes": false
+          "passes": true
         },
         {
           "id": "3.4",

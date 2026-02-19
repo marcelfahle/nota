@@ -292,3 +292,31 @@ Notes:
 - /invoices doesn't exist yet (Phase 5), so after login you'll get a 404 — this is expected until 5.2 is built
 - ESLint + eslint-config-next still in devDependencies — remove when adding Oxlint in 1.2
 - No test framework configured yet — verification is via TypeScript compilation and build success
+
+## 2026-02-19 — Feature 3.3: Create dashboard layout with header and navigation
+
+Completed:
+- Created src/app/(dashboard)/layout.tsx as a Client Component (uses usePathname for active tab)
+- Header: left side has logo (small black rounded square with "inv" text + "inv." label), nav tabs for Invoices and Clients
+- Right side: "New Invoice" button (default/black, with Plus icon from lucide-react)
+- Header has bottom border (border-zinc-100)
+- Main content area: max-w-6xl mx-auto px-6 py-8
+- Nav tabs use Next.js Link components to /invoices and /clients
+- Active tab highlighted with bg-zinc-100 + text-zinc-900; inactive tabs text-zinc-500 with hover state
+- Created placeholder pages: src/app/(dashboard)/invoices/page.tsx and src/app/(dashboard)/clients/page.tsx
+- TypeScript compiles clean, `bun run build` succeeds
+- All routes render: /, /clients, /invoices, /login
+
+Prioritization note:
+- Chose 3.3 (dashboard layout) as highest priority because it's the gateway to ALL dashboard functionality. Every remaining feature (3.4, 4.x, 5.x, ..., 11.x) renders inside this layout. Without it, no dashboard page can exist. It was the single biggest blocker on the critical path.
+
+Next up:
+- Feature 3.4: Create shared UI components (StatusBadge, StatCard) — needed by invoice list (5.2)
+- Feature 4.1: Client CRUD server actions — next on critical path after 3.4
+- Feature 1.2: Configure tsgo, Oxlint, and Oxfmt (non-blocking tooling)
+
+Notes:
+- Login redirects to /invoices which now renders (placeholder) inside the dashboard layout
+- The layout is a Client Component because usePathname() requires it — this is standard Next.js pattern
+- ESLint + eslint-config-next still in devDependencies — remove when adding Oxlint in 1.2
+- No test framework configured yet — verification is via TypeScript compilation and build success
