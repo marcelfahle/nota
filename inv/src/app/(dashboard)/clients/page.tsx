@@ -1,5 +1,5 @@
 import { asc, eq, sql } from "drizzle-orm";
-import { Plus } from "lucide-react";
+import { Plus, Users } from "lucide-react";
 import Link from "next/link";
 
 import { Button } from "@/components/ui/button";
@@ -44,7 +44,19 @@ export default async function ClientsPage() {
       </div>
 
       {clientList.length === 0 ? (
-        <p className="text-sm text-zinc-400">No clients yet.</p>
+        <div className="flex flex-col items-center justify-center py-16">
+          <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-zinc-100">
+            <Users className="h-6 w-6 text-zinc-400" />
+          </div>
+          <p className="mb-1 text-sm font-medium text-zinc-900">No clients yet</p>
+          <p className="mb-4 text-sm text-zinc-500">Add your first client to start invoicing.</p>
+          <Button asChild size="sm">
+            <Link href="/clients/new">
+              <Plus />
+              Add Client
+            </Link>
+          </Button>
+        </div>
       ) : (
         <div className="divide-y divide-zinc-100">
           {clientList.map((client) => (

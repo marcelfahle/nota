@@ -561,7 +561,7 @@
             "Run: bun run dev",
             "Verify: Empty states show when no data, loading states flash on navigation"
           ],
-          "passes": false
+          "passes": true
         },
         {
           "id": "11.2",

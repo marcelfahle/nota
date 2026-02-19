@@ -893,3 +893,32 @@ Notes:
 - The ACTION_LABELS map supports all 5 action types that can be logged: created, sent, paid, reminder_sent, marked_overdue
 - Activities are serialized to ISO strings when passed from server to client component (timestamps can't be passed directly)
 - No test framework configured yet — verification is via TypeScript compilation and check suite
+
+## 2026-02-19 — Feature 11.1: Add empty states and loading states
+
+Completed:
+- Updated invoices list page (src/app/(dashboard)/invoices/page.tsx):
+  - Replaced plain "No invoices yet." text with centered empty state: FileText icon in zinc circle, heading, description, and "Create Invoice" CTA button
+  - Added lucide-react FileText and Plus icons, shadcn Button import
+- Updated clients list page (src/app/(dashboard)/clients/page.tsx):
+  - Replaced plain "No clients yet." text with centered empty state: Users icon in zinc circle, heading, description, and "Add Client" CTA button
+  - Added lucide-react Users icon import
+- Created src/app/(dashboard)/invoices/loading.tsx — skeleton matching invoice list layout:
+  - Skeleton stat cards (3 columns), filter tabs (5 pills), table header, and 5 table rows with placeholders for number, client, amount, status badge, and dates
+- Created src/app/(dashboard)/clients/loading.tsx — skeleton matching client list layout:
+  - Skeleton header with title + button, and 5 client rows with avatar circle, name/email, and amount/count placeholders
+- Both loading files use local Skeleton component (div with animate-pulse + bg-zinc-100) — no extra shadcn component needed
+- All checks pass: `bun run check` (tsc + lint + format:check) — 0 errors
+
+Prioritization note:
+- Chose 11.1 (empty states + loading states) as highest priority because it's fully unblocked with no external dependencies, directly improves user experience for the working app, and is self-contained. The remaining features requiring API keys (7.1 Stripe, 7.2 webhook, 8.1 Resend, 8.2 sendInvoice, 9.2 reminders) all need STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET, or RESEND_API_KEY to be configured. Feature 11.2 (mobile responsive) is lower priority since it's pure visual polish.
+
+Next up:
+- Feature 11.2: Mobile responsive pass (unblocked, pure UI)
+- Feature 7.1: Set up Stripe client (needs STRIPE_SECRET_KEY in .env)
+- Feature 8.1: Set up Resend and email templates (needs RESEND_API_KEY)
+
+Notes:
+- Empty states use consistent pattern: icon in zinc-100 circle, bold title, muted description, primary CTA button
+- Loading skeletons use plain div with animate-pulse instead of a separate Skeleton component — keeps it simple
+- The clients page already had a "New Client" button in the header; the empty state adds a second CTA in the empty content area for discoverability

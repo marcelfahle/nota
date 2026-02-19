@@ -1,8 +1,10 @@
 import { desc, eq } from "drizzle-orm";
+import { FileText, Plus } from "lucide-react";
 import Link from "next/link";
 
 import { StatCard } from "@/components/stat-card";
 import { StatusBadge } from "@/components/status-badge";
+import { Button } from "@/components/ui/button";
 import { db } from "@/lib/db";
 import { clients, invoices } from "@/lib/db/schema";
 import { formatCurrency } from "@/lib/utils";
@@ -97,7 +99,19 @@ export default async function InvoicesPage({
 
       {/* Invoice Table */}
       {filtered.length === 0 ? (
-        <p className="text-sm text-zinc-400">No invoices yet.</p>
+        <div className="flex flex-col items-center justify-center py-16">
+          <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-zinc-100">
+            <FileText className="h-6 w-6 text-zinc-400" />
+          </div>
+          <p className="mb-1 text-sm font-medium text-zinc-900">No invoices yet</p>
+          <p className="mb-4 text-sm text-zinc-500">Create your first invoice to get started.</p>
+          <Button asChild size="sm">
+            <Link href="/invoices/new">
+              <Plus />
+              Create Invoice
+            </Link>
+          </Button>
+        </div>
       ) : (
         <table className="w-full">
           <thead>
