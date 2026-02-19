@@ -493,3 +493,37 @@ Notes:
 - client-detail.tsx now uses StatusBadge for invoice status display
 - ESLint + eslint-config-next still in devDependencies — remove when adding Oxlint in 1.2
 - No test framework configured yet — verification is via TypeScript compilation and build success
+
+## 2026-02-19 — Feature 5.2: Build invoice list page with stats and filters
+
+Completed:
+- Replaced placeholder invoices page with full Server Component at src/app/(dashboard)/invoices/page.tsx
+- Queries all invoices with client data via LEFT JOIN on clients table, ordered by issuedAt desc
+- Computes stats from all invoices (regardless of filter):
+  - Outstanding: sum of total for sent + overdue invoices
+  - Total Paid: sum of total for paid invoices
+  - Overdue: sum of total for overdue invoices + count
+- Renders 3 StatCard components at top with computed values
+- Filter tabs: All, Draft, Sent, Paid, Overdue — uses URL search params (?status=draft) for filter state
+  - Active tab highlighted with bg-zinc-100 + text-zinc-900
+  - "All" tab links to /invoices (no query param)
+- Invoice table with columns: Number (mono font), Client (name + email), Amount (right-aligned, semibold), Status (StatusBadge), Issued, Due
+- Rows link to /invoices/[id] (will 404 until Feature 5.4 is built)
+- Empty state: "No invoices yet." when no invoices match filter
+- formatDate helper for displaying dates in "Mon DD, YYYY" format
+- TypeScript compiles clean, `bun run build` succeeds
+- Route renders as dynamic (ƒ) due to searchParams usage
+
+Prioritization note:
+- Chose 5.2 (invoice list page) as highest priority because it's the main invoice dashboard — the first thing users see after login. Server actions (5.1) and shared components (3.4) were already done, making it fully unblocked. Without this page, users can't see, navigate to, or manage any invoices. This is the critical-path bottleneck for all remaining invoice features (5.3, 5.4, 5.5) and beyond.
+
+Next up:
+- Feature 5.3: Build invoice creation form (needs 5.1, which is done)
+- Feature 5.4: Build invoice detail page with side panel or full page view
+- Feature 5.5: Implement invoice duplication
+
+Notes:
+- Stats are computed in JS from the full invoice list (not separate SQL aggregates) — fine for a single-user app with small dataset
+- /invoices/[id] doesn't exist yet — will 404 until Feature 5.4 is built
+- ESLint + eslint-config-next still in devDependencies — remove when adding Oxlint in 1.2
+- No test framework configured yet — verification is via TypeScript compilation and build success

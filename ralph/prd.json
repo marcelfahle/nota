@@ -313,7 +313,7 @@
             "Run: bun run dev",
             "Verify: Invoice list renders with stats and working filters"
           ],
-          "passes": false
+          "passes": true
         },
         {
           "id": "5.3",
