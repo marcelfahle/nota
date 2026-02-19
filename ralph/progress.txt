@@ -420,3 +420,48 @@ Notes:
 - formatCurrency is duplicated in client-detail.tsx (same as clients list page); Feature 3.4 will add shared version to lib/utils.ts
 - ESLint + eslint-config-next still in devDependencies — remove when adding Oxlint in 1.2
 - No test framework configured yet — verification is via TypeScript compilation and build success
+
+## 2026-02-19 — Feature 5.1: Create server actions for invoice CRUD
+
+Completed:
+- Created src/actions/invoices.ts with 'use server' directive
+- Defined invoiceSchema with zod: clientId (uuid), currency (string, default EUR), issuedAt (string), dueAt (string), taxRate (coerced number, 0-100, default 0), notes (optional), internalNotes (optional), reverseCharge (string, default "false"), lineItems array of { description, quantity, unitPrice }
+- Defined lineItemSchema with zod: description (string, min 1), quantity (coerced positive number), unitPrice (coerced non-negative number)
+- Implemented getUserId() helper (same pattern as clients.ts — queries first user)
+- Implemented calculateTotals(): computes subtotal from line items, taxAmount from subtotal * taxRate/100, total as subtotal + taxAmount; returns all as .toFixed(2) strings for numeric columns
+- Implemented parseInvoiceFormData(): extracts fields from FormData, parses lineItems from JSON string
+- Implemented createInvoice action (useActionState-compatible: prevState, formData):
+  - Validates with zod
+  - Runs in a db.transaction() for atomicity:
+    - Queries user's invoicePrefix + nextInvoiceNumber
+    - Generates invoice number as "PREFIX-0042" (padded to 4 digits)
+    - Atomically increments nextInvoiceNumber on users table
+    - Inserts invoice with calculated totals
+    - Inserts all line items with sortOrder
+    - Inserts activityLog entry with action "created"
+  - Returns { success: true, invoiceId } on success
+- Implemented updateInvoice action (invoiceId, prevState, formData):
+  - Validates with zod
+  - Runs in a db.transaction():
+    - Updates invoice row with new data + totals + updatedAt
+    - Deletes old line items, inserts new ones (replace strategy)
+  - Revalidates /invoices and /invoices/[id]
+- Implemented deleteInvoice action: deletes by id (line items cascade via FK), revalidates /invoices
+- TypeScript compiles clean, `bun run build` succeeds
+
+Prioritization note:
+- Chose 5.1 (invoice CRUD actions) as highest priority because invoices are the core domain entity of the entire app. Without invoice CRUD, nothing in Phase 5 through 11 can proceed — no invoice list (5.2), no invoice form (5.3), no PDF generation (6.x), no Stripe integration (7.x), no email sending (8.x). This is the critical-path bottleneck. Feature 3.4 (StatusBadge/StatCard) is needed for UI but doesn't block the server actions.
+
+Next up:
+- Feature 3.4: Create shared UI components (StatusBadge, StatCard, formatCurrency) — needed for 5.2 (invoice list page)
+- Feature 5.2: Build invoice list page with stats and filters (needs 3.4 + 5.1)
+- Feature 5.3: Build invoice creation form (needs 5.1)
+
+Notes:
+- Line items are passed as a JSON string in FormData (field name "lineItems") — this is the cleanest approach for dynamic arrays in server actions
+- Numeric columns (subtotal, taxRate, taxAmount, total, quantity, unitPrice, amount) are stored as .toFixed(2) strings matching the numeric(precision, scale) column types
+- Invoice number generation is atomic within the transaction to prevent duplicates
+- updateInvoice uses a delete-then-insert strategy for line items (simpler than diffing)
+- db.transaction() works with drizzle-orm/neon-http (Neon HTTP transactions)
+- ESLint + eslint-config-next still in devDependencies — remove when adding Oxlint in 1.2
+- No test framework configured yet — verification is via TypeScript compilation and build success
