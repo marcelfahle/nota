@@ -256,3 +256,39 @@ Notes:
 - The @theme inline block in globals.css uses oklch color values (zinc palette)
 - All 12 component files live in src/components/ui/
 - ESLint + eslint-config-next still in devDependencies — remove when adding Oxlint in 1.2
+
+## 2026-02-19 — Feature 3.2: Create login page and auth action
+
+Completed:
+- Created src/actions/auth.ts with 'use server' directive
+  - login() action: accepts FormData via useActionState pattern (prevState, formData)
+  - Password verification uses Node.js crypto scrypt + timingSafeEqual
+  - Expects PASSWORD_HASH env var in format "salt:scrypt_hex" (64-byte key length)
+  - On success: sets httpOnly "session" cookie with SESSION_SECRET value, redirects to /invoices
+  - On failure: returns { error: string } for client-side display
+  - Cookie config: httpOnly, secure in production, sameSite lax, 30-day maxAge
+  - logout() action: deletes session cookie, redirects to /login
+- Created src/app/login/page.tsx as Client Component
+  - Minimal centered layout: logo mark (black rounded square with "inv"), title "inv."
+  - Single password field + "Sign in" button, styled with shadcn Input, Label, Button
+  - Uses React 19 useActionState for form submission with pending state
+  - Shows error message in red below the form on auth failure
+  - Button shows "Signing in..." while pending
+- TypeScript compiles clean, `bun run build` succeeds
+- Login page renders at /login as static route
+
+Prioritization note:
+- Chose 3.2 (login page + auth action) as highest priority because the auth middleware (3.1) is done but there's no way for users to actually authenticate. Without login, the entire app is inaccessible — every dashboard feature (3.3, 3.4, 4.x, 5.x, ...) is untestable. This is the critical-path bottleneck.
+
+Next up:
+- Feature 3.3: Create dashboard layout with header and navigation (next on critical path)
+- Feature 3.4: Create shared UI components (StatusBadge, StatCard)
+- Feature 4.1+: Client CRUD (needs dashboard layout first)
+
+Notes:
+- PASSWORD_HASH env var must be added to .env. Generate with:
+  node -e "const c=require('crypto'),s=c.randomBytes(16).toString('hex');c.scrypt('your-password',s,64,(e,k)=>console.log(s+':'+k.toString('hex')))"
+- The middleware (3.1) compares cookie value directly to SESSION_SECRET — the login action sets that exact value
+- /invoices doesn't exist yet (Phase 5), so after login you'll get a 404 — this is expected until 5.2 is built
+- ESLint + eslint-config-next still in devDependencies — remove when adding Oxlint in 1.2
+- No test framework configured yet — verification is via TypeScript compilation and build success

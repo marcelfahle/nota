@@ -192,7 +192,7 @@
             "Run: bun run dev",
             "Verify: Login page renders, submitting correct password redirects to app, wrong password stays on login"
           ],
-          "passes": false
+          "passes": true
         },
         {
           "id": "3.3",
