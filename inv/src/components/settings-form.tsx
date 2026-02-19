@@ -63,11 +63,15 @@ export function SettingsForm({
   const [state, formAction, pending] = useActionState(updateSettings, null);
 
   const [prefix, setPrefix] = useState(settings.invoicePrefix ?? "");
-  const [separator, setSeparator] = useState(settings.invoiceSeparator);
+  const [separator, setSeparator] = useState(
+    settings.invoiceSeparator || "none",
+  );
   const [digits, setDigits] = useState(String(settings.invoiceDigits));
   const [nextNumber, setNextNumber] = useState(
     String(settings.nextInvoiceNumber ?? 1),
   );
+
+  const effectiveSeparator = separator === "none" ? "" : separator;
 
   const preview = useMemo(() => {
     const num = parseInt(nextNumber) || 1;
@@ -77,10 +81,10 @@ export function SettingsForm({
         digits: d,
         number: num + offset,
         prefix,
-        separator: prefix ? separator : "",
+        separator: prefix ? effectiveSeparator : "",
       }),
     );
-  }, [prefix, separator, digits, nextNumber]);
+  }, [prefix, effectiveSeparator, digits, nextNumber]);
 
   return (
     <div className="space-y-10">
@@ -149,13 +153,14 @@ export function SettingsForm({
                 value={prefix}
               />
             </div>
+            <input
+              name="invoiceSeparator"
+              type="hidden"
+              value={effectiveSeparator}
+            />
             <div className={prefix ? "space-y-2" : "hidden"}>
               <Label>Separator</Label>
-              <Select
-                name="invoiceSeparator"
-                onValueChange={setSeparator}
-                value={separator}
-              >
+              <Select onValueChange={setSeparator} value={separator}>
                 <SelectTrigger className="w-full">
                   <SelectValue />
                 </SelectTrigger>
@@ -163,7 +168,7 @@ export function SettingsForm({
                   <SelectItem value="-">Dash (-)</SelectItem>
                   <SelectItem value="/">Slash (/)</SelectItem>
                   <SelectItem value=".">Dot (.)</SelectItem>
-                  <SelectItem value="">None</SelectItem>
+                  <SelectItem value="none">None</SelectItem>
                 </SelectContent>
               </Select>
             </div>

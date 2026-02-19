@@ -26,7 +26,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body className={`${sans.variable} ${mono.variable} antialiased`}>{children}</body>
+      <body suppressHydrationWarning className={`${sans.variable} ${mono.variable} antialiased`}>{children}</body>
     </html>
   );
 }
