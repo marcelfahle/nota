@@ -64,7 +64,7 @@
             "Run: bun run dev",
             "Verify: App renders with DM Sans font"
           ],
-          "passes": false
+          "passes": true
         },
         {
           "id": "1.4",

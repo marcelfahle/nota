@@ -225,3 +225,34 @@ Notes:
 - Next.js 16.1.6 shows a deprecation warning: "The 'middleware' file convention is deprecated. Please use 'proxy' instead." However, middleware still works and is recognized as "ƒ Proxy (Middleware)" in the build output. The PRD specifies middleware, and it functions correctly.
 - No test framework is configured yet — verification is via TypeScript compilation and build success
 - ESLint + eslint-config-next still in devDependencies — remove when adding Oxlint in 1.2
+
+## 2026-02-19 — Feature 1.3: Initialize shadcn/ui and configure DM Sans font
+
+Completed:
+- Initialized shadcn/ui using `bunx shadcn@latest init -d -b zinc --css-variables`
+  - Style: New York, Base color: Zinc, CSS variables: enabled
+  - Generated components.json config, utils.ts (with cn() helper), and globals.css theme
+- Installed 12 shadcn/ui components: button, input, label, select, table, badge, separator, dropdown-menu, dialog, sheet, tabs, card
+- Installed dependencies: clsx, tailwind-merge, class-variance-authority, lucide-react, tw-animate-css, @radix-ui/* components
+- Replaced Geist/Geist_Mono fonts with DM Sans and DM Mono in src/app/layout.tsx
+  - DM_Sans with --font-sans CSS variable
+  - DM_Mono (weights 400, 500) with --font-mono CSS variable
+- Added --font-sans and --font-mono to Tailwind v4 @theme inline block in globals.css
+- Added `font-sans` to body base styles so DM Sans is the default body font
+- Updated metadata: title "inv.", description "Personal invoicing app"
+- TypeScript compiles clean, `bun run build` succeeds
+
+Prioritization note:
+- Chose 1.3 (shadcn/ui + DM Sans) as highest priority because it's the critical blocker for ALL UI work. Every remaining feature from 3.2 onward needs shadcn components (Button, Input, Dialog, etc.) and the design system (zinc palette, DM Sans font). Feature 1.2 (Oxlint/Oxfmt) is non-blocking tooling.
+
+Next up:
+- Feature 3.2: Create login page and auth action (now unblocked — shadcn components available)
+- Feature 3.3: Create dashboard layout with header and navigation
+- Feature 3.4: Create shared UI components (StatusBadge, StatCard)
+- Feature 1.2: Configure tsgo, Oxlint, and Oxfmt (non-blocking tooling)
+
+Notes:
+- shadcn/ui is configured for Tailwind v4 (CSS-based theme, no tailwind.config.ts)
+- The @theme inline block in globals.css uses oklch color values (zinc palette)
+- All 12 component files live in src/components/ui/
+- ESLint + eslint-config-next still in devDependencies — remove when adding Oxlint in 1.2
