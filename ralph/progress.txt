@@ -652,3 +652,34 @@ Notes:
 - InvoiceForm now supports configurable redirect via redirectTo prop — new page uses default ("/invoices"), edit page redirects back to detail page
 - The detail page follows the same Server Component → Client Component pattern as clients/[id]
 - No test framework configured yet — verification is via TypeScript compilation and check suite
+
+## 2026-02-19 — Feature 5.5: Implement invoice duplication
+
+Completed:
+- Added duplicateInvoice server action to src/actions/invoices.ts:
+  - Queries original invoice and its line items by id
+  - Generates new invoice number atomically (same transaction pattern as createInvoice)
+  - Sets today's date as issuedAt, 30 days from now as dueAt
+  - Copies: clientId, currency, notes, internalNotes, reverseCharge, tax settings, line items
+  - Does NOT copy: Stripe links, sentAt, paidAt, status (always draft)
+  - Logs activity with action "created" and metadata { duplicatedFrom: originalId }
+- Added "Duplicate" button to invoice detail page (src/components/invoice-detail.tsx):
+  - Uses Copy icon from lucide-react (already imported)
+  - Shows "Duplicating..." while in progress
+  - On success, redirects to the newly created invoice's detail page
+  - Placed between "Download PDF" and "Delete" buttons, visible for all invoice statuses
+- All checks pass: `bun run check` (tsc + lint + format:check) — 0 errors
+- Phase 5 is now fully complete (5.1–5.5 all pass)
+
+Prioritization note:
+- Chose 5.5 (invoice duplication) as highest priority because it completes Phase 5 entirely. It's a small, self-contained feature with no external dependencies, and wrapping up the current phase creates a clean handoff point for Phase 6 (PDF generation).
+
+Next up:
+- Feature 6.1: Install react-pdf and create PDF invoice template (critical path — enables PDF download and is needed by 8.2 sendInvoice)
+- Feature 6.2: Create PDF generation endpoint (needs 6.1)
+- Feature 7.1: Set up Stripe client (needs STRIPE_SECRET_KEY in .env)
+
+Notes:
+- The Duplicate button is available for all invoice statuses (draft, sent, paid, overdue, cancelled)
+- Duplicated invoices always start as draft with fresh dates and no Stripe/payment data
+- The Copy icon is shared with the Stripe payment link indicator — no visual conflict since they appear in different contexts

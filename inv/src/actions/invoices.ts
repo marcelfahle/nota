@@ -176,3 +176,79 @@ export async function deleteInvoice(invoiceId: string) {
   await db.delete(invoices).where(eq(invoices.id, invoiceId));
   revalidatePath("/invoices");
 }
+
+export async function duplicateInvoice(invoiceId: string) {
+  const [original] = await db.select().from(invoices).where(eq(invoices.id, invoiceId)).limit(1);
+
+  if (!original) {
+    throw new Error("Invoice not found");
+  }
+
+  const originalItems = await db.select().from(lineItems).where(eq(lineItems.invoiceId, invoiceId));
+
+  const today = new Date().toISOString().split("T")[0];
+  const dueDate = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
+
+  const inserted = await db.transaction(async (tx) => {
+    const [user] = await tx
+      .select({
+        invoicePrefix: users.invoicePrefix,
+        nextInvoiceNumber: users.nextInvoiceNumber,
+      })
+      .from(users)
+      .where(eq(users.id, original.userId))
+      .limit(1);
+
+    const prefix = user.invoicePrefix || "INV";
+    const num = user.nextInvoiceNumber || 1;
+    const number = `${prefix}-${String(num).padStart(4, "0")}`;
+
+    await tx
+      .update(users)
+      .set({ nextInvoiceNumber: num + 1 })
+      .where(eq(users.id, original.userId));
+
+    const [inv] = await tx
+      .insert(invoices)
+      .values({
+        clientId: original.clientId,
+        currency: original.currency,
+        dueAt: dueDate,
+        internalNotes: original.internalNotes,
+        issuedAt: today,
+        notes: original.notes,
+        number,
+        reverseCharge: original.reverseCharge,
+        subtotal: original.subtotal,
+        taxAmount: original.taxAmount,
+        taxRate: original.taxRate,
+        total: original.total,
+        userId: original.userId,
+      })
+      .returning({ id: invoices.id });
+
+    if (originalItems.length > 0) {
+      await tx.insert(lineItems).values(
+        originalItems.map((item, index) => ({
+          amount: item.amount,
+          description: item.description,
+          invoiceId: inv.id,
+          quantity: item.quantity,
+          sortOrder: index,
+          unitPrice: item.unitPrice,
+        })),
+      );
+    }
+
+    await tx.insert(activityLog).values({
+      action: "created",
+      invoiceId: inv.id,
+      metadata: { duplicatedFrom: invoiceId },
+    });
+
+    return inv;
+  });
+
+  revalidatePath("/invoices");
+  return inserted.id;
+}

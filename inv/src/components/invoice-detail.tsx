@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
-import { deleteInvoice } from "@/actions/invoices";
+import { deleteInvoice, duplicateInvoice } from "@/actions/invoices";
 import { StatusBadge } from "@/components/status-badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -60,6 +60,7 @@ function formatDate(dateStr: string): string {
 export function InvoiceDetailView({ invoice }: InvoiceDetailProps) {
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [duplicating, setDuplicating] = useState(false);
   const router = useRouter();
 
   const currency = invoice.currency ?? "EUR";
@@ -69,6 +70,12 @@ export function InvoiceDetailView({ invoice }: InvoiceDetailProps) {
     setDeleting(true);
     await deleteInvoice(invoice.id);
     router.push("/invoices");
+  }
+
+  async function handleDuplicate() {
+    setDuplicating(true);
+    const newId = await duplicateInvoice(invoice.id);
+    router.push(`/invoices/${newId}`);
   }
 
   return (
@@ -126,6 +133,10 @@ export function InvoiceDetailView({ invoice }: InvoiceDetailProps) {
           <Button disabled size="sm" variant="outline">
             <Download className="size-4" />
             Download PDF
+          </Button>
+          <Button disabled={duplicating} onClick={handleDuplicate} size="sm" variant="outline">
+            <Copy className="size-4" />
+            {duplicating ? "Duplicating..." : "Duplicate"}
           </Button>
           <Button
             className="text-red-600 hover:bg-red-50 hover:text-red-700"

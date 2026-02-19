@@ -361,7 +361,7 @@
             "Run: bun run dev",
             "Verify: Duplicating an invoice creates a new draft with correct data"
           ],
-          "passes": false
+          "passes": true
         }
       ]
     },
