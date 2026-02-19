@@ -1060,3 +1060,35 @@ Notes:
 - The "Send Invoice" button from the create form (/invoices/new) is NOT wired up in this feature — it only saves as draft. Send is done from the detail page after creation. This matches the typical workflow: create → review → send.
 - STRIPE_SECRET_KEY and RESEND_API_KEY must be configured in .env for the send flow to work at runtime
 - All checks pass: tsc + oxlint + oxfmt
+
+## 2026-02-19 — Feature 7.2: Implement Stripe webhook handler
+
+Completed:
+- Created src/app/api/webhooks/stripe/route.ts — POST endpoint for Stripe webhook events:
+  - Reads raw request body and stripe-signature header
+  - Verifies webhook signature using stripe.webhooks.constructEvent with STRIPE_WEBHOOK_SECRET
+  - Returns 400 if signature is missing or invalid
+  - Handles 'checkout.session.completed' event:
+    - Extracts invoiceId from session metadata (set by createPaymentLink in 7.1)
+    - Updates invoice: status='paid', paidAt=today, stores stripePaymentIntentId
+    - Inserts activityLog entry with action 'paid'
+    - Sends payment-received notification email to business owner via Resend
+      - Queries invoice, client (for name), and user (for email + businessName)
+      - Uses PaymentReceivedEmail template (created in 8.1) with client name, amount, invoice number
+  - Returns { received: true } for all events (including unhandled ones)
+- Middleware already allows /api/webhooks as a public path (set up in 3.1)
+- All checks pass: `bun run check` (tsc + lint + format:check) — 0 errors
+
+Prioritization note:
+- Chose 7.2 (Stripe webhook) as highest priority because it closes the core payment loop. Without it, invoices that are paid via Stripe stay in "sent" status forever — the app can't track actual payments. This is more critical than 9.2 (send reminder) which is a nice-to-have workflow convenience. Feature 7.2 also triggers the payment-received notification email, completing the full send → pay → notify cycle.
+
+Next up:
+- Feature 9.2: Send reminder action (the only remaining feature with passes: false)
+
+Notes:
+- STRIPE_WEBHOOK_SECRET must be set in .env for signature verification to work at runtime
+- The webhook endpoint is at /api/webhooks/stripe — configure this URL in Stripe Dashboard → Developers → Webhooks
+- For local testing: `stripe listen --forward-to localhost:3000/api/webhooks/stripe`
+- The endpoint handles checkout.session.completed specifically because createPaymentLink (7.1) creates Payment Links, which trigger checkout sessions when customers pay
+- Payment intent ID is stored as string | null since checkout sessions may not always have one (e.g., free amounts)
+- All checks pass: tsc + oxlint + oxfmt

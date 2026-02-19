@@ -432,7 +432,7 @@
             "Run: bun run tsc",
             "Verify: No type errors. Test with Stripe CLI: stripe listen --forward-to localhost:3000/api/webhooks/stripe"
           ],
-          "passes": false
+          "passes": true
         }
       ]
     },
