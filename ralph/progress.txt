@@ -718,3 +718,35 @@ Notes:
 - Uses StyleSheet.create for type-safe react-pdf styles with `as const` assertions for enum-like values (flexDirection, textAlign, etc.)
 - Alphabetical sorting enforced by oxlint perfectionist/sort-objects rule on the styles object
 - No test framework configured yet — verification is via TypeScript compilation and check suite
+
+## 2026-02-19 — Feature 6.2: Create PDF generation endpoint
+
+Completed:
+- Created src/app/api/invoices/[id]/pdf/route.ts — GET endpoint for PDF generation:
+  - Queries invoice by id, returns 404 JSON if not found
+  - Queries client data by invoice.clientId
+  - Queries line items ordered by sortOrder
+  - Queries user (business details) by invoice.userId
+  - Renders InvoicePdf component via @react-pdf/renderer renderToBuffer
+  - Returns Response with Content-Type: application/pdf and Content-Disposition: attachment with invoice number as filename
+  - Converts Buffer to Uint8Array for Response body compatibility with tsgo strict typing
+- Updated src/components/invoice-detail.tsx — wired up "Download PDF" button:
+  - Removed disabled prop from the button
+  - Wrapped in anchor tag linking to /api/invoices/[id]/pdf with target="_blank"
+  - Downloads PDF in new tab for all invoice statuses
+- Phase 6 (PDF Generation) is now fully complete (6.1 + 6.2 both pass)
+- All checks pass: `bun run check` (tsc + lint + format:check) — 0 errors
+
+Prioritization note:
+- Chose 6.2 (PDF generation endpoint) as highest priority because it's directly on the critical path. The template (6.1) was already done, and 6.2 enables PDF downloads immediately. It also unblocks Feature 8.2 (sendInvoice) which needs renderToBuffer for email attachments. No external API keys required, unlike Phase 7 (Stripe) or Phase 8 (Resend).
+
+Next up:
+- Feature 10.1: Build settings page (independent, no external dependencies — good for parallel progress)
+- Feature 7.1: Set up Stripe client (needs STRIPE_SECRET_KEY in .env)
+- Feature 8.1: Set up Resend and create email templates (needs RESEND_API_KEY)
+
+Notes:
+- The API route uses renderToBuffer (not renderToStream) since buffer is needed for the full Response
+- Buffer must be wrapped in `new Uint8Array(buffer)` because tsgo's strict typing doesn't accept Node.js Buffer as BodyInit
+- The endpoint is at /api/invoices/[id]/pdf — accessible via same-origin requests which include the session cookie automatically
+- No test framework configured yet — verification is via TypeScript compilation and check suite

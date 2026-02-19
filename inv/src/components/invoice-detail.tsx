@@ -130,10 +130,12 @@ export function InvoiceDetailView({ invoice }: InvoiceDetailProps) {
               Send Overdue Notice
             </Button>
           )}
-          <Button disabled size="sm" variant="outline">
-            <Download className="size-4" />
-            Download PDF
-          </Button>
+          <a href={`/api/invoices/${invoice.id}/pdf`} rel="noopener noreferrer" target="_blank">
+            <Button size="sm" variant="outline">
+              <Download className="size-4" />
+              Download PDF
+            </Button>
+          </a>
           <Button disabled={duplicating} onClick={handleDuplicate} size="sm" variant="outline">
             <Copy className="size-4" />
             {duplicating ? "Duplicating..." : "Duplicate"}

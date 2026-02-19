@@ -397,7 +397,7 @@
             "Run: bun run dev",
             "Verify: Clicking 'Download PDF' downloads a properly formatted PDF"
           ],
-          "passes": false
+          "passes": true
         }
       ]
     },
