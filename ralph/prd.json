@@ -494,7 +494,7 @@
             "Run: bun run tsc",
             "Verify: No type errors. Can test manually by hitting the endpoint with correct auth header."
           ],
-          "passes": false
+          "passes": true
         },
         {
           "id": "9.2",

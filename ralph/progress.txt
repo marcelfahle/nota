@@ -838,3 +838,32 @@ Notes:
 - Password hash format is "salt:hex_key" — same format expected by auth.ts verifyPassword()
 - scripts/seed.ts uses `/* eslint-disable no-console */` since console output is expected in a CLI script
 - No test framework configured yet — verification is via TypeScript compilation and check suite
+
+## 2026-02-19 — Feature 9.1: Create overdue detection cron job
+
+Completed:
+- Created src/app/api/cron/overdue/route.ts — GET endpoint for Vercel Cron:
+  - Authorization: checks Authorization header for `Bearer ${CRON_SECRET}` — returns 401 if missing/invalid
+  - Queries all invoices where status='sent' AND dueAt < today (using drizzle-orm `lt` comparator on date column)
+  - For each overdue invoice: updates status to 'overdue', sets updatedAt to current timestamp
+  - Inserts activityLog entry with action 'marked_overdue' for each updated invoice
+  - Returns JSON response with count of updated invoices
+  - Early return with { updated: 0 } if no overdue invoices found
+- Created vercel.json with cron config:
+  - Runs /api/cron/overdue daily at 9:00 AM UTC (schedule: "0 9 * * *")
+- All checks pass: `bun run check` (tsc + lint + format:check) — 0 errors
+
+Prioritization note:
+- Chose 9.1 (overdue cron) as highest priority because it's core business logic that the app fundamentally needs. An invoicing app that can't auto-detect overdue invoices is broken — invoices past their due date would stay as "sent" forever, making the overdue filter and stats meaningless. It's DB-only (no external API keys needed), unlike Phase 7 (Stripe) and Phase 8 (Resend) which require STRIPE_SECRET_KEY and RESEND_API_KEY respectively. Features 11.x (UI polish) are lower impact.
+
+Next up:
+- Feature 11.3: Activity log on invoice detail (DB-only, all data already being logged)
+- Feature 11.1: Empty states and loading states (UX polish)
+- Feature 11.2: Mobile responsive pass (UX polish)
+
+Notes:
+- CRON_SECRET env var must be added to .env and Vercel project settings for production
+- Vercel Cron sends GET requests with Authorization: Bearer <CRON_SECRET> header
+- The endpoint processes invoices one at a time (not batched) — fine for a single-user app with small invoice volumes
+- The overdue status was already defined in the invoiceStatusEnum and is displayed by StatusBadge and invoice list filters
+- No test framework configured yet — verification is via TypeScript compilation and check suite
