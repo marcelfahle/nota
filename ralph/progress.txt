@@ -683,3 +683,38 @@ Notes:
 - The Duplicate button is available for all invoice statuses (draft, sent, paid, overdue, cancelled)
 - Duplicated invoices always start as draft with fresh dates and no Stripe/payment data
 - The Copy icon is shared with the Stripe payment link indicator — no visual conflict since they appear in different contexts
+
+## 2026-02-19 — Feature 6.1: Install react-pdf and create PDF invoice template
+
+Completed:
+- Installed @react-pdf/renderer (v4.3.2) as a dependency
+- Created src/components/invoice-pdf.tsx — full PDF invoice template using @react-pdf/renderer:
+  - Header: "inv." logo mark (black rounded square + text) with business name and address, invoice number right-aligned with "Invoice" label
+  - Bill To section: client name, company, email, address, VAT number
+  - Dates section: issued date, due date, currency — right-aligned opposite the client info
+  - Line items table: Description, Qty, Rate, Amount columns with zebra-stripe borders
+  - Totals section: subtotal, tax (if > 0%), separator line, total — right-aligned
+  - Reverse charge notice when applicable (Article 196 EU VAT Directive)
+  - Notes section below totals
+  - Fixed footer: business VAT number + name on left, bank details on right
+- Component accepts typed props: { business, client, invoice } with full type definitions
+  - business: name, address, bankDetails, vatNumber (all optional/nullable)
+  - client: name, email, company, address, vatNumber
+  - invoice: number, currency, issuedAt, dueAt, lineItems[], subtotal, taxRate, taxAmount, total, notes, reverseCharge
+- Internal helpers: formatCurrencyPdf (Intl.NumberFormat) and formatDatePdf
+- Typography: Helvetica body (10pt), Courier for invoice number and logo, zinc color palette matching app theme
+- All checks pass: `bun run check` (tsc + lint + format:check) — 0 errors
+
+Prioritization note:
+- Chose 6.1 (react-pdf template) as highest priority because it's the critical-path bottleneck for Phase 6 and beyond. PDF generation (6.2) needs the template, and sendInvoice (8.2) attaches the PDF to emails. Without this, no PDF download or email sending can work. Features 7.x (Stripe) require API keys which may not be configured yet.
+
+Next up:
+- Feature 6.2: Create PDF generation endpoint (now unblocked — template exists)
+- Feature 7.1: Set up Stripe client (needs STRIPE_SECRET_KEY in .env)
+- Feature 10.1: Build settings page (independent, no external dependencies)
+
+Notes:
+- The InvoicePdf component is designed for use with both renderToBuffer (server-side for email attachments in 8.2) and API route rendering (6.2)
+- Uses StyleSheet.create for type-safe react-pdf styles with `as const` assertions for enum-like values (flexDirection, textAlign, etc.)
+- Alphabetical sorting enforced by oxlint perfectionist/sort-objects rule on the styles object
+- No test framework configured yet — verification is via TypeScript compilation and check suite
