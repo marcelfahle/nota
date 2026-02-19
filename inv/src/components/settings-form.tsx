@@ -149,29 +149,24 @@ export function SettingsForm({
                 value={prefix}
               />
             </div>
-            {prefix && (
-              <div className="space-y-2">
-                <Label>Separator</Label>
-                <Select
-                  name="invoiceSeparator"
-                  onValueChange={setSeparator}
-                  value={separator}
-                >
-                  <SelectTrigger className="w-full">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="-">Dash (-)</SelectItem>
-                    <SelectItem value="/">Slash (/)</SelectItem>
-                    <SelectItem value=".">Dot (.)</SelectItem>
-                    <SelectItem value="">None</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            )}
-            {!prefix && (
-              <input name="invoiceSeparator" type="hidden" value={separator} />
-            )}
+            <div className={prefix ? "space-y-2" : "hidden"}>
+              <Label>Separator</Label>
+              <Select
+                name="invoiceSeparator"
+                onValueChange={setSeparator}
+                value={separator}
+              >
+                <SelectTrigger className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="-">Dash (-)</SelectItem>
+                  <SelectItem value="/">Slash (/)</SelectItem>
+                  <SelectItem value=".">Dot (.)</SelectItem>
+                  <SelectItem value="">None</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
             <div className="space-y-2">
               <Label>Digits</Label>
               <Select
