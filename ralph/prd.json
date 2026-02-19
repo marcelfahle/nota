@@ -472,7 +472,7 @@
             "Run: bun run dev",
             "Verify: Sending an invoice generates PDF, creates Stripe link, sends email, updates status"
           ],
-          "passes": false
+          "passes": true
         }
       ]
     },

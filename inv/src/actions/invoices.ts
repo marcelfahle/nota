@@ -1,12 +1,17 @@
 "use server";
 
-import { eq } from "drizzle-orm";
+import { renderToBuffer } from "@react-pdf/renderer";
+import { asc, eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
+import { InvoicePdf } from "@/components/invoice-pdf";
+import { InvoiceSentEmail } from "@/emails/invoice-sent";
 import { getCurrentUser } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { activityLog, invoices, lineItems, users } from "@/lib/db/schema";
+import { activityLog, clients, invoices, lineItems, users } from "@/lib/db/schema";
+import { resend } from "@/lib/email";
+import { createPaymentLink } from "@/lib/stripe";
 
 const lineItemSchema = z.object({
   description: z.string().min(1, "Description is required"),
@@ -169,6 +174,120 @@ export async function updateInvoice(
 export async function deleteInvoice(invoiceId: string) {
   await db.delete(invoices).where(eq(invoices.id, invoiceId));
   revalidatePath("/invoices");
+}
+
+export async function sendInvoice(invoiceId: string) {
+  // Step 1: Query invoice with client and line items
+  const [invoice] = await db.select().from(invoices).where(eq(invoices.id, invoiceId)).limit(1);
+  if (!invoice) {
+    return { error: "Invoice not found" };
+  }
+
+  const [client] = await db.select().from(clients).where(eq(clients.id, invoice.clientId)).limit(1);
+  if (!client) {
+    return { error: "Client not found" };
+  }
+
+  const items = await db
+    .select()
+    .from(lineItems)
+    .where(eq(lineItems.invoiceId, invoiceId))
+    .orderBy(asc(lineItems.sortOrder));
+
+  const user = await getCurrentUser();
+
+  // Step 2: Generate PDF buffer
+  const pdfBuffer = await renderToBuffer(
+    InvoicePdf({
+      business: {
+        address: user.businessAddress,
+        bankDetails: user.bankDetails,
+        name: user.businessName,
+        vatNumber: user.vatNumber,
+      },
+      client: {
+        address: client.address,
+        company: client.company,
+        email: client.email,
+        name: client.name,
+        vatNumber: client.vatNumber,
+      },
+      invoice: {
+        currency: invoice.currency ?? "EUR",
+        dueAt: invoice.dueAt,
+        issuedAt: invoice.issuedAt,
+        lineItems: items.map((item) => ({
+          amount: item.amount,
+          description: item.description,
+          quantity: item.quantity,
+          unitPrice: item.unitPrice,
+        })),
+        notes: invoice.notes,
+        number: invoice.number,
+        reverseCharge: invoice.reverseCharge,
+        subtotal: invoice.subtotal ?? "0",
+        taxAmount: invoice.taxAmount ?? "0",
+        taxRate: invoice.taxRate ?? "0",
+        total: invoice.total ?? "0",
+      },
+    }),
+  );
+
+  // Step 3: Create Stripe payment link
+  const paymentLink = await createPaymentLink({
+    currency: invoice.currency,
+    id: invoice.id,
+    number: invoice.number,
+    total: invoice.total,
+  });
+
+  // Step 4: Send email via Resend with PDF attachment and payment link
+  const fromEmail =
+    process.env.RESEND_FROM_EMAIL ?? `${user.businessName ?? "inv."} <invoices@resend.dev>`;
+  await resend.emails.send({
+    attachments: [
+      {
+        content: pdfBuffer.toString("base64"),
+        filename: `${invoice.number}.pdf`,
+      },
+    ],
+    from: fromEmail,
+    react: InvoiceSentEmail({
+      businessName: user.businessName ?? "inv.",
+      clientName: client.name,
+      currency: invoice.currency ?? "EUR",
+      dueAt: invoice.dueAt,
+      invoiceNumber: invoice.number,
+      paymentLinkUrl: paymentLink.url,
+      total: invoice.total ?? "0",
+    }),
+    subject: `Invoice ${invoice.number} from ${user.businessName ?? "inv."}`,
+    to: [client.email],
+  });
+
+  // Step 5: Update invoice status and Stripe link data
+  await db
+    .update(invoices)
+    .set({
+      sentAt: new Date(),
+      status: "sent",
+      stripePaymentLinkId: paymentLink.id,
+      stripePaymentLinkUrl: paymentLink.url,
+      updatedAt: new Date(),
+    })
+    .where(eq(invoices.id, invoiceId));
+
+  // Step 6: Log activity
+  await db.insert(activityLog).values({
+    action: "sent",
+    invoiceId,
+  });
+
+  // Step 7: Revalidate paths
+  revalidatePath("/invoices");
+  revalidatePath(`/invoices/${invoiceId}`);
+
+  return { success: true };
 }
 
 export async function duplicateInvoice(invoiceId: string) {

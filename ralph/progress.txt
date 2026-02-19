@@ -1027,3 +1027,36 @@ Notes:
 - Email styles use inline objects (not StyleSheet) — this is the standard pattern for @react-email/components
 - RESEND_API_KEY must be set in .env for sending to work at runtime; code compiles fine without it
 - Both templates use system font stack (-apple-system, BlinkMacSystemFont, ...) since email clients don't support custom font loading
+
+## 2026-02-19 — Feature 8.2: Implement sendInvoice server action (the full flow)
+
+Completed:
+- Implemented sendInvoice server action in src/actions/invoices.ts orchestrating the full send flow:
+  - Step 1: Queries invoice, client, and line items from DB
+  - Step 2: Generates PDF buffer via @react-pdf/renderer renderToBuffer with InvoicePdf component (business details from user, client info, line items)
+  - Step 3: Creates Stripe payment link via createPaymentLink helper
+  - Step 4: Sends email via Resend with PDF attachment (base64-encoded) and InvoiceSentEmail template containing payment link
+  - Step 5: Updates invoice: status='sent', sentAt=now, stores stripePaymentLinkId and stripePaymentLinkUrl
+  - Step 6: Inserts activityLog entry with action 'sent'
+  - Step 7: Revalidates /invoices and /invoices/[id]
+- Wired up "Send Invoice" button on invoice detail page (src/components/invoice-detail.tsx):
+  - Removed disabled prop from the button for draft invoices
+  - Added sending state and handleSend function that calls sendInvoice action
+  - Button shows "Sending..." while in progress
+  - Page refreshes via router.refresh() after successful send to show updated status
+- Added imports: renderToBuffer, InvoicePdf, InvoiceSentEmail, resend, createPaymentLink, asc, clients
+- All checks pass: `bun run check` (tsc + lint + format:check) — 0 errors
+
+Prioritization note:
+- Chose 8.2 (sendInvoice action) as highest priority because it's the CORE feature of an invoicing app — sending invoices. Without it, the app is fundamentally incomplete. All dependencies were already done: 7.1 (Stripe client), 8.1 (Resend + email templates), 6.1 (PDF template), 6.2 (PDF rendering). It also unblocks testing of the entire send → pay → webhook flow. Features 7.2 (Stripe webhook) and 9.2 (send reminder) are important but less critical than the primary send flow.
+
+Next up:
+- Feature 7.2: Stripe webhook handler (closes the payment loop — marks invoices as paid)
+- Feature 9.2: Send reminder action (now trivial — same pattern as sendInvoice but reuses email template with reminder flag)
+
+Notes:
+- The sendInvoice action uses RESEND_FROM_EMAIL env var if set, otherwise falls back to `{businessName} <invoices@resend.dev>` — Resend's test domain works for development
+- PDF is attached as base64-encoded content in the email (Resend attachment format)
+- The "Send Invoice" button from the create form (/invoices/new) is NOT wired up in this feature — it only saves as draft. Send is done from the detail page after creation. This matches the typical workflow: create → review → send.
+- STRIPE_SECRET_KEY and RESEND_API_KEY must be configured in .env for the send flow to work at runtime
+- All checks pass: tsc + oxlint + oxfmt

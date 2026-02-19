@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
-import { deleteInvoice, duplicateInvoice } from "@/actions/invoices";
+import { deleteInvoice, duplicateInvoice, sendInvoice } from "@/actions/invoices";
 import { StatusBadge } from "@/components/status-badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -76,6 +76,7 @@ export function InvoiceDetailView({ activities, invoice }: InvoiceDetailProps) {
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [duplicating, setDuplicating] = useState(false);
+  const [sending, setSending] = useState(false);
   const router = useRouter();
 
   const currency = invoice.currency ?? "EUR";
@@ -85,6 +86,13 @@ export function InvoiceDetailView({ activities, invoice }: InvoiceDetailProps) {
     setDeleting(true);
     await deleteInvoice(invoice.id);
     router.push("/invoices");
+  }
+
+  async function handleSend() {
+    setSending(true);
+    await sendInvoice(invoice.id);
+    router.refresh();
+    setSending(false);
   }
 
   async function handleDuplicate() {
@@ -121,9 +129,9 @@ export function InvoiceDetailView({ activities, invoice }: InvoiceDetailProps) {
         <div className="flex flex-wrap items-center gap-2">
           {status === "draft" && (
             <>
-              <Button disabled size="sm" variant="outline">
+              <Button disabled={sending} onClick={handleSend} size="sm" variant="outline">
                 <Mail className="size-4" />
-                Send Invoice
+                {sending ? "Sending..." : "Send Invoice"}
               </Button>
               <Link href={`/invoices/${invoice.id}/edit`}>
                 <Button size="sm" variant="outline">
