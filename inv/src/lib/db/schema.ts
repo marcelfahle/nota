@@ -12,35 +12,35 @@ import {
 } from "drizzle-orm/pg-core";
 
 export const users = pgTable("users", {
-  id: uuid().defaultRandom().primaryKey(),
-  email: text().notNull().unique(),
-  name: text().notNull(),
-  passwordHash: text("password_hash").notNull(),
-  businessName: text("business_name"),
-  businessAddress: text("business_address"),
-  vatNumber: text("vat_number"),
   bankDetails: text("bank_details"),
-  logoUrl: text("logo_url"),
-  defaultCurrency: text("default_currency").default("EUR"),
-  invoicePrefix: text("invoice_prefix").default("INV"),
-  nextInvoiceNumber: integer("next_invoice_number").default(1),
+  businessAddress: text("business_address"),
+  businessName: text("business_name"),
   createdAt: timestamp("created_at").defaultNow(),
+  defaultCurrency: text("default_currency").default("EUR"),
+  email: text().notNull().unique(),
+  id: uuid().defaultRandom().primaryKey(),
+  invoicePrefix: text("invoice_prefix").default("INV"),
+  logoUrl: text("logo_url"),
+  name: text().notNull(),
+  nextInvoiceNumber: integer("next_invoice_number").default(1),
+  passwordHash: text("password_hash").notNull(),
+  vatNumber: text("vat_number"),
 });
 
 export const clients = pgTable("clients", {
+  address: text(),
+  company: text(),
+  createdAt: timestamp("created_at").defaultNow(),
+  defaultCurrency: text("default_currency").default("EUR"),
+  email: text().notNull(),
   id: uuid().defaultRandom().primaryKey(),
+  name: text().notNull(),
+  notes: text(),
+  updatedAt: timestamp("updated_at").defaultNow(),
   userId: uuid("user_id")
     .notNull()
     .references(() => users.id),
-  name: text().notNull(),
-  email: text().notNull(),
-  company: text(),
-  address: text(),
   vatNumber: text("vat_number"),
-  notes: text(),
-  defaultCurrency: text("default_currency").default("EUR"),
-  createdAt: timestamp("created_at").defaultNow(),
-  updatedAt: timestamp("updated_at").defaultNow(),
 });
 
 export const invoiceStatusEnum = pgEnum("invoice_status", [
@@ -52,52 +52,52 @@ export const invoiceStatusEnum = pgEnum("invoice_status", [
 ]);
 
 export const invoices = pgTable("invoices", {
-  id: uuid().defaultRandom().primaryKey(),
-  userId: uuid("user_id")
-    .notNull()
-    .references(() => users.id),
   clientId: uuid("client_id")
     .notNull()
     .references(() => clients.id),
-  number: text().notNull().unique(),
-  status: invoiceStatusEnum().default("draft"),
+  createdAt: timestamp("created_at").defaultNow(),
   currency: text().default("EUR"),
-  issuedAt: date("issued_at").notNull(),
   dueAt: date("due_at").notNull(),
+  id: uuid().defaultRandom().primaryKey(),
+  internalNotes: text("internal_notes"),
+  issuedAt: date("issued_at").notNull(),
+  notes: text(),
+  number: text().notNull().unique(),
   paidAt: date("paid_at"),
+  reverseCharge: text("reverse_charge").default("false"),
   sentAt: timestamp("sent_at"),
-  subtotal: numeric({ precision: 12, scale: 2 }),
-  taxRate: numeric("tax_rate", { precision: 5, scale: 2 }),
-  taxAmount: numeric("tax_amount", { precision: 12, scale: 2 }),
-  total: numeric({ precision: 12, scale: 2 }),
+  status: invoiceStatusEnum().default("draft"),
+  stripePaymentIntentId: text("stripe_payment_intent_id"),
   stripePaymentLinkId: text("stripe_payment_link_id"),
   stripePaymentLinkUrl: text("stripe_payment_link_url"),
-  stripePaymentIntentId: text("stripe_payment_intent_id"),
-  notes: text(),
-  internalNotes: text("internal_notes"),
-  reverseCharge: text("reverse_charge").default("false"),
-  createdAt: timestamp("created_at").defaultNow(),
+  subtotal: numeric({ precision: 12, scale: 2 }),
+  taxAmount: numeric("tax_amount", { precision: 12, scale: 2 }),
+  taxRate: numeric("tax_rate", { precision: 5, scale: 2 }),
+  total: numeric({ precision: 12, scale: 2 }),
   updatedAt: timestamp("updated_at").defaultNow(),
+  userId: uuid("user_id")
+    .notNull()
+    .references(() => users.id),
 });
 
 export const lineItems = pgTable("line_items", {
+  amount: numeric({ precision: 12, scale: 2 }).notNull(),
+  description: text().notNull(),
   id: uuid().defaultRandom().primaryKey(),
   invoiceId: uuid("invoice_id")
     .notNull()
     .references(() => invoices.id, { onDelete: "cascade" }),
-  description: text().notNull(),
   quantity: numeric({ precision: 10, scale: 2 }).notNull(),
-  unitPrice: numeric("unit_price", { precision: 12, scale: 2 }).notNull(),
-  amount: numeric({ precision: 12, scale: 2 }).notNull(),
   sortOrder: integer("sort_order").default(0),
+  unitPrice: numeric("unit_price", { precision: 12, scale: 2 }).notNull(),
 });
 
 export const activityLog = pgTable("activity_log", {
+  action: text().notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
   id: uuid().defaultRandom().primaryKey(),
   invoiceId: uuid("invoice_id").references(() => invoices.id),
-  action: text().notNull(),
   metadata: jsonb(),
-  createdAt: timestamp("created_at").defaultNow(),
 });
 
 // Relations
@@ -107,19 +107,19 @@ export const usersRelations = relations(users, ({ many }) => ({
   invoices: many(invoices),
 }));
 
-export const clientsRelations = relations(clients, ({ one, many }) => ({
-  user: one(users, { fields: [clients.userId], references: [users.id] }),
+export const clientsRelations = relations(clients, ({ many, one }) => ({
   invoices: many(invoices),
+  user: one(users, { fields: [clients.userId], references: [users.id] }),
 }));
 
-export const invoicesRelations = relations(invoices, ({ one, many }) => ({
-  user: one(users, { fields: [invoices.userId], references: [users.id] }),
+export const invoicesRelations = relations(invoices, ({ many, one }) => ({
+  activityLog: many(activityLog),
   client: one(clients, {
     fields: [invoices.clientId],
     references: [clients.id],
   }),
   lineItems: many(lineItems),
-  activityLog: many(activityLog),
+  user: one(users, { fields: [invoices.userId], references: [users.id] }),
 }));
 
 export const lineItemsRelations = relations(lineItems, ({ one }) => ({

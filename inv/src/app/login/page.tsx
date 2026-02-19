@@ -1,6 +1,7 @@
 "use client";
 
 import { useActionState } from "react";
+
 import { login } from "@/actions/auth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -22,20 +23,12 @@ export default function LoginPage() {
         <form action={action} className="space-y-4">
           <div className="space-y-2">
             <Label htmlFor="password">Password</Label>
-            <Input
-              id="password"
-              name="password"
-              type="password"
-              autoFocus
-              required
-            />
+            <Input autoFocus id="password" name="password" required type="password" />
           </div>
 
-          {state?.error && (
-            <p className="text-sm text-red-500">{state.error}</p>
-          )}
+          {state?.error && <p className="text-sm text-red-500">{state.error}</p>}
 
-          <Button type="submit" className="w-full" disabled={pending}>
+          <Button className="w-full" disabled={pending} type="submit">
             {pending ? "Signing in..." : "Sign in"}
           </Button>
         </form>

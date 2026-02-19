@@ -1,8 +1,9 @@
 "use client";
 
-import { useActionState, useEffect, useState, useCallback } from "react";
-import { useRouter } from "next/navigation";
 import { Plus, Trash2 } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { useActionState, useEffect, useState, useCallback } from "react";
+
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -23,30 +24,30 @@ type LineItem = {
 
 type ActionState = {
   error?: string;
-  success?: boolean;
   invoiceId?: string;
+  success?: boolean;
 } | null;
 
 type Client = {
+  defaultCurrency: string | null;
+  email: string;
   id: string;
   name: string;
-  email: string;
-  defaultCurrency: string | null;
 };
 
 type InvoiceFormProps = {
-  clients: Client[];
   action: (state: ActionState, formData: FormData) => Promise<ActionState>;
+  clients: Array<Client>;
   defaultValues?: {
     clientId?: string;
     currency?: string;
-    issuedAt?: string;
     dueAt?: string;
-    taxRate?: string;
-    notes?: string | null;
     internalNotes?: string | null;
+    issuedAt?: string;
+    lineItems?: Array<{ description: string; quantity: string; unitPrice: string }>;
+    notes?: string | null;
     reverseCharge?: string;
-    lineItems?: { description: string; quantity: string; unitPrice: string }[];
+    taxRate?: string;
   };
   submitLabel?: string;
 };
@@ -56,8 +57,8 @@ function emptyLineItem(): LineItem {
 }
 
 function toNumber(val: string): number {
-  const n = parseFloat(val);
-  return isNaN(n) ? 0 : n;
+  const n = Number.parseFloat(val);
+  return Number.isNaN(n) ? 0 : n;
 }
 
 function todayISO(): string {
@@ -71,23 +72,19 @@ function defaultDueDate(): string {
 }
 
 export function InvoiceForm({
-  clients,
   action,
+  clients,
   defaultValues,
   submitLabel = "Save Draft",
 }: InvoiceFormProps) {
   const [state, formAction, pending] = useActionState(action, null);
   const router = useRouter();
 
-  const [items, setItems] = useState<LineItem[]>(
-    defaultValues?.lineItems?.length
-      ? defaultValues.lineItems
-      : [emptyLineItem()],
+  const [items, setItems] = useState<Array<LineItem>>(
+    defaultValues?.lineItems?.length ? defaultValues.lineItems : [emptyLineItem()],
   );
 
-  const [currency, setCurrency] = useState(
-    defaultValues?.currency ?? "EUR",
-  );
+  const [currency, setCurrency] = useState(defaultValues?.currency ?? "EUR");
 
   const [taxRate, setTaxRate] = useState(defaultValues?.taxRate ?? "0");
 
@@ -97,16 +94,9 @@ export function InvoiceForm({
     }
   }, [state, router]);
 
-  const updateItem = useCallback(
-    (index: number, field: keyof LineItem, value: string) => {
-      setItems((prev) =>
-        prev.map((item, i) =>
-          i === index ? { ...item, [field]: value } : item,
-        ),
-      );
-    },
-    [],
-  );
+  const updateItem = useCallback((index: number, field: keyof LineItem, value: string) => {
+    setItems((prev) => prev.map((item, i) => (i === index ? { ...item, [field]: value } : item)));
+  }, []);
 
   const addItem = useCallback(() => {
     setItems((prev) => [...prev, emptyLineItem()]);
@@ -117,9 +107,7 @@ export function InvoiceForm({
   }, []);
 
   // Computed totals
-  const lineAmounts = items.map(
-    (item) => toNumber(item.quantity) * toNumber(item.unitPrice),
-  );
+  const lineAmounts = items.map((item) => toNumber(item.quantity) * toNumber(item.unitPrice));
   const subtotal = lineAmounts.reduce((sum, a) => sum + a, 0);
   const taxRateNum = toNumber(taxRate);
   const taxAmount = subtotal * (taxRateNum / 100);
@@ -149,11 +137,7 @@ export function InvoiceForm({
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="space-y-2">
           <Label htmlFor="clientId">Client *</Label>
-          <Select
-            name="clientId"
-            defaultValue={defaultValues?.clientId}
-            required
-          >
+          <Select defaultValue={defaultValues?.clientId} name="clientId" required>
             <SelectTrigger className="w-full">
               <SelectValue placeholder="Select a client" />
             </SelectTrigger>
@@ -169,11 +153,7 @@ export function InvoiceForm({
 
         <div className="space-y-2">
           <Label>Currency</Label>
-          <Select
-            name="currency_display"
-            value={currency}
-            onValueChange={setCurrency}
-          >
+          <Select name="currency_display" onValueChange={setCurrency} value={currency}>
             <SelectTrigger className="w-full">
               <SelectValue />
             </SelectTrigger>
@@ -190,21 +170,21 @@ export function InvoiceForm({
         <div className="space-y-2">
           <Label htmlFor="issuedAt">Issue Date *</Label>
           <Input
+            defaultValue={defaultValues?.issuedAt ?? todayISO()}
             id="issuedAt"
             name="issuedAt"
-            type="date"
-            defaultValue={defaultValues?.issuedAt ?? todayISO()}
             required
+            type="date"
           />
         </div>
         <div className="space-y-2">
           <Label htmlFor="dueAt">Due Date *</Label>
           <Input
+            defaultValue={defaultValues?.dueAt ?? defaultDueDate()}
             id="dueAt"
             name="dueAt"
-            type="date"
-            defaultValue={defaultValues?.dueAt ?? defaultDueDate()}
             required
+            type="date"
           />
         </div>
       </div>
@@ -214,7 +194,7 @@ export function InvoiceForm({
         <Label className="mb-3 block">Line Items</Label>
         <div className="rounded-lg border border-zinc-200">
           {/* Header */}
-          <div className="grid grid-cols-[1fr_80px_100px_100px_36px] gap-2 border-b border-zinc-100 px-3 py-2 text-xs font-medium uppercase tracking-wide text-zinc-400">
+          <div className="grid grid-cols-[1fr_80px_100px_100px_36px] gap-2 border-b border-zinc-100 px-3 py-2 text-xs font-medium tracking-wide text-zinc-400 uppercase">
             <span>Description</span>
             <span>Qty/Hrs</span>
             <span>Rate</span>
@@ -225,50 +205,44 @@ export function InvoiceForm({
           {/* Rows */}
           {items.map((item, index) => (
             <div
-              key={index}
               className="grid grid-cols-[1fr_80px_100px_100px_36px] items-center gap-2 border-b border-zinc-50 px-3 py-2"
+              key={index}
             >
               <Input
+                className="h-8 text-sm"
+                onChange={(e) => updateItem(index, "description", e.target.value)}
                 placeholder="Description"
+                required
                 value={item.description}
-                onChange={(e) =>
-                  updateItem(index, "description", e.target.value)
-                }
-                className="h-8 text-sm"
-                required
               />
               <Input
-                type="number"
-                step="0.01"
+                className="h-8 text-sm"
                 min="0"
+                onChange={(e) => updateItem(index, "quantity", e.target.value)}
                 placeholder="1"
-                value={item.quantity}
-                onChange={(e) =>
-                  updateItem(index, "quantity", e.target.value)
-                }
-                className="h-8 text-sm"
                 required
+                step="0.01"
+                type="number"
+                value={item.quantity}
               />
               <Input
-                type="number"
-                step="0.01"
-                min="0"
-                placeholder="0.00"
-                value={item.unitPrice}
-                onChange={(e) =>
-                  updateItem(index, "unitPrice", e.target.value)
-                }
                 className="h-8 text-sm"
+                min="0"
+                onChange={(e) => updateItem(index, "unitPrice", e.target.value)}
+                placeholder="0.00"
                 required
+                step="0.01"
+                type="number"
+                value={item.unitPrice}
               />
               <p className="text-right text-sm font-medium text-zinc-900">
                 {formatCurrency(lineAmounts[index], currency)}
               </p>
               <button
-                type="button"
-                onClick={() => removeItem(index)}
                 className="flex h-8 w-8 items-center justify-center rounded text-zinc-400 transition-colors hover:text-red-500"
                 disabled={items.length <= 1}
+                onClick={() => removeItem(index)}
+                type="button"
               >
                 <Trash2 className="size-3.5" />
               </button>
@@ -278,9 +252,9 @@ export function InvoiceForm({
           {/* Add Line Item */}
           <div className="px-3 py-2">
             <button
-              type="button"
-              onClick={addItem}
               className="inline-flex items-center gap-1 text-sm text-zinc-500 hover:text-zinc-900"
+              onClick={addItem}
+              type="button"
             >
               <Plus className="size-3.5" />
               Add line item
@@ -294,31 +268,25 @@ export function InvoiceForm({
         <div className="w-64 space-y-2">
           <div className="flex items-center justify-between text-sm">
             <span className="text-zinc-500">Subtotal</span>
-            <span className="font-medium">
-              {formatCurrency(subtotal, currency)}
-            </span>
+            <span className="font-medium">{formatCurrency(subtotal, currency)}</span>
           </div>
           <div className="flex items-center gap-2 text-sm">
             <span className="text-zinc-500">Tax</span>
             <Input
-              type="number"
-              step="0.01"
-              min="0"
-              max="100"
-              value={taxRate}
-              onChange={(e) => setTaxRate(e.target.value)}
               className="h-7 w-16 text-center text-xs"
+              max="100"
+              min="0"
+              onChange={(e) => setTaxRate(e.target.value)}
+              step="0.01"
+              type="number"
+              value={taxRate}
             />
             <span className="text-zinc-500">%</span>
-            <span className="ml-auto font-medium">
-              {formatCurrency(taxAmount, currency)}
-            </span>
+            <span className="ml-auto font-medium">{formatCurrency(taxAmount, currency)}</span>
           </div>
           <div className="flex items-center justify-between border-t border-zinc-200 pt-2 text-sm">
             <span className="font-semibold">Total</span>
-            <span className="text-lg font-semibold">
-              {formatCurrency(total, currency)}
-            </span>
+            <span className="text-lg font-semibold">{formatCurrency(total, currency)}</span>
           </div>
         </div>
       </div>
@@ -328,23 +296,23 @@ export function InvoiceForm({
         <div className="space-y-2">
           <Label htmlFor="notes">Notes (visible on invoice)</Label>
           <textarea
+            className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:outline-none"
+            defaultValue={defaultValues?.notes ?? ""}
             id="notes"
             name="notes"
-            rows={3}
-            defaultValue={defaultValues?.notes ?? ""}
             placeholder="Payment terms, thank you message, etc."
-            className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+            rows={3}
           />
         </div>
         <div className="space-y-2">
           <Label htmlFor="internalNotes">Internal Notes</Label>
           <textarea
+            className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:outline-none"
+            defaultValue={defaultValues?.internalNotes ?? ""}
             id="internalNotes"
             name="internalNotes"
-            rows={3}
-            defaultValue={defaultValues?.internalNotes ?? ""}
             placeholder="Notes for your own reference"
-            className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+            rows={3}
           />
         </div>
       </div>
@@ -352,32 +320,26 @@ export function InvoiceForm({
       {/* Reverse Charge */}
       <div className="flex items-center gap-2">
         <input
-          type="checkbox"
+          className="size-4 rounded border-zinc-300"
+          defaultChecked={defaultValues?.reverseCharge === "true"}
           id="reverseCharge"
           name="reverseCharge"
+          type="checkbox"
           value="true"
-          defaultChecked={defaultValues?.reverseCharge === "true"}
-          className="size-4 rounded border-zinc-300"
         />
-        <Label htmlFor="reverseCharge" className="text-sm font-normal">
+        <Label className="text-sm font-normal" htmlFor="reverseCharge">
           Reverse charge (VAT not applicable)
         </Label>
       </div>
 
-      {state?.error && (
-        <p className="text-sm text-red-500">{state.error}</p>
-      )}
+      {state?.error && <p className="text-sm text-red-500">{state.error}</p>}
 
       {/* Actions */}
       <div className="flex justify-end gap-2">
-        <Button
-          type="button"
-          variant="outline"
-          onClick={() => router.push("/invoices")}
-        >
+        <Button onClick={() => router.push("/invoices")} type="button" variant="outline">
           Cancel
         </Button>
-        <Button type="submit" disabled={pending}>
+        <Button disabled={pending} type="submit">
           {pending ? "Saving..." : submitLabel}
         </Button>
       </div>

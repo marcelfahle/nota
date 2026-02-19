@@ -1,9 +1,10 @@
-import Link from "next/link";
-import { Plus } from "lucide-react";
 import { asc, eq, sql } from "drizzle-orm";
+import { Plus } from "lucide-react";
+import Link from "next/link";
+
+import { Button } from "@/components/ui/button";
 import { db } from "@/lib/db";
 import { clients, invoices } from "@/lib/db/schema";
-import { Button } from "@/components/ui/button";
 import { formatCurrency } from "@/lib/utils";
 
 function getInitials(name: string): string {
@@ -18,11 +19,11 @@ function getInitials(name: string): string {
 export default async function ClientsPage() {
   const clientList = await db
     .select({
-      id: clients.id,
-      name: clients.name,
-      email: clients.email,
       company: clients.company,
+      email: clients.email,
+      id: clients.id,
       invoiceCount: sql<number>`count(${invoices.id})::int`,
+      name: clients.name,
       totalInvoiced: sql<string>`coalesce(sum(${invoices.total}::numeric), 0)`,
     })
     .from(clients)
@@ -48,18 +49,16 @@ export default async function ClientsPage() {
         <div className="divide-y divide-zinc-100">
           {clientList.map((client) => (
             <Link
-              key={client.id}
-              href={`/clients/${client.id}`}
               className="-mx-4 flex items-center justify-between rounded-lg px-4 py-4 transition-colors hover:bg-zinc-50"
+              href={`/clients/${client.id}`}
+              key={client.id}
             >
               <div className="flex items-center gap-4">
                 <div className="flex h-10 w-10 items-center justify-center rounded-full bg-zinc-100 text-sm font-medium text-zinc-600">
                   {getInitials(client.name)}
                 </div>
                 <div>
-                  <p className="text-sm font-medium text-zinc-900">
-                    {client.name}
-                  </p>
+                  <p className="text-sm font-medium text-zinc-900">{client.name}</p>
                   <p className="text-xs text-zinc-500">{client.email}</p>
                 </div>
               </div>
@@ -68,8 +67,7 @@ export default async function ClientsPage() {
                   {formatCurrency(Number(client.totalInvoiced))}
                 </p>
                 <p className="text-xs text-zinc-500">
-                  {client.invoiceCount}{" "}
-                  {client.invoiceCount === 1 ? "invoice" : "invoices"}
+                  {client.invoiceCount} {client.invoiceCount === 1 ? "invoice" : "invoices"}
                 </p>
               </div>
             </Link>

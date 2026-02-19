@@ -1,10 +1,11 @@
-import Link from "next/link";
 import { desc, eq } from "drizzle-orm";
+import Link from "next/link";
+
+import { StatCard } from "@/components/stat-card";
+import { StatusBadge } from "@/components/status-badge";
 import { db } from "@/lib/db";
 import { clients, invoices } from "@/lib/db/schema";
 import { formatCurrency } from "@/lib/utils";
-import { StatusBadge } from "@/components/status-badge";
-import { StatCard } from "@/components/stat-card";
 
 const FILTER_STATUSES = ["all", "draft", "sent", "paid", "overdue"] as const;
 
@@ -17,15 +18,15 @@ export default async function InvoicesPage({
 
   const invoiceList = await db
     .select({
+      clientEmail: clients.email,
+      clientName: clients.name,
+      currency: invoices.currency,
+      dueAt: invoices.dueAt,
       id: invoices.id,
+      issuedAt: invoices.issuedAt,
       number: invoices.number,
       status: invoices.status,
-      currency: invoices.currency,
       total: invoices.total,
-      issuedAt: invoices.issuedAt,
-      dueAt: invoices.dueAt,
-      clientName: clients.name,
-      clientEmail: clients.email,
     })
     .from(invoices)
     .leftJoin(clients, eq(invoices.clientId, clients.id))
@@ -58,9 +59,7 @@ export default async function InvoicesPage({
       : "all";
 
   const filtered =
-    activeFilter === "all"
-      ? invoiceList
-      : invoiceList.filter((inv) => inv.status === activeFilter);
+    activeFilter === "all" ? invoiceList : invoiceList.filter((inv) => inv.status === activeFilter);
 
   return (
     <div>
@@ -70,18 +69,14 @@ export default async function InvoicesPage({
 
       {/* Stats */}
       <div className="mb-8 grid grid-cols-3 gap-8">
-        <StatCard
-          label="Outstanding"
-          value={formatCurrency(outstanding)}
-        />
-        <StatCard
-          label="Total Paid"
-          value={formatCurrency(totalPaid)}
-        />
+        <StatCard label="Outstanding" value={formatCurrency(outstanding)} />
+        <StatCard label="Total Paid" value={formatCurrency(totalPaid)} />
         <StatCard
           label="Overdue"
+          sub={
+            overdueCount > 0 ? `${overdueCount} invoice${overdueCount === 1 ? "" : "s"}` : undefined
+          }
           value={formatCurrency(overdueAmount)}
-          sub={overdueCount > 0 ? `${overdueCount} invoice${overdueCount === 1 ? "" : "s"}` : undefined}
         />
       </div>
 
@@ -89,13 +84,11 @@ export default async function InvoicesPage({
       <div className="mb-6 flex gap-1">
         {FILTER_STATUSES.map((s) => (
           <Link
-            key={s}
-            href={s === "all" ? "/invoices" : `/invoices?status=${s}`}
             className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
-              activeFilter === s
-                ? "bg-zinc-100 text-zinc-900"
-                : "text-zinc-500 hover:text-zinc-700"
+              activeFilter === s ? "bg-zinc-100 text-zinc-900" : "text-zinc-500 hover:text-zinc-700"
             }`}
+            href={s === "all" ? "/invoices" : `/invoices?status=${s}`}
+            key={s}
           >
             {s.charAt(0).toUpperCase() + s.slice(1)}
           </Link>
@@ -108,28 +101,28 @@ export default async function InvoicesPage({
       ) : (
         <table className="w-full">
           <thead>
-            <tr className="border-b border-zinc-100 text-left text-xs font-medium uppercase tracking-wide text-zinc-400">
-              <th className="pb-3 pr-4">Number</th>
-              <th className="pb-3 pr-4">Client</th>
-              <th className="pb-3 pr-4 text-right">Amount</th>
-              <th className="pb-3 pr-4">Status</th>
-              <th className="pb-3 pr-4">Issued</th>
+            <tr className="border-b border-zinc-100 text-left text-xs font-medium tracking-wide text-zinc-400 uppercase">
+              <th className="pr-4 pb-3">Number</th>
+              <th className="pr-4 pb-3">Client</th>
+              <th className="pr-4 pb-3 text-right">Amount</th>
+              <th className="pr-4 pb-3">Status</th>
+              <th className="pr-4 pb-3">Issued</th>
               <th className="pb-3">Due</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-zinc-50">
             {filtered.map((inv) => (
-              <tr key={inv.id} className="group">
+              <tr className="group" key={inv.id}>
                 <td className="py-3 pr-4">
                   <Link
-                    href={`/invoices/${inv.id}`}
                     className="font-mono text-sm font-medium text-zinc-900 group-hover:text-zinc-600"
+                    href={`/invoices/${inv.id}`}
                   >
                     {inv.number}
                   </Link>
                 </td>
                 <td className="py-3 pr-4">
-                  <Link href={`/invoices/${inv.id}`} className="block">
+                  <Link className="block" href={`/invoices/${inv.id}`}>
                     <p className="text-sm text-zinc-900">{inv.clientName}</p>
                     <p className="text-xs text-zinc-500">{inv.clientEmail}</p>
                   </Link>
@@ -145,14 +138,10 @@ export default async function InvoicesPage({
                   </Link>
                 </td>
                 <td className="py-3 pr-4 text-sm text-zinc-500">
-                  <Link href={`/invoices/${inv.id}`}>
-                    {formatDate(inv.issuedAt)}
-                  </Link>
+                  <Link href={`/invoices/${inv.id}`}>{formatDate(inv.issuedAt)}</Link>
                 </td>
                 <td className="py-3 text-sm text-zinc-500">
-                  <Link href={`/invoices/${inv.id}`}>
-                    {formatDate(inv.dueAt)}
-                  </Link>
+                  <Link href={`/invoices/${inv.id}`}>{formatDate(inv.dueAt)}</Link>
                 </td>
               </tr>
             ))}
@@ -165,8 +154,8 @@ export default async function InvoicesPage({
 
 function formatDate(dateStr: string): string {
   return new Date(dateStr).toLocaleDateString("en-US", {
-    month: "short",
     day: "numeric",
+    month: "short",
     year: "numeric",
   });
 }

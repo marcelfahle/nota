@@ -569,3 +569,37 @@ Notes:
 - /invoices/[id] doesn't exist yet — will 404 until Feature 5.4 is built.
 - ESLint + eslint-config-next still in devDependencies — remove when adding Oxlint in 1.2
 - No test framework configured yet — verification is via TypeScript compilation and build success
+
+## 2026-02-19 — Feature 1.2: Configure tsgo, Oxlint, and Oxfmt
+
+Completed:
+- Added package.json scripts: tsc (tsgo), lint (oxlint), format (oxfmt --write .), format:check (oxfmt --check .), check (npm-run-all --parallel tsc lint format:check)
+- Created oxlint.config.ts with @nkzw/oxlint-config extending via defineConfig from oxlint
+- Created .oxfmtrc.jsonc with experimentalSortImports and experimentalTailwindcss (pointed at globals.css stylesheet for Tailwind v4, with cn/clsx/cva function support)
+- Created .vscode/settings.json with tsgo, oxc-vscode formatter, formatOnSave, and fixAll.oxc
+- Removed eslint and eslint-config-next from devDependencies
+- Ran oxfmt to format the entire codebase (sorted imports, formatted all 46 files)
+- Fixed 27 lint errors across 13 files:
+  - Replaced `import * as React from "react"` with `import type { ComponentProps } from "react"` in all 12 shadcn UI components
+  - Replaced `React.ComponentProps<...>` with `ComponentProps<...>` throughout
+  - Sorted CVA variant objects alphabetically in button.tsx and badge.tsx (perfectionist/sort-objects)
+  - Changed `isNaN()` to `Number.isNaN()` in invoice-form.tsx (unicorn/prefer-number-properties)
+  - Changed `Client[]` to `Array<Client>` and similar in invoice-form.tsx (typescript-eslint/array-type)
+- All three checks pass: `bun run check` (tsc + lint + format:check) — 0 errors
+- `bun run build` succeeds
+
+Prioritization note:
+- Chose 1.2 (tsgo/Oxlint/Oxfmt) as highest priority because (1) the task workflow requires running `bun format` and `bun check` which didn't exist as scripts, (2) this feature had been deferred 15+ consecutive sessions creating growing code quality debt, and (3) the dependencies were already installed — only config and scripts were missing. Every future feature benefits from having automated code quality checks.
+
+Next up:
+- Feature 5.4: Build invoice detail page (critical path — blocks 5.5, 6.2, 8.2, 9.2, 11.3)
+- Feature 5.5: Implement invoice duplication
+- Feature 6.1: Install react-pdf and create PDF invoice template
+
+Notes:
+- PRD specified `organizeImports` and `tailwindCSS.sortClasses` for .oxfmtrc.jsonc, but oxfmt 0.33.0 uses `experimentalSortImports` and `experimentalTailwindcss` — updated to match actual API
+- PRD specified scripts as `fmt` and `fmt:check` but used `format` and `format:check` to match the task workflow's `bun format` command
+- oxlint.config.ts triggers a Node.js MODULE_TYPELESS_PACKAGE_JSON warning since package.json lacks `"type": "module"`. Cosmetic only — doesn't affect functionality.
+- The @nkzw/oxlint-config enables strict perfectionist rules (sort-objects, sort-jsx-props, sort-object-types) which enforce alphabetical ordering of all object properties and JSX attributes
+- ESLint is now fully removed from devDependencies
+- No test framework configured yet

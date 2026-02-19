@@ -47,7 +47,7 @@
             "Run: bun run check",
             "Verify: All three checks (tsc, lint, fmt:check) pass"
           ],
-          "passes": false
+          "passes": true
         },
         {
           "id": "1.3",

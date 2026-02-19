@@ -1,33 +1,28 @@
-import { notFound } from "next/navigation";
 import { eq, desc } from "drizzle-orm";
+import { notFound } from "next/navigation";
+
+import { ClientDetailView } from "@/components/client-detail";
 import { db } from "@/lib/db";
 import { clients, invoices } from "@/lib/db/schema";
-import { ClientDetailView } from "@/components/client-detail";
 
-export default async function ClientDetailPage({
-  params,
-}: {
-  params: Promise<{ id: string }>;
-}) {
+export default async function ClientDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
 
-  const [client] = await db
-    .select()
-    .from(clients)
-    .where(eq(clients.id, id))
-    .limit(1);
+  const [client] = await db.select().from(clients).where(eq(clients.id, id)).limit(1);
 
-  if (!client) notFound();
+  if (!client) {
+    notFound();
+  }
 
   const clientInvoices = await db
     .select({
+      currency: invoices.currency,
+      dueAt: invoices.dueAt,
       id: invoices.id,
+      issuedAt: invoices.issuedAt,
       number: invoices.number,
       status: invoices.status,
       total: invoices.total,
-      currency: invoices.currency,
-      issuedAt: invoices.issuedAt,
-      dueAt: invoices.dueAt,
     })
     .from(invoices)
     .where(eq(invoices.clientId, id))

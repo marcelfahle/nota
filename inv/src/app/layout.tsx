@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { DM_Sans, DM_Mono } from "next/font/google";
+
 import "./globals.css";
 
 const sans = DM_Sans({
@@ -8,14 +9,14 @@ const sans = DM_Sans({
 });
 
 const mono = DM_Mono({
-  weight: ["400", "500"],
   subsets: ["latin"],
   variable: "--font-mono",
+  weight: ["400", "500"],
 });
 
 export const metadata: Metadata = {
-  title: "inv.",
   description: "Personal invoicing app",
+  title: "inv.",
 };
 
 export default function RootLayout({
@@ -25,9 +26,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body className={`${sans.variable} ${mono.variable} antialiased`}>
-        {children}
-      </body>
+      <body className={`${sans.variable} ${mono.variable} antialiased`}>{children}</body>
     </html>
   );
 }

@@ -1,24 +1,27 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
 import { eq } from "drizzle-orm";
+import { revalidatePath } from "next/cache";
 import { z } from "zod";
+
 import { db } from "@/lib/db";
 import { clients, users } from "@/lib/db/schema";
 
 const clientSchema = z.object({
-  name: z.string().min(1, "Name is required"),
-  email: z.string().email("Invalid email address"),
-  company: z.string().optional(),
   address: z.string().optional(),
-  vatNumber: z.string().optional(),
-  notes: z.string().optional(),
+  company: z.string().optional(),
   defaultCurrency: z.string().optional().default("EUR"),
+  email: z.string().email("Invalid email address"),
+  name: z.string().min(1, "Name is required"),
+  notes: z.string().optional(),
+  vatNumber: z.string().optional(),
 });
 
 async function getUserId(): Promise<string> {
   const [user] = await db.select({ id: users.id }).from(users).limit(1);
-  if (!user) throw new Error("No user found");
+  if (!user) {
+    throw new Error("No user found");
+  }
   return user.id;
 }
 
@@ -27,13 +30,13 @@ export async function createClient(
   formData: FormData,
 ) {
   const raw = {
-    name: formData.get("name") as string,
-    email: formData.get("email") as string,
-    company: (formData.get("company") as string) || undefined,
     address: (formData.get("address") as string) || undefined,
-    vatNumber: (formData.get("vatNumber") as string) || undefined,
-    notes: (formData.get("notes") as string) || undefined,
+    company: (formData.get("company") as string) || undefined,
     defaultCurrency: (formData.get("defaultCurrency") as string) || undefined,
+    email: formData.get("email") as string,
+    name: formData.get("name") as string,
+    notes: (formData.get("notes") as string) || undefined,
+    vatNumber: (formData.get("vatNumber") as string) || undefined,
   };
 
   const result = clientSchema.safeParse(raw);
@@ -58,13 +61,13 @@ export async function updateClient(
   formData: FormData,
 ) {
   const raw = {
-    name: formData.get("name") as string,
-    email: formData.get("email") as string,
-    company: (formData.get("company") as string) || undefined,
     address: (formData.get("address") as string) || undefined,
-    vatNumber: (formData.get("vatNumber") as string) || undefined,
-    notes: (formData.get("notes") as string) || undefined,
+    company: (formData.get("company") as string) || undefined,
     defaultCurrency: (formData.get("defaultCurrency") as string) || undefined,
+    email: formData.get("email") as string,
+    name: formData.get("name") as string,
+    notes: (formData.get("notes") as string) || undefined,
+    vatNumber: (formData.get("vatNumber") as string) || undefined,
   };
 
   const result = clientSchema.safeParse(raw);

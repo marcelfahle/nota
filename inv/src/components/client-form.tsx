@@ -1,7 +1,8 @@
 "use client";
 
-import { useActionState, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import { useActionState, useEffect } from "react";
+
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -16,32 +17,29 @@ import {
 type ActionState = { error?: string; success?: boolean } | null;
 
 type ClientFormProps = {
-  action: (
-    state: ActionState,
-    formData: FormData,
-  ) => Promise<ActionState>;
+  action: (state: ActionState, formData: FormData) => Promise<ActionState>;
   defaultValues?: {
-    name?: string;
-    email?: string;
-    company?: string | null;
     address?: string | null;
-    vatNumber?: string | null;
-    notes?: string | null;
+    company?: string | null;
     defaultCurrency?: string | null;
+    email?: string;
+    name?: string;
+    notes?: string | null;
+    vatNumber?: string | null;
   };
-  submitLabel?: string;
-  redirectTo?: string;
-  onSuccess?: () => void;
   onCancel?: () => void;
+  onSuccess?: () => void;
+  redirectTo?: string;
+  submitLabel?: string;
 };
 
 export function ClientForm({
   action,
   defaultValues,
-  submitLabel = "Save Client",
-  redirectTo,
-  onSuccess,
   onCancel,
+  onSuccess,
+  redirectTo,
+  submitLabel = "Save Client",
 }: ClientFormProps) {
   const [state, formAction, pending] = useActionState(action, null);
   const router = useRouter();
@@ -60,21 +58,16 @@ export function ClientForm({
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="space-y-2">
           <Label htmlFor="name">Name *</Label>
-          <Input
-            id="name"
-            name="name"
-            defaultValue={defaultValues?.name ?? ""}
-            required
-          />
+          <Input defaultValue={defaultValues?.name ?? ""} id="name" name="name" required />
         </div>
         <div className="space-y-2">
           <Label htmlFor="email">Email *</Label>
           <Input
+            defaultValue={defaultValues?.email ?? ""}
             id="email"
             name="email"
-            type="email"
-            defaultValue={defaultValues?.email ?? ""}
             required
+            type="email"
           />
         </div>
       </div>
@@ -82,46 +75,27 @@ export function ClientForm({
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="space-y-2">
           <Label htmlFor="company">Company</Label>
-          <Input
-            id="company"
-            name="company"
-            defaultValue={defaultValues?.company ?? ""}
-          />
+          <Input defaultValue={defaultValues?.company ?? ""} id="company" name="company" />
         </div>
         <div className="space-y-2">
           <Label htmlFor="vatNumber">VAT Number</Label>
-          <Input
-            id="vatNumber"
-            name="vatNumber"
-            defaultValue={defaultValues?.vatNumber ?? ""}
-          />
+          <Input defaultValue={defaultValues?.vatNumber ?? ""} id="vatNumber" name="vatNumber" />
         </div>
       </div>
 
       <div className="space-y-2">
         <Label htmlFor="address">Address</Label>
-        <Input
-          id="address"
-          name="address"
-          defaultValue={defaultValues?.address ?? ""}
-        />
+        <Input defaultValue={defaultValues?.address ?? ""} id="address" name="address" />
       </div>
 
       <div className="space-y-2">
         <Label htmlFor="notes">Notes</Label>
-        <Input
-          id="notes"
-          name="notes"
-          defaultValue={defaultValues?.notes ?? ""}
-        />
+        <Input defaultValue={defaultValues?.notes ?? ""} id="notes" name="notes" />
       </div>
 
       <div className="space-y-2">
         <Label>Currency</Label>
-        <Select
-          name="defaultCurrency"
-          defaultValue={defaultValues?.defaultCurrency ?? "EUR"}
-        >
+        <Select defaultValue={defaultValues?.defaultCurrency ?? "EUR"} name="defaultCurrency">
           <SelectTrigger className="w-full">
             <SelectValue />
           </SelectTrigger>
@@ -133,17 +107,15 @@ export function ClientForm({
         </Select>
       </div>
 
-      {state?.error && (
-        <p className="text-sm text-red-500">{state.error}</p>
-      )}
+      {state?.error && <p className="text-sm text-red-500">{state.error}</p>}
 
       <div className="flex justify-end gap-2">
         {onCancel && (
-          <Button type="button" variant="outline" onClick={onCancel}>
+          <Button onClick={onCancel} type="button" variant="outline">
             Cancel
           </Button>
         )}
-        <Button type="submit" disabled={pending}>
+        <Button disabled={pending} type="submit">
           {pending ? "Saving..." : submitLabel}
         </Button>
       </div>

@@ -1,0 +1,7 @@
+{
+  "experimentalSortImports": {},
+  "experimentalTailwindcss": {
+    "stylesheet": "./src/app/globals.css",
+    "functions": ["cn", "clsx", "cva"],
+  },
+}
