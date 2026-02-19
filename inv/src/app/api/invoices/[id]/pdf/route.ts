@@ -3,8 +3,9 @@ import { asc, eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
 
 import { InvoicePdf } from "@/components/invoice-pdf";
+import { getCurrentUser } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { clients, invoices, lineItems, users } from "@/lib/db/schema";
+import { clients, invoices, lineItems } from "@/lib/db/schema";
 
 export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -27,15 +28,15 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
     .where(eq(lineItems.invoiceId, id))
     .orderBy(asc(lineItems.sortOrder));
 
-  const [user] = await db.select().from(users).where(eq(users.id, invoice.userId)).limit(1);
+  const user = await getCurrentUser();
 
   const buffer = await renderToBuffer(
     InvoicePdf({
       business: {
-        address: user?.businessAddress,
-        bankDetails: user?.bankDetails,
-        name: user?.businessName,
-        vatNumber: user?.vatNumber,
+        address: user.businessAddress,
+        bankDetails: user.bankDetails,
+        name: user.businessName,
+        vatNumber: user.vatNumber,
       },
       client: {
         address: client.address,

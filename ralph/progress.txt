@@ -788,3 +788,53 @@ Notes:
 - Avoided useEffect + useState for "saved" feedback due to oxlint react-hooks-js/set-state-in-effect rule — derived directly from action state instead
 - Settings gear icon uses ghost variant to visually separate it from the primary "New Invoice" action
 - No test framework configured yet — verification is via TypeScript compilation and check suite
+
+## 2026-02-19 — Feature 10.2: Seed initial user and wire up user context
+
+Completed:
+- Created scripts/seed.ts — standalone script to create or update the single user record:
+  - Accepts SEED_EMAIL, SEED_NAME, SEED_PASSWORD env vars (defaults: admin@inv.app, Admin, changeme)
+  - Generates password hash using scrypt (same algorithm as auth.ts)
+  - Creates user if not found by email, updates name + passwordHash if found
+  - Outputs password hash for setting PASSWORD_HASH env var
+  - Uses top-level await pattern to satisfy oxlint prefer-top-level-await rule
+  - Run with: bun run scripts/seed.ts
+- Created src/lib/auth.ts — central auth helper:
+  - Exports getCurrentUser() that queries the single user (first user) from DB
+  - Cached with React cache() for request deduplication within a single server render
+- Updated src/actions/clients.ts:
+  - Removed local getUserId() function and users import
+  - Now imports getCurrentUser from @/lib/auth
+  - createClient uses getCurrentUser().id for userId
+- Updated src/actions/invoices.ts:
+  - Removed local getUserId() function
+  - Now imports getCurrentUser from @/lib/auth
+  - createInvoice uses getCurrentUser().id for userId
+- Updated src/actions/settings.ts:
+  - Removed local getUserId() function
+  - Now imports getCurrentUser from @/lib/auth
+  - updateSettings uses getCurrentUser().id for userId
+- Updated src/app/(dashboard)/settings/page.tsx:
+  - Replaced raw DB query with getCurrentUser() for settings data
+  - Removed direct db/schema imports
+- Updated src/app/api/invoices/[id]/pdf/route.ts:
+  - Replaced raw DB user query with getCurrentUser() for business details
+  - Removed users schema import
+- Phase 10 is now fully complete (10.1 + 10.2 both pass)
+- All checks pass: `bun run check` (tsc + lint + format:check) — 0 errors
+
+Prioritization note:
+- Chose 10.2 (seed user + user context) as highest priority because every server action in the app had a duplicated getUserId() function that independently queried the database. This was a correctness and maintainability issue affecting all CRUD operations. Centralizing to getCurrentUser() with React cache() eliminates 3 duplicate functions, ensures consistent user resolution, and enables request-level deduplication. Additionally, the seed script enables fresh deployments to bootstrap the app. Features 7.x/8.x remain blocked by API keys.
+
+Next up:
+- Feature 11.1: Empty states and loading states (unblocked, improves UX)
+- Feature 11.3: Activity log on invoice detail (unblocked, DB-only)
+- Feature 11.2: Mobile responsive pass (unblocked)
+- Feature 9.1: Overdue detection cron job (unblocked, DB-only)
+
+Notes:
+- getCurrentUser() uses React cache() which deduplicates calls within a single server request — if multiple server actions or components call it, only one DB query is made per request
+- The seed script uses the same scrypt hashing as auth.ts (randomBytes(16) salt, 64-byte key length)
+- Password hash format is "salt:hex_key" — same format expected by auth.ts verifyPassword()
+- scripts/seed.ts uses `/* eslint-disable no-console */` since console output is expected in a CLI script
+- No test framework configured yet — verification is via TypeScript compilation and check suite

@@ -542,7 +542,7 @@
             "Run: bun run dev",
             "Verify: Business details from settings appear on PDFs and emails"
           ],
-          "passes": false
+          "passes": true
         }
       ]
     },

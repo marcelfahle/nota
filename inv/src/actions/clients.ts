@@ -4,8 +4,9 @@ import { eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
+import { getCurrentUser } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { clients, users } from "@/lib/db/schema";
+import { clients } from "@/lib/db/schema";
 
 const clientSchema = z.object({
   address: z.string().optional(),
@@ -16,14 +17,6 @@ const clientSchema = z.object({
   notes: z.string().optional(),
   vatNumber: z.string().optional(),
 });
-
-async function getUserId(): Promise<string> {
-  const [user] = await db.select({ id: users.id }).from(users).limit(1);
-  if (!user) {
-    throw new Error("No user found");
-  }
-  return user.id;
-}
 
 export async function createClient(
   _prevState: { error?: string; success?: boolean } | null,
@@ -44,11 +37,11 @@ export async function createClient(
     return { error: result.error.issues[0].message };
   }
 
-  const userId = await getUserId();
+  const user = await getCurrentUser();
 
   await db.insert(clients).values({
     ...result.data,
-    userId,
+    userId: user.id,
   });
 
   revalidatePath("/clients");

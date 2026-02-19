@@ -1,27 +1,16 @@
 import { SettingsForm } from "@/components/settings-form";
-import { db } from "@/lib/db";
-import { users } from "@/lib/db/schema";
+import { getCurrentUser } from "@/lib/auth";
 
 export default async function SettingsPage() {
-  const [user] = await db
-    .select({
-      bankDetails: users.bankDetails,
-      businessAddress: users.businessAddress,
-      businessName: users.businessName,
-      defaultCurrency: users.defaultCurrency,
-      invoicePrefix: users.invoicePrefix,
-      vatNumber: users.vatNumber,
-    })
-    .from(users)
-    .limit(1);
+  const user = await getCurrentUser();
 
-  const settings = user ?? {
-    bankDetails: null,
-    businessAddress: null,
-    businessName: null,
-    defaultCurrency: "EUR",
-    invoicePrefix: "INV",
-    vatNumber: null,
+  const settings = {
+    bankDetails: user.bankDetails,
+    businessAddress: user.businessAddress,
+    businessName: user.businessName,
+    defaultCurrency: user.defaultCurrency,
+    invoicePrefix: user.invoicePrefix,
+    vatNumber: user.vatNumber,
   };
 
   return (

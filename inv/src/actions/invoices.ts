@@ -4,8 +4,9 @@ import { eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
+import { getCurrentUser } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { invoices, lineItems, users, activityLog } from "@/lib/db/schema";
+import { activityLog, invoices, lineItems, users } from "@/lib/db/schema";
 
 const lineItemSchema = z.object({
   description: z.string().min(1, "Description is required"),
@@ -24,14 +25,6 @@ const invoiceSchema = z.object({
   reverseCharge: z.string().default("false"),
   taxRate: z.coerce.number().min(0).max(100).default(0),
 });
-
-async function getUserId(): Promise<string> {
-  const [user] = await db.select({ id: users.id }).from(users).limit(1);
-  if (!user) {
-    throw new Error("No user found");
-  }
-  return user.id;
-}
 
 function calculateTotals(items: Array<{ quantity: number; unitPrice: number }>, taxRate: number) {
   const subtotal = items.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0);
@@ -68,7 +61,8 @@ export async function createInvoice(
     return { error: result.error.issues[0].message };
   }
 
-  const userId = await getUserId();
+  const user = await getCurrentUser();
+  const userId = user.id;
   const { lineItems: items, taxRate, ...invoiceData } = result.data;
   const totals = calculateTotals(items, taxRate);
 
