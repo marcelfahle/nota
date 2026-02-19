@@ -27,7 +27,14 @@ type LineItem = {
   unitPrice: string;
 };
 
+type ActivityEntry = {
+  action: string;
+  createdAt: string;
+  id: string;
+};
+
 type InvoiceDetailProps = {
+  activities: Array<ActivityEntry>;
   invoice: {
     client: { email: string; name: string };
     currency: string | null;
@@ -57,7 +64,15 @@ function formatDate(dateStr: string): string {
   });
 }
 
-export function InvoiceDetailView({ invoice }: InvoiceDetailProps) {
+const ACTION_LABELS: Record<string, string> = {
+  created: "Invoice created",
+  marked_overdue: "Marked overdue",
+  paid: "Payment received",
+  reminder_sent: "Reminder sent",
+  sent: "Invoice sent",
+};
+
+export function InvoiceDetailView({ activities, invoice }: InvoiceDetailProps) {
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [duplicating, setDuplicating] = useState(false);
@@ -249,6 +264,29 @@ export function InvoiceDetailView({ invoice }: InvoiceDetailProps) {
           {invoice.internalNotes && (
             <DetailItem label="Internal Notes" value={invoice.internalNotes} />
           )}
+        </div>
+      )}
+
+      {/* Activity Log */}
+      {activities.length > 0 && (
+        <div className="mb-8">
+          <h2 className="mb-4 text-sm font-semibold">Activity</h2>
+          <div className="relative pl-6">
+            {activities.map((activity, i) => (
+              <div className="relative pb-4 last:pb-0" key={activity.id}>
+                {/* Vertical line */}
+                {i < activities.length - 1 && (
+                  <div className="absolute top-2 left-[-17px] h-full w-px bg-zinc-200" />
+                )}
+                {/* Dot */}
+                <div className="absolute top-1.5 left-[-20px] size-[7px] rounded-full bg-zinc-400" />
+                <p className="text-sm text-zinc-900">
+                  {ACTION_LABELS[activity.action] ?? activity.action}
+                </p>
+                <p className="text-xs text-zinc-400">{formatDate(activity.createdAt)}</p>
+              </div>
+            ))}
+          </div>
         </div>
       )}
 

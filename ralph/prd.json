@@ -590,7 +590,7 @@
             "Run: bun run dev",
             "Verify: Activity log shows on invoice detail with correct entries"
           ],
-          "passes": false
+          "passes": true
         }
       ]
     }
