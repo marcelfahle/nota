@@ -378,3 +378,45 @@ Notes:
 - PostgreSQL functional dependency grouping allows SELECT of non-aggregated columns when GROUP BY includes the primary key
 - ESLint + eslint-config-next still in devDependencies — remove when adding Oxlint in 1.2
 - No test framework configured yet — verification is via TypeScript compilation and build success
+
+## 2026-02-19 — Feature 4.3: Build client form dialog and detail page
+
+Completed:
+- Created src/components/client-form.tsx — reusable Client Component form with all fields:
+  - name (required), email (required), company, address, vatNumber, notes, defaultCurrency (Select: EUR/USD/GBP)
+  - Uses useActionState for form submission with pending state
+  - Accepts action prop (useActionState-compatible), defaultValues for editing, submitLabel, redirectTo, onSuccess, onCancel
+  - Redirects via useRouter on success when redirectTo is provided
+  - Calls onSuccess callback on success (used by edit mode to toggle back to view)
+  - Uses shadcn Input, Label, Select components in a responsive 2-column grid
+- Created src/app/(dashboard)/clients/new/page.tsx — Client Component page
+  - Back link to /clients, heading "New Client"
+  - Renders ClientForm with createClient action, redirects to /clients on success
+- Created src/app/(dashboard)/clients/[id]/page.tsx — Server Component
+  - Queries client by id from DB, returns 404 if not found
+  - Queries client's invoices ordered by createdAt desc
+  - Passes data to ClientDetailView client component
+- Created src/components/client-detail.tsx — Client Component for interactive detail view
+  - Header: avatar with initials, client name, company + email
+  - Edit button toggles between detail view and edit form (ClientForm with updateClient.bind(null, clientId))
+  - Detail view shows address, VAT number, currency, notes in a 2-column grid
+  - Invoice list: shows each invoice as a clickable row with number, status badge (color-coded), total, due date
+  - Delete button with Dialog confirmation — calls deleteClient and redirects to /clients
+  - Empty state for invoices: "No invoices for this client."
+- TypeScript compiles clean, `bun run build` succeeds
+- Routes: /clients/new (static), /clients/[id] (dynamic)
+
+Prioritization note:
+- Chose 4.3 (client form + detail page) as highest priority because it's the critical-path bottleneck. Without it, no clients can be created (the /clients/new page didn't exist), and without clients, no invoices can be created (invoices require a clientId FK). This blocks all of Phase 5+ (invoice CRUD, PDF generation, Stripe, email, etc.).
+
+Next up:
+- Feature 3.4: Create shared UI components (StatusBadge, StatCard) — needed for 5.2 (invoice list page)
+- Feature 5.1: Create server actions for invoice CRUD — next on critical path
+- Feature 1.2: Configure tsgo, Oxlint, and Oxfmt (non-blocking tooling)
+
+Notes:
+- updateClient uses .bind(null, clientId) to create a useActionState-compatible action
+- ClientForm uses Radix Select with name prop for form submission (renders hidden native select)
+- formatCurrency is duplicated in client-detail.tsx (same as clients list page); Feature 3.4 will add shared version to lib/utils.ts
+- ESLint + eslint-config-next still in devDependencies — remove when adding Oxlint in 1.2
+- No test framework configured yet — verification is via TypeScript compilation and build success

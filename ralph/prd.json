@@ -274,7 +274,7 @@
             "Run: bun run dev",
             "Verify: Can create a new client, see it in the list, click into detail, edit, and delete"
           ],
-          "passes": false
+          "passes": true
         }
       ]
     },
