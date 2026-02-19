@@ -922,3 +922,46 @@ Notes:
 - Empty states use consistent pattern: icon in zinc-100 circle, bold title, muted description, primary CTA button
 - Loading skeletons use plain div with animate-pulse instead of a separate Skeleton component — keeps it simple
 - The clients page already had a "New Client" button in the header; the empty state adds a second CTA in the empty content area for discoverability
+
+## 2026-02-19 — Feature 11.2: Mobile responsive pass
+
+Completed:
+- Updated dashboard layout (src/app/(dashboard)/layout.tsx):
+  - Reduced horizontal padding on mobile (px-4 vs px-6 on sm:)
+  - Reduced gap between logo and nav (gap-4 vs gap-8 on sm:)
+  - Hidden "inv." text label on mobile (logo icon still visible)
+  - Hidden "New Invoice" button text on mobile (plus icon still visible)
+  - Reduced main content padding on mobile (py-6 vs py-8 on sm:)
+- Updated invoice list page (src/app/(dashboard)/invoices/page.tsx):
+  - Stats grid: single column on mobile (grid-cols-1), 3 columns on sm: (sm:grid-cols-3)
+  - Reduced stats gap on mobile (gap-4 vs gap-8 on sm:)
+  - Hidden Issued and Due columns on mobile (hidden sm:table-cell)
+  - Made filter tabs horizontally scrollable on mobile (overflow-x-auto)
+- Updated invoice form (src/components/invoice-form.tsx):
+  - Line items: stacked layout on mobile (flex-col), grid layout on sm: (sm:grid-cols-[1fr_80px_100px_100px_36px])
+  - Hidden table header row on mobile (hidden sm:grid)
+  - On mobile: description input on top, qty/rate/delete in a row below, amount at bottom
+  - Used sm:contents to seamlessly transition between mobile stack and desktop grid
+- Updated invoice detail (src/components/invoice-detail.tsx):
+  - Header: stacked layout (title block on top, action buttons below)
+  - Action buttons: flex-wrap for natural wrapping on narrow screens
+  - Line items table: overflow-x-auto with min-w-[400px] for horizontal scroll on very small screens
+- Updated client detail (src/components/client-detail.tsx):
+  - Header: stacked layout (avatar + name on top, buttons below)
+  - Added shrink-0 on avatar circle, min-w-0 + truncate on name/email for overflow protection
+  - Action buttons: flex-wrap for natural wrapping
+
+Prioritization note:
+- Chose 11.2 (mobile responsive) as highest priority because it's the only remaining feature with zero external dependencies. All other features (7.1 Stripe client, 7.2 Stripe webhook, 8.1 Resend email, 8.2 sendInvoice, 9.2 send reminder) require API keys (STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET, RESEND_API_KEY) that aren't configured, making them impossible to fully test. Mobile responsiveness directly improves the working app's usability for all users now.
+
+Next up:
+- Feature 7.1: Set up Stripe client (needs STRIPE_SECRET_KEY in .env)
+- Feature 8.1: Set up Resend and email templates (needs RESEND_API_KEY)
+- Feature 7.2: Stripe webhook handler (needs 7.1 + STRIPE_WEBHOOK_SECRET)
+
+Notes:
+- The invoice form line items use `sm:contents` to make children participate in the parent grid on desktop while being self-contained flex items on mobile
+- Client list page was already single-column and tested fine at 375px — no changes needed
+- Settings form already used sm:grid-cols-2 responsive grids — no changes needed
+- All pages are now usable at 375px width
+- Phase 11 (Polish & Responsive) is now fully complete (11.1 + 11.2 + 11.3 all pass)

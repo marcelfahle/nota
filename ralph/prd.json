@@ -576,7 +576,7 @@
             "Run: bun run dev and test at 375px width",
             "Verify: All pages are usable on mobile"
           ],
-          "passes": false
+          "passes": true
         },
         {
           "id": "11.3",

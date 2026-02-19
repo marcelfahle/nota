@@ -71,9 +71,9 @@ export function ClientDetailView({
         Back to clients
       </Link>
 
-      <div className="mb-8 flex items-start justify-between">
-        <div className="flex items-center gap-4">
-          <div className="flex h-12 w-12 items-center justify-center rounded-full bg-zinc-100 text-sm font-medium text-zinc-600">
+      <div className="mb-8">
+        <div className="mb-4 flex items-center gap-4">
+          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-zinc-100 text-sm font-medium text-zinc-600">
             {client.name
               .split(" ")
               .map((w) => w[0])
@@ -81,15 +81,15 @@ export function ClientDetailView({
               .toUpperCase()
               .slice(0, 2)}
           </div>
-          <div>
-            <h1 className="text-lg font-semibold">{client.name}</h1>
-            <p className="text-sm text-zinc-500">
+          <div className="min-w-0">
+            <h1 className="truncate text-lg font-semibold">{client.name}</h1>
+            <p className="truncate text-sm text-zinc-500">
               {client.company && <span>{client.company} &middot; </span>}
               {client.email}
             </p>
           </div>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <Button onClick={() => setEditing(!editing)} size="sm" variant="outline">
             <Pencil className="size-4" />
             {editing ? "Cancel" : "Edit"}

@@ -70,7 +70,7 @@ export default async function InvoicesPage({
       </div>
 
       {/* Stats */}
-      <div className="mb-8 grid grid-cols-3 gap-8">
+      <div className="mb-8 grid grid-cols-1 gap-4 sm:grid-cols-3 sm:gap-8">
         <StatCard label="Outstanding" value={formatCurrency(outstanding)} />
         <StatCard label="Total Paid" value={formatCurrency(totalPaid)} />
         <StatCard
@@ -83,7 +83,7 @@ export default async function InvoicesPage({
       </div>
 
       {/* Filter Tabs */}
-      <div className="mb-6 flex gap-1">
+      <div className="mb-6 flex gap-1 overflow-x-auto">
         {FILTER_STATUSES.map((s) => (
           <Link
             className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
@@ -120,8 +120,8 @@ export default async function InvoicesPage({
               <th className="pr-4 pb-3">Client</th>
               <th className="pr-4 pb-3 text-right">Amount</th>
               <th className="pr-4 pb-3">Status</th>
-              <th className="pr-4 pb-3">Issued</th>
-              <th className="pb-3">Due</th>
+              <th className="hidden pr-4 pb-3 sm:table-cell">Issued</th>
+              <th className="hidden pb-3 sm:table-cell">Due</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-zinc-50">
@@ -151,10 +151,10 @@ export default async function InvoicesPage({
                     <StatusBadge status={inv.status ?? "draft"} />
                   </Link>
                 </td>
-                <td className="py-3 pr-4 text-sm text-zinc-500">
+                <td className="hidden py-3 pr-4 text-sm text-zinc-500 sm:table-cell">
                   <Link href={`/invoices/${inv.id}`}>{formatDate(inv.issuedAt)}</Link>
                 </td>
-                <td className="py-3 text-sm text-zinc-500">
+                <td className="hidden py-3 text-sm text-zinc-500 sm:table-cell">
                   <Link href={`/invoices/${inv.id}`}>{formatDate(inv.dueAt)}</Link>
                 </td>
               </tr>

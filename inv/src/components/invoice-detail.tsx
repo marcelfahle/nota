@@ -104,8 +104,8 @@ export function InvoiceDetailView({ activities, invoice }: InvoiceDetailProps) {
       </Link>
 
       {/* Header */}
-      <div className="mb-8 flex items-start justify-between">
-        <div>
+      <div className="mb-8">
+        <div className="mb-4">
           <div className="mb-1 flex items-center gap-3">
             <h1 className="font-mono text-lg font-semibold">{invoice.number}</h1>
             <StatusBadge status={status} />
@@ -118,7 +118,7 @@ export function InvoiceDetailView({ activities, invoice }: InvoiceDetailProps) {
           </p>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           {status === "draft" && (
             <>
               <Button disabled size="sm" variant="outline">
@@ -203,8 +203,8 @@ export function InvoiceDetailView({ activities, invoice }: InvoiceDetailProps) {
       {/* Line Items */}
       <div className="mb-8">
         <h2 className="mb-4 text-sm font-semibold">Line Items</h2>
-        <div className="rounded-lg border border-zinc-200">
-          <table className="w-full">
+        <div className="overflow-x-auto rounded-lg border border-zinc-200">
+          <table className="w-full min-w-[400px]">
             <thead>
               <tr className="border-b border-zinc-100 text-left text-xs font-medium tracking-wide text-zinc-400 uppercase">
                 <th className="px-4 py-3">Description</th>

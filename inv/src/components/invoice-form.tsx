@@ -195,8 +195,8 @@ export function InvoiceForm({
       <div>
         <Label className="mb-3 block">Line Items</Label>
         <div className="rounded-lg border border-zinc-200">
-          {/* Header */}
-          <div className="grid grid-cols-[1fr_80px_100px_100px_36px] gap-2 border-b border-zinc-100 px-3 py-2 text-xs font-medium tracking-wide text-zinc-400 uppercase">
+          {/* Header (desktop only) */}
+          <div className="hidden gap-2 border-b border-zinc-100 px-3 py-2 text-xs font-medium tracking-wide text-zinc-400 uppercase sm:grid sm:grid-cols-[1fr_80px_100px_100px_36px]">
             <span>Description</span>
             <span>Qty/Hrs</span>
             <span>Rate</span>
@@ -207,7 +207,7 @@ export function InvoiceForm({
           {/* Rows */}
           {items.map((item, index) => (
             <div
-              className="grid grid-cols-[1fr_80px_100px_100px_36px] items-center gap-2 border-b border-zinc-50 px-3 py-2"
+              className="flex flex-col gap-2 border-b border-zinc-50 px-3 py-3 sm:grid sm:grid-cols-[1fr_80px_100px_100px_36px] sm:items-center sm:py-2"
               key={index}
             >
               <Input
@@ -217,37 +217,39 @@ export function InvoiceForm({
                 required
                 value={item.description}
               />
-              <Input
-                className="h-8 text-sm"
-                min="0"
-                onChange={(e) => updateItem(index, "quantity", e.target.value)}
-                placeholder="1"
-                required
-                step="0.01"
-                type="number"
-                value={item.quantity}
-              />
-              <Input
-                className="h-8 text-sm"
-                min="0"
-                onChange={(e) => updateItem(index, "unitPrice", e.target.value)}
-                placeholder="0.00"
-                required
-                step="0.01"
-                type="number"
-                value={item.unitPrice}
-              />
-              <p className="text-right text-sm font-medium text-zinc-900">
+              <div className="grid grid-cols-[1fr_1fr_auto] items-center gap-2 sm:contents">
+                <Input
+                  className="h-8 text-sm"
+                  min="0"
+                  onChange={(e) => updateItem(index, "quantity", e.target.value)}
+                  placeholder="Qty"
+                  required
+                  step="0.01"
+                  type="number"
+                  value={item.quantity}
+                />
+                <Input
+                  className="h-8 text-sm"
+                  min="0"
+                  onChange={(e) => updateItem(index, "unitPrice", e.target.value)}
+                  placeholder="Rate"
+                  required
+                  step="0.01"
+                  type="number"
+                  value={item.unitPrice}
+                />
+                <button
+                  className="flex h-8 w-8 items-center justify-center rounded text-zinc-400 transition-colors hover:text-red-500 sm:order-last"
+                  disabled={items.length <= 1}
+                  onClick={() => removeItem(index)}
+                  type="button"
+                >
+                  <Trash2 className="size-3.5" />
+                </button>
+              </div>
+              <p className="text-right text-sm font-medium text-zinc-900 sm:order-none">
                 {formatCurrency(lineAmounts[index], currency)}
               </p>
-              <button
-                className="flex h-8 w-8 items-center justify-center rounded text-zinc-400 transition-colors hover:text-red-500"
-                disabled={items.length <= 1}
-                onClick={() => removeItem(index)}
-                type="button"
-              >
-                <Trash2 className="size-3.5" />
-              </button>
             </div>
           ))}
 
