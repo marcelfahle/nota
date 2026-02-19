@@ -290,6 +290,51 @@ export async function sendInvoice(invoiceId: string) {
   return { success: true };
 }
 
+export async function sendReminder(invoiceId: string) {
+  const [invoice] = await db.select().from(invoices).where(eq(invoices.id, invoiceId)).limit(1);
+  if (!invoice) {
+    return { error: "Invoice not found" };
+  }
+
+  const [client] = await db.select().from(clients).where(eq(clients.id, invoice.clientId)).limit(1);
+  if (!client) {
+    return { error: "Client not found" };
+  }
+
+  const user = await getCurrentUser();
+
+  const fromEmail =
+    process.env.RESEND_FROM_EMAIL ?? `${user.businessName ?? "inv."} <invoices@resend.dev>`;
+
+  const paymentLinkUrl = invoice.stripePaymentLinkUrl ?? "";
+
+  await resend.emails.send({
+    from: fromEmail,
+    react: InvoiceSentEmail({
+      businessName: user.businessName ?? "inv.",
+      clientName: client.name,
+      currency: invoice.currency ?? "EUR",
+      dueAt: invoice.dueAt,
+      invoiceNumber: invoice.number,
+      paymentLinkUrl,
+      reminder: true,
+      total: invoice.total ?? "0",
+    }),
+    subject: `Reminder: Invoice ${invoice.number} — ${user.businessName ?? "inv."}`,
+    to: [client.email],
+  });
+
+  await db.insert(activityLog).values({
+    action: "reminder_sent",
+    invoiceId,
+  });
+
+  revalidatePath("/invoices");
+  revalidatePath(`/invoices/${invoiceId}`);
+
+  return { success: true };
+}
+
 export async function duplicateInvoice(invoiceId: string) {
   const [original] = await db.select().from(invoices).where(eq(invoices.id, invoiceId)).limit(1);
 

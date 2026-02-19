@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
-import { deleteInvoice, duplicateInvoice, sendInvoice } from "@/actions/invoices";
+import { deleteInvoice, duplicateInvoice, sendInvoice, sendReminder } from "@/actions/invoices";
 import { StatusBadge } from "@/components/status-badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -77,6 +77,7 @@ export function InvoiceDetailView({ activities, invoice }: InvoiceDetailProps) {
   const [deleting, setDeleting] = useState(false);
   const [duplicating, setDuplicating] = useState(false);
   const [sending, setSending] = useState(false);
+  const [reminding, setReminding] = useState(false);
   const router = useRouter();
 
   const currency = invoice.currency ?? "EUR";
@@ -93,6 +94,13 @@ export function InvoiceDetailView({ activities, invoice }: InvoiceDetailProps) {
     await sendInvoice(invoice.id);
     router.refresh();
     setSending(false);
+  }
+
+  async function handleReminder() {
+    setReminding(true);
+    await sendReminder(invoice.id);
+    router.refresh();
+    setReminding(false);
   }
 
   async function handleDuplicate() {
@@ -142,15 +150,15 @@ export function InvoiceDetailView({ activities, invoice }: InvoiceDetailProps) {
             </>
           )}
           {status === "sent" && (
-            <Button disabled size="sm" variant="outline">
+            <Button disabled={reminding} onClick={handleReminder} size="sm" variant="outline">
               <Mail className="size-4" />
-              Send Reminder
+              {reminding ? "Sending..." : "Send Reminder"}
             </Button>
           )}
           {status === "overdue" && (
-            <Button disabled size="sm" variant="outline">
+            <Button disabled={reminding} onClick={handleReminder} size="sm" variant="outline">
               <Mail className="size-4" />
-              Send Overdue Notice
+              {reminding ? "Sending..." : "Send Overdue Notice"}
             </Button>
           )}
           <a href={`/api/invoices/${invoice.id}/pdf`} rel="noopener noreferrer" target="_blank">

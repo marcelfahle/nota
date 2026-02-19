@@ -507,7 +507,7 @@
             "Run: bun run dev",
             "Verify: Sending a reminder dispatches email and logs activity"
           ],
-          "passes": false
+          "passes": true
         }
       ]
     },

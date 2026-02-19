@@ -1092,3 +1092,31 @@ Notes:
 - The endpoint handles checkout.session.completed specifically because createPaymentLink (7.1) creates Payment Links, which trigger checkout sessions when customers pay
 - Payment intent ID is stored as string | null since checkout sessions may not always have one (e.g., free amounts)
 - All checks pass: tsc + oxlint + oxfmt
+
+## 2026-02-19 — Feature 9.2: Implement send reminder action
+
+Completed:
+- Added sendReminder server action to src/actions/invoices.ts:
+  - Queries invoice and client from DB
+  - Sends reminder email via Resend using InvoiceSentEmail template with reminder=true flag
+  - Uses existing Stripe payment link URL from invoice record (no new link creation needed)
+  - Logs activity with action 'reminder_sent'
+  - Revalidates /invoices and /invoices/[id]
+- Wired up "Send Reminder" button on invoice detail page (src/components/invoice-detail.tsx):
+  - Removed disabled prop for sent invoices — now calls handleReminder
+  - Shows "Sending..." while in progress, refreshes page after success
+- Wired up "Send Overdue Notice" button for overdue invoices:
+  - Same handler as Send Reminder (uses same email template with reminder flag)
+  - Shows "Sending..." while in progress
+- Phase 9 (Overdue Detection & Reminders) is now fully complete (9.1 + 9.2 both pass)
+- ALL PHASES (1-11) ARE NOW COMPLETE — every feature in the PRD passes
+- All checks pass: `bun run check` (tsc + lint + format:check) — 0 errors
+
+Prioritization note:
+- Feature 9.2 was the ONLY remaining feature with passes: false. It completes the entire PRD.
+
+Notes:
+- sendReminder reuses the existing Stripe payment link stored on the invoice (from sendInvoice) — no new Stripe API call needed
+- The InvoiceSentEmail template's reminder=true flag changes heading to "Payment Reminder" and adjusts copy
+- Both "Send Reminder" (sent status) and "Send Overdue Notice" (overdue status) use the same sendReminder action
+- RESEND_API_KEY and RESEND_FROM_EMAIL env vars needed for email sending at runtime
