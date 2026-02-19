@@ -320,3 +320,30 @@ Notes:
 - The layout is a Client Component because usePathname() requires it — this is standard Next.js pattern
 - ESLint + eslint-config-next still in devDependencies — remove when adding Oxlint in 1.2
 - No test framework configured yet — verification is via TypeScript compilation and build success
+
+## 2026-02-19 — Feature 4.1: Create server actions for client CRUD
+
+Completed:
+- Created src/actions/clients.ts with 'use server' directive
+- Installed zod@4.3.6 for schema validation
+- Defined clientSchema with zod: name (string, min 1), email (string, email), company (optional), address (optional), vatNumber (optional), notes (optional), defaultCurrency (optional, default 'EUR')
+- Implemented getUserId() helper: queries first user from database (single-user app, will be replaced with proper auth user lookup in 10.2)
+- Implemented createClient action: uses useActionState pattern (prevState, formData), validates with zod, inserts into clients table with userId, revalidates /clients
+- Implemented updateClient action: accepts clientId as first arg, validates, updates by id, sets updatedAt to current timestamp, revalidates /clients and /clients/[id]
+- Implemented deleteClient action: deletes by id, revalidates /clients
+- TypeScript compiles clean, `bun run build` succeeds
+
+Prioritization note:
+- Chose 4.1 (client CRUD actions) as highest priority because clients must exist before invoices can be created (invoices reference clients via clientId FK). This is the critical-path bottleneck — all of Phase 4 (client UI) and Phase 5+ (invoice CRUD) depend on it. Features 1.2 (Oxlint) and 3.4 (StatusBadge/StatCard) are non-blocking.
+
+Next up:
+- Feature 4.2: Build clients list page (now unblocked by 4.1)
+- Feature 4.3: Build client form dialog and detail page
+- Feature 3.4: Create shared UI components (StatusBadge, StatCard) — needed for 5.2
+
+Notes:
+- Using zod@4.3.6 (Zod 4) — import as `import { z } from "zod"`
+- getUserId() queries first user from DB; will be replaced with getCurrentUser() in Feature 10.2
+- createClient and updateClient use useActionState-compatible signatures (prevState, formData)
+- ESLint + eslint-config-next still in devDependencies — remove when adding Oxlint in 1.2
+- No test framework configured yet — verification is via TypeScript compilation and build success
