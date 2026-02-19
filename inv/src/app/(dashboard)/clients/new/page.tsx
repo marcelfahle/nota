@@ -1,12 +1,26 @@
-"use client";
-
+import { asc, eq } from "drizzle-orm";
 import { ArrowLeft } from "lucide-react";
 import Link from "next/link";
 
 import { createClient } from "@/actions/clients";
 import { ClientForm } from "@/components/client-form";
+import { getCurrentUser } from "@/lib/auth";
+import { db } from "@/lib/db";
+import { bankAccounts } from "@/lib/db/schema";
 
-export default function NewClientPage() {
+export default async function NewClientPage() {
+  const user = await getCurrentUser();
+
+  const userBankAccounts = await db
+    .select({
+      id: bankAccounts.id,
+      isDefault: bankAccounts.isDefault,
+      name: bankAccounts.name,
+    })
+    .from(bankAccounts)
+    .where(eq(bankAccounts.userId, user.id))
+    .orderBy(asc(bankAccounts.sortOrder), asc(bankAccounts.createdAt));
+
   return (
     <div>
       <Link
@@ -20,7 +34,12 @@ export default function NewClientPage() {
       <h1 className="mb-6 text-lg font-semibold">New Client</h1>
 
       <div className="max-w-2xl">
-        <ClientForm action={createClient} redirectTo="/clients" submitLabel="Create Client" />
+        <ClientForm
+          action={createClient}
+          bankAccounts={userBankAccounts}
+          redirectTo="/clients"
+          submitLabel="Create Client"
+        />
       </div>
     </div>
   );

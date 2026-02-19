@@ -10,6 +10,7 @@ import { clients } from "@/lib/db/schema";
 
 const clientSchema = z.object({
   address: z.string().optional(),
+  bankAccountId: z.string().uuid().nullable().optional(),
   company: z.string().optional(),
   defaultCurrency: z.string().optional().default("EUR"),
   email: z.string().email("Invalid email address"),
@@ -18,12 +19,11 @@ const clientSchema = z.object({
   vatNumber: z.string().optional(),
 });
 
-export async function createClient(
-  _prevState: { error?: string; success?: boolean } | null,
-  formData: FormData,
-) {
-  const raw = {
+function parseClientFormData(formData: FormData) {
+  const bankAccountId = formData.get("bankAccountId") as string;
+  return {
     address: (formData.get("address") as string) || undefined,
+    bankAccountId: bankAccountId && bankAccountId !== "" ? bankAccountId : null,
     company: (formData.get("company") as string) || undefined,
     defaultCurrency: (formData.get("defaultCurrency") as string) || undefined,
     email: formData.get("email") as string,
@@ -31,6 +31,13 @@ export async function createClient(
     notes: (formData.get("notes") as string) || undefined,
     vatNumber: (formData.get("vatNumber") as string) || undefined,
   };
+}
+
+export async function createClient(
+  _prevState: { error?: string; success?: boolean } | null,
+  formData: FormData,
+) {
+  const raw = parseClientFormData(formData);
 
   const result = clientSchema.safeParse(raw);
   if (!result.success) {
@@ -53,15 +60,7 @@ export async function updateClient(
   _prevState: { error?: string; success?: boolean } | null,
   formData: FormData,
 ) {
-  const raw = {
-    address: (formData.get("address") as string) || undefined,
-    company: (formData.get("company") as string) || undefined,
-    defaultCurrency: (formData.get("defaultCurrency") as string) || undefined,
-    email: formData.get("email") as string,
-    name: formData.get("name") as string,
-    notes: (formData.get("notes") as string) || undefined,
-    vatNumber: (formData.get("vatNumber") as string) || undefined,
-  };
+  const raw = parseClientFormData(formData);
 
   const result = clientSchema.safeParse(raw);
   if (!result.success) {

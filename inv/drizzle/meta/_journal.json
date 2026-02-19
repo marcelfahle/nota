@@ -8,6 +8,13 @@
       "when": 1771443467888,
       "tag": "0000_classy_chamber",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1771499096345,
+      "tag": "0001_invoice-numbering-and-bank-accounts",
+      "breakpoints": true
     }
   ]
 }

@@ -1,5 +1,6 @@
 import { relations } from "drizzle-orm";
 import {
+  boolean,
   date,
   integer,
   jsonb,
@@ -12,14 +13,15 @@ import {
 } from "drizzle-orm/pg-core";
 
 export const users = pgTable("users", {
-  bankDetails: text("bank_details"),
   businessAddress: text("business_address"),
   businessName: text("business_name"),
   createdAt: timestamp("created_at").defaultNow(),
   defaultCurrency: text("default_currency").default("EUR"),
   email: text().notNull().unique(),
   id: uuid().defaultRandom().primaryKey(),
+  invoiceDigits: integer("invoice_digits").notNull().default(4),
   invoicePrefix: text("invoice_prefix").default("INV"),
+  invoiceSeparator: text("invoice_separator").notNull().default("-"),
   logoUrl: text("logo_url"),
   name: text().notNull(),
   nextInvoiceNumber: integer("next_invoice_number").default(1),
@@ -27,8 +29,24 @@ export const users = pgTable("users", {
   vatNumber: text("vat_number"),
 });
 
+export const bankAccounts = pgTable("bank_accounts", {
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  details: text().notNull(),
+  id: uuid().defaultRandom().primaryKey(),
+  isDefault: boolean("is_default").notNull().default(false),
+  name: text().notNull(),
+  sortOrder: integer("sort_order").notNull().default(0),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  userId: uuid("user_id")
+    .notNull()
+    .references(() => users.id),
+});
+
 export const clients = pgTable("clients", {
   address: text(),
+  bankAccountId: uuid("bank_account_id").references(() => bankAccounts.id, {
+    onDelete: "set null",
+  }),
   company: text(),
   createdAt: timestamp("created_at").defaultNow(),
   defaultCurrency: text("default_currency").default("EUR"),
@@ -103,11 +121,20 @@ export const activityLog = pgTable("activity_log", {
 // Relations
 
 export const usersRelations = relations(users, ({ many }) => ({
+  bankAccounts: many(bankAccounts),
   clients: many(clients),
   invoices: many(invoices),
 }));
 
+export const bankAccountsRelations = relations(bankAccounts, ({ one }) => ({
+  user: one(users, { fields: [bankAccounts.userId], references: [users.id] }),
+}));
+
 export const clientsRelations = relations(clients, ({ many, one }) => ({
+  bankAccount: one(bankAccounts, {
+    fields: [clients.bankAccountId],
+    references: [bankAccounts.id],
+  }),
   invoices: many(invoices),
   user: one(users, { fields: [clients.userId], references: [users.id] }),
 }));

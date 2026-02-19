@@ -19,8 +19,15 @@ import {
 } from "@/components/ui/dialog";
 import { formatCurrency } from "@/lib/utils";
 
+type BankAccountOption = {
+  id: string;
+  isDefault: boolean;
+  name: string;
+};
+
 type Client = {
   address: string | null;
+  bankAccountId: string | null;
   company: string | null;
   createdAt: Date | null;
   defaultCurrency: string | null;
@@ -42,9 +49,11 @@ type Invoice = {
 };
 
 export function ClientDetailView({
+  bankAccounts,
   client,
   invoices,
 }: {
+  bankAccounts: BankAccountOption[];
   client: Client;
   invoices: Array<Invoice>;
 }) {
@@ -110,6 +119,7 @@ export function ClientDetailView({
         <div className="mb-8 max-w-2xl">
           <ClientForm
             action={boundUpdateAction}
+            bankAccounts={bankAccounts}
             defaultValues={client}
             onCancel={() => setEditing(false)}
             onSuccess={() => setEditing(false)}
@@ -122,6 +132,16 @@ export function ClientDetailView({
           <DetailItem label="VAT Number" value={client.vatNumber} />
           <DetailItem label="Currency" value={client.defaultCurrency ?? "EUR"} />
           <DetailItem label="Notes" value={client.notes} />
+          {bankAccounts.length >= 2 && (
+            <DetailItem
+              label="Bank Account"
+              value={
+                client.bankAccountId
+                  ? bankAccounts.find((ba) => ba.id === client.bankAccountId)?.name ?? null
+                  : (bankAccounts.find((ba) => ba.isDefault)?.name ?? "") + " (default)"
+              }
+            />
+          )}
         </div>
       )}
 

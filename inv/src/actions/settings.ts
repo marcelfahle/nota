@@ -9,11 +9,13 @@ import { db } from "@/lib/db";
 import { users } from "@/lib/db/schema";
 
 const settingsSchema = z.object({
-  bankDetails: z.string().optional(),
   businessAddress: z.string().optional(),
   businessName: z.string().optional(),
   defaultCurrency: z.string().optional().default("EUR"),
+  invoiceDigits: z.coerce.number().int().min(3).max(10).default(4),
   invoicePrefix: z.string().optional().default("INV"),
+  invoiceSeparator: z.enum(["-", "/", ".", ""]).default("-"),
+  nextInvoiceNumber: z.coerce.number().int().min(1).optional(),
   vatNumber: z.string().optional(),
 });
 
@@ -22,11 +24,13 @@ export async function updateSettings(
   formData: FormData,
 ) {
   const raw = {
-    bankDetails: (formData.get("bankDetails") as string) || undefined,
     businessAddress: (formData.get("businessAddress") as string) || undefined,
     businessName: (formData.get("businessName") as string) || undefined,
     defaultCurrency: (formData.get("defaultCurrency") as string) || undefined,
-    invoicePrefix: (formData.get("invoicePrefix") as string) || undefined,
+    invoiceDigits: formData.get("invoiceDigits") as string,
+    invoicePrefix: (formData.get("invoicePrefix") as string) ?? "",
+    invoiceSeparator: (formData.get("invoiceSeparator") as string) ?? "-",
+    nextInvoiceNumber: (formData.get("nextInvoiceNumber") as string) || undefined,
     vatNumber: (formData.get("vatNumber") as string) || undefined,
   };
 

@@ -16,10 +16,18 @@ import {
 
 type ActionState = { error?: string; success?: boolean } | null;
 
+type BankAccountOption = {
+  id: string;
+  isDefault: boolean;
+  name: string;
+};
+
 type ClientFormProps = {
   action: (state: ActionState, formData: FormData) => Promise<ActionState>;
+  bankAccounts?: BankAccountOption[];
   defaultValues?: {
     address?: string | null;
+    bankAccountId?: string | null;
     company?: string | null;
     defaultCurrency?: string | null;
     email?: string;
@@ -35,6 +43,7 @@ type ClientFormProps = {
 
 export function ClientForm({
   action,
+  bankAccounts,
   defaultValues,
   onCancel,
   onSuccess,
@@ -106,6 +115,28 @@ export function ClientForm({
           </SelectContent>
         </Select>
       </div>
+
+      {bankAccounts && bankAccounts.length >= 2 && (
+        <div className="space-y-2">
+          <Label>Bank Account</Label>
+          <Select
+            defaultValue={defaultValues?.bankAccountId ?? ""}
+            name="bankAccountId"
+          >
+            <SelectTrigger className="w-full">
+              <SelectValue placeholder="Use default account" />
+            </SelectTrigger>
+            <SelectContent>
+              {bankAccounts.map((ba) => (
+                <SelectItem key={ba.id} value={ba.id}>
+                  {ba.name}
+                  {ba.isDefault ? " (default)" : ""}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      )}
 
       {state?.error && <p className="text-sm text-red-500">{state.error}</p>}
 

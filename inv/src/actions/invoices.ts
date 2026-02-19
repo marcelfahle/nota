@@ -1,7 +1,7 @@
 "use server";
 
 import { renderToBuffer } from "@react-pdf/renderer";
-import { asc, eq } from "drizzle-orm";
+import { and, asc, eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
@@ -9,8 +9,9 @@ import { InvoicePdf } from "@/components/invoice-pdf";
 import { InvoiceSentEmail } from "@/emails/invoice-sent";
 import { getCurrentUser } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { activityLog, clients, invoices, lineItems, users } from "@/lib/db/schema";
+import { activityLog, bankAccounts, clients, invoices, lineItems, users } from "@/lib/db/schema";
 import { resend } from "@/lib/email";
+import { formatInvoiceNumber } from "@/lib/invoice-number";
 import { createPaymentLink } from "@/lib/stripe";
 
 const lineItemSchema = z.object({
@@ -75,16 +76,22 @@ export async function createInvoice(
     // Generate invoice number atomically
     const [user] = await tx
       .select({
+        invoiceDigits: users.invoiceDigits,
         invoicePrefix: users.invoicePrefix,
+        invoiceSeparator: users.invoiceSeparator,
         nextInvoiceNumber: users.nextInvoiceNumber,
       })
       .from(users)
       .where(eq(users.id, userId))
       .limit(1);
 
-    const prefix = user.invoicePrefix || "INV";
     const num = user.nextInvoiceNumber || 1;
-    const number = `${prefix}-${String(num).padStart(4, "0")}`;
+    const number = formatInvoiceNumber({
+      digits: user.invoiceDigits,
+      number: num,
+      prefix: user.invoicePrefix || "",
+      separator: user.invoiceSeparator,
+    });
 
     await tx
       .update(users)
@@ -196,12 +203,31 @@ export async function sendInvoice(invoiceId: string) {
 
   const user = await getCurrentUser();
 
-  // Step 2: Generate PDF buffer
+  // Step 2: Resolve bank account for this invoice
+  let bankDetails: string | null = null;
+  if (client.bankAccountId) {
+    const [ba] = await db
+      .select({ details: bankAccounts.details })
+      .from(bankAccounts)
+      .where(eq(bankAccounts.id, client.bankAccountId))
+      .limit(1);
+    bankDetails = ba?.details ?? null;
+  }
+  if (!bankDetails) {
+    const [defaultBa] = await db
+      .select({ details: bankAccounts.details })
+      .from(bankAccounts)
+      .where(and(eq(bankAccounts.userId, user.id), eq(bankAccounts.isDefault, true)))
+      .limit(1);
+    bankDetails = defaultBa?.details ?? null;
+  }
+
+  // Step 3: Generate PDF buffer
   const pdfBuffer = await renderToBuffer(
     InvoicePdf({
       business: {
         address: user.businessAddress,
-        bankDetails: user.bankDetails,
+        bankDetails,
         name: user.businessName,
         vatNumber: user.vatNumber,
       },
@@ -248,7 +274,7 @@ export async function sendInvoice(invoiceId: string) {
     attachments: [
       {
         content: pdfBuffer.toString("base64"),
-        filename: `${invoice.number}.pdf`,
+        filename: `${invoice.number.replace(/\//g, "-")}.pdf`,
       },
     ],
     from: fromEmail,
@@ -350,16 +376,22 @@ export async function duplicateInvoice(invoiceId: string) {
   const inserted = await db.transaction(async (tx) => {
     const [user] = await tx
       .select({
+        invoiceDigits: users.invoiceDigits,
         invoicePrefix: users.invoicePrefix,
+        invoiceSeparator: users.invoiceSeparator,
         nextInvoiceNumber: users.nextInvoiceNumber,
       })
       .from(users)
       .where(eq(users.id, original.userId))
       .limit(1);
 
-    const prefix = user.invoicePrefix || "INV";
     const num = user.nextInvoiceNumber || 1;
-    const number = `${prefix}-${String(num).padStart(4, "0")}`;
+    const number = formatInvoiceNumber({
+      digits: user.invoiceDigits,
+      number: num,
+      prefix: user.invoicePrefix || "",
+      separator: user.invoiceSeparator,
+    });
 
     await tx
       .update(users)

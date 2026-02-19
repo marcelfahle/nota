@@ -1,11 +1,11 @@
 import { renderToBuffer } from "@react-pdf/renderer";
-import { asc, eq } from "drizzle-orm";
+import { and, asc, eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
 
 import { InvoicePdf } from "@/components/invoice-pdf";
 import { getCurrentUser } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { clients, invoices, lineItems } from "@/lib/db/schema";
+import { bankAccounts, clients, invoices, lineItems } from "@/lib/db/schema";
 
 export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -30,11 +30,30 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
 
   const user = await getCurrentUser();
 
+  // Resolve bank account: client assignment -> default
+  let bankDetails: string | null = null;
+  if (client.bankAccountId) {
+    const [ba] = await db
+      .select({ details: bankAccounts.details })
+      .from(bankAccounts)
+      .where(eq(bankAccounts.id, client.bankAccountId))
+      .limit(1);
+    bankDetails = ba?.details ?? null;
+  }
+  if (!bankDetails) {
+    const [defaultBa] = await db
+      .select({ details: bankAccounts.details })
+      .from(bankAccounts)
+      .where(and(eq(bankAccounts.userId, user.id), eq(bankAccounts.isDefault, true)))
+      .limit(1);
+    bankDetails = defaultBa?.details ?? null;
+  }
+
   const buffer = await renderToBuffer(
     InvoicePdf({
       business: {
         address: user.businessAddress,
-        bankDetails: user.bankDetails,
+        bankDetails,
         name: user.businessName,
         vatNumber: user.vatNumber,
       },
@@ -66,9 +85,11 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
     }),
   );
 
+  const safeFilename = invoice.number.replace(/\//g, "-");
+
   return new Response(new Uint8Array(buffer), {
     headers: {
-      "Content-Disposition": `attachment; filename="${invoice.number}.pdf"`,
+      "Content-Disposition": `attachment; filename="${safeFilename}.pdf"`,
       "Content-Type": "application/pdf",
     },
   });
