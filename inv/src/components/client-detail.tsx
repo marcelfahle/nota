@@ -5,6 +5,8 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, Pencil, Trash2 } from "lucide-react";
 import { updateClient, deleteClient } from "@/actions/clients";
+import { formatCurrency } from "@/lib/utils";
+import { StatusBadge } from "@/components/status-badge";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -38,20 +40,6 @@ type Invoice = {
   dueAt: string;
 };
 
-function formatCurrency(amount: number, currency = "EUR"): string {
-  return new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency,
-  }).format(amount);
-}
-
-const statusColors: Record<string, string> = {
-  draft: "bg-zinc-100 text-zinc-600",
-  sent: "bg-blue-50 text-blue-700",
-  paid: "bg-emerald-50 text-emerald-700",
-  overdue: "bg-red-50 text-red-700",
-  cancelled: "bg-zinc-100 text-zinc-500",
-};
 
 export function ClientDetailView({
   client,
@@ -158,11 +146,7 @@ export function ClientDetailView({
                 <div className="flex items-center gap-4">
                   <span className="font-mono text-sm">{inv.number}</span>
                   {inv.status && (
-                    <span
-                      className={`rounded-full px-2 py-0.5 text-xs font-medium ${statusColors[inv.status] ?? ""}`}
-                    >
-                      {inv.status.charAt(0).toUpperCase() + inv.status.slice(1)}
-                    </span>
+                    <StatusBadge status={inv.status} />
                   )}
                 </div>
                 <div className="text-right">

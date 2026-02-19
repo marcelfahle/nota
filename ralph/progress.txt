@@ -465,3 +465,31 @@ Notes:
 - db.transaction() works with drizzle-orm/neon-http (Neon HTTP transactions)
 - ESLint + eslint-config-next still in devDependencies — remove when adding Oxlint in 1.2
 - No test framework configured yet — verification is via TypeScript compilation and build success
+
+## 2026-02-19 — Feature 3.4: Create shared UI components (StatusBadge, StatCard, formatCurrency)
+
+Completed:
+- Created src/components/status-badge.tsx — renders invoice status as a styled pill
+  - Colors: paid=emerald, sent=blue, draft=zinc, overdue=red, cancelled=zinc
+  - Simple component accepting { status: string }
+- Created src/components/stat-card.tsx — renders label (xs, uppercase, zinc-400), value (2xl, semibold), and optional sub text (xs, zinc-400)
+  - Accepts { label, value, sub? } props
+- Added formatCurrency(amount, currency) to src/lib/utils.ts using Intl.NumberFormat
+- Removed duplicate formatCurrency from src/app/(dashboard)/clients/page.tsx — now imports from @/lib/utils
+- Removed duplicate formatCurrency and statusColors from src/components/client-detail.tsx — now imports formatCurrency from @/lib/utils and uses StatusBadge component
+- TypeScript compiles clean, `bun run build` succeeds
+
+Prioritization note:
+- Chose 3.4 (shared UI components) as highest priority because it's the direct blocker for Feature 5.2 (invoice list page with stats and filters). StatCard is needed for the stats row, StatusBadge is needed for the invoice table, and formatCurrency was duplicated in two files. Without these components, the main invoice dashboard page cannot be built. All remaining Phase 5 UI features (5.2, 5.3, 5.4) depend on these shared components.
+
+Next up:
+- Feature 5.2: Build invoice list page with stats and filters (now unblocked by 3.4 + 5.1)
+- Feature 5.3: Build invoice creation form (needs 5.1, which is done)
+- Feature 5.4: Build invoice detail page
+
+Notes:
+- StatusBadge uses plain span with Tailwind classes (not shadcn Badge) to keep it simple and match the inline styles that were already in client-detail.tsx
+- formatCurrency is now the single source of truth in src/lib/utils.ts
+- client-detail.tsx now uses StatusBadge for invoice status display
+- ESLint + eslint-config-next still in devDependencies — remove when adding Oxlint in 1.2
+- No test framework configured yet — verification is via TypeScript compilation and build success

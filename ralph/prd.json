@@ -222,7 +222,7 @@
             "Run: bun run tsc",
             "Verify: No type errors, components are properly typed"
           ],
-          "passes": false
+          "passes": true
         }
       ]
     },

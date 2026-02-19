@@ -4,6 +4,7 @@ import { asc, eq, sql } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { clients, invoices } from "@/lib/db/schema";
 import { Button } from "@/components/ui/button";
+import { formatCurrency } from "@/lib/utils";
 
 function getInitials(name: string): string {
   return name
@@ -12,13 +13,6 @@ function getInitials(name: string): string {
     .join("")
     .toUpperCase()
     .slice(0, 2);
-}
-
-function formatCurrency(amount: number, currency = "EUR"): string {
-  return new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency,
-  }).format(amount);
 }
 
 export default async function ClientsPage() {
