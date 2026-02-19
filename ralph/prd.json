@@ -261,7 +261,7 @@
             "Run: bun run dev",
             "Verify: Clients page renders (empty state is fine for now)"
           ],
-          "passes": false
+          "passes": true
         },
         {
           "id": "4.3",

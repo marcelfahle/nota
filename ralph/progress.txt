@@ -347,3 +347,34 @@ Notes:
 - createClient and updateClient use useActionState-compatible signatures (prevState, formData)
 - ESLint + eslint-config-next still in devDependencies — remove when adding Oxlint in 1.2
 - No test framework configured yet — verification is via TypeScript compilation and build success
+
+## 2026-02-19 — Feature 4.2: Build clients list page
+
+Completed:
+- Replaced placeholder clients page with full Server Component at src/app/(dashboard)/clients/page.tsx
+- Queries all clients from DB ordered by name, with aggregated invoice stats via LEFT JOIN
+  - Uses drizzle-orm SQL builder: db.select().from(clients).leftJoin(invoices, ...).groupBy(clients.id)
+  - Computes invoiceCount (count) and totalInvoiced (sum) per client
+- Each client rendered as a clickable row (Link to /clients/[id]):
+  - Left side: avatar circle with initials (zinc-100 bg, zinc-600 text), name + email
+  - Right side: total invoiced amount (formatted with Intl.NumberFormat) + invoice count
+- "New Client" button in top right linking to /clients/new
+- Clean styling: divide-y dividers, hover:bg-zinc-50 transitions, generous padding
+- Empty state: "No clients yet." when no clients exist
+- Helper functions: getInitials(name) for avatar, formatCurrency(amount, currency) for display
+- TypeScript compiles clean, bun run build succeeds
+
+Prioritization note:
+- Chose 4.2 (clients list page) as highest priority because client CRUD actions (4.1) are done but there's no UI to see or interact with clients. Without a visible client list, client management is untestable, and Phase 5 (invoices) depends on being able to verify clients exist. This is the critical-path bottleneck.
+
+Next up:
+- Feature 4.3: Build client form dialog and detail page (now the top priority — needed to actually create/edit/delete clients)
+- Feature 3.4: Create shared UI components (StatusBadge, StatCard) — needed for 5.2
+- Feature 5.1+: Invoice CRUD server actions
+
+Notes:
+- /clients/new and /clients/[id] routes don't exist yet — will 404 until Feature 4.3 is built
+- formatCurrency is defined inline in the page; Feature 3.4 will add a shared version to lib/utils.ts
+- PostgreSQL functional dependency grouping allows SELECT of non-aggregated columns when GROUP BY includes the primary key
+- ESLint + eslint-config-next still in devDependencies — remove when adding Oxlint in 1.2
+- No test framework configured yet — verification is via TypeScript compilation and build success
