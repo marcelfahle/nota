@@ -993,3 +993,37 @@ Notes:
 - Settings form already used sm:grid-cols-2 responsive grids — no changes needed
 - All pages are now usable at 375px width
 - Phase 11 (Polish & Responsive) is now fully complete (11.1 + 11.2 + 11.3 all pass)
+
+## 2026-02-19 — Feature 8.1: Set up Resend and create email templates
+
+Completed:
+- Installed resend@6.9.2 and @react-email/components@1.0.8 as dependencies
+- Created src/lib/email.ts — initializes Resend client with RESEND_API_KEY env var
+- Created src/emails/invoice-sent.tsx — React Email template for sending invoices:
+  - Clean design matching app aesthetic: zinc palette, centered card layout
+  - "inv." logo at top, heading ("New Invoice" or "Payment Reminder")
+  - Greeting with client name, context-aware copy for new vs. reminder
+  - Invoice box: invoice number (mono font), large total amount, due date
+  - "Pay Now" button (dark zinc, rounded) linking to Stripe payment link
+  - Business name in footer
+  - Accepts `reminder` boolean prop to adjust copy for reminders (reused by 9.2)
+- Created src/emails/payment-received.tsx — self-notification email when payment is received:
+  - "Payment Received" heading
+  - Client name + invoice number in body text
+  - Amount paid in emerald green (success color), invoice number, paid date
+  - Footer: "This is an automated notification from inv."
+- All checks pass: `bun run check` (tsc + lint + format:check) — 0 errors
+
+Prioritization note:
+- Chose 8.1 (Resend + email templates) as highest priority because it's the critical bottleneck blocking 2 downstream features: 8.2 (sendInvoice — the core user flow) and 9.2 (send reminder). The remaining features are 7.2 (Stripe webhook — independent leaf node), 8.2, and 9.2. Since 8.1 unblocks the most features, it has the highest leverage.
+
+Next up:
+- Feature 7.2: Stripe webhook handler (independent, unblocks payment confirmation + payment-received email)
+- Feature 8.2: sendInvoice action (now unblocked by 8.1 + 7.1)
+- Feature 9.2: Send reminder action (now unblocked by 8.1)
+
+Notes:
+- InvoiceSentEmail supports `reminder` prop — when true, heading changes to "Payment Reminder" and copy adjusts. This enables 9.2 (send reminder) to reuse the same template without creating a separate one.
+- Email styles use inline objects (not StyleSheet) — this is the standard pattern for @react-email/components
+- RESEND_API_KEY must be set in .env for sending to work at runtime; code compiles fine without it
+- Both templates use system font stack (-apple-system, BlinkMacSystemFont, ...) since email clients don't support custom font loading

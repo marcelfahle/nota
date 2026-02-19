@@ -452,7 +452,7 @@
             "Run: bun run tsc",
             "Verify: No type errors"
           ],
-          "passes": false
+          "passes": true
         },
         {
           "id": "8.2",
