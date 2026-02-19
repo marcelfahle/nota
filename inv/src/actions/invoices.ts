@@ -130,7 +130,7 @@ export async function createInvoice(
 
 export async function updateInvoice(
   invoiceId: string,
-  _prevState: { error?: string; success?: boolean } | null,
+  _prevState: { error?: string; invoiceId?: string; success?: boolean } | null,
   formData: FormData,
 ) {
   const result = invoiceSchema.safeParse(parseInvoiceFormData(formData));
@@ -169,7 +169,7 @@ export async function updateInvoice(
 
   revalidatePath("/invoices");
   revalidatePath(`/invoices/${invoiceId}`);
-  return { success: true };
+  return { invoiceId, success: true };
 }
 
 export async function deleteInvoice(invoiceId: string) {

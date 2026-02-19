@@ -348,7 +348,7 @@
             "Run: bun run dev",
             "Verify: Invoice detail page renders correctly for each status"
           ],
-          "passes": false
+          "passes": true
         },
         {
           "id": "5.5",

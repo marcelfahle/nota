@@ -603,3 +603,52 @@ Notes:
 - The @nkzw/oxlint-config enables strict perfectionist rules (sort-objects, sort-jsx-props, sort-object-types) which enforce alphabetical ordering of all object properties and JSX attributes
 - ESLint is now fully removed from devDependencies
 - No test framework configured yet
+
+## 2026-02-19 — Feature 5.4: Build invoice detail page with side panel or full page view
+
+Completed:
+- Created src/components/invoice-detail.tsx — Client Component for interactive invoice detail view:
+  - Header: invoice number (mono font) + StatusBadge, client name + email, large total amount
+  - Action buttons based on status:
+    - Draft: "Send Invoice" (disabled, Phase 8) + "Edit" (links to edit page)
+    - Sent: "Send Reminder" (disabled, Phase 9)
+    - Overdue: "Send Overdue Notice" (disabled, Phase 9)
+    - All statuses: "Download PDF" (disabled, Phase 6) + "Delete" (with confirmation dialog)
+  - Stripe payment link indicator for sent invoices with active payment links
+  - Invoice details grid: issue date, due date, paid date (or currency)
+  - Reverse charge indicator when applicable
+  - Line items table with Description, Qty, Rate, Amount columns inside bordered card
+  - Totals section: subtotal, tax (if > 0%), total with separator
+  - Notes and internal notes sections
+  - Delete confirmation dialog (same pattern as client-detail.tsx)
+- Created src/app/(dashboard)/invoices/[id]/page.tsx — Server Component
+  - Queries invoice by id, returns 404 if not found
+  - Queries client (name, email) by invoice.clientId
+  - Queries line items ordered by sortOrder
+  - Passes assembled data to InvoiceDetailView
+- Created src/app/(dashboard)/invoices/[id]/edit/page.tsx — Server Component
+  - Queries invoice, client list, and line items
+  - Reuses InvoiceForm component with defaultValues pre-populated from invoice data
+  - Uses updateInvoice.bind(null, id) for action binding
+  - Redirects back to invoice detail page on success via redirectTo prop
+  - Back link to invoice detail page, heading "Edit {number}"
+- Updated src/actions/invoices.ts:
+  - updateInvoice now returns { invoiceId, success: true } to trigger form redirect
+- Updated src/components/invoice-form.tsx:
+  - Added redirectTo prop (default "/invoices") for configurable post-submit redirect
+  - Edit page uses redirectTo={`/invoices/${id}`} to return to detail page
+- All checks pass: `bun run check` (tsc + lint + format:check) — 0 errors
+
+Prioritization note:
+- Chose 5.4 (invoice detail page) as highest priority because it's the critical-path bottleneck. Without it, clicking any invoice from the list gives a 404. It blocks 5.5 (duplication button), 6.2 (PDF download button), 8.2 (send invoice button), 9.2 (send reminder button), and 11.3 (activity log display). Every downstream feature depends on this page existing.
+
+Next up:
+- Feature 5.5: Implement invoice duplication (add duplicateInvoice action + button on detail page)
+- Feature 6.1: Install react-pdf and create PDF invoice template
+- Feature 6.2: Create PDF generation endpoint
+
+Notes:
+- "Send Invoice", "Send Reminder", "Send Overdue Notice", and "Download PDF" buttons are present but disabled — they'll be wired up in Phases 6-9 when the respective features are implemented
+- InvoiceForm now supports configurable redirect via redirectTo prop — new page uses default ("/invoices"), edit page redirects back to detail page
+- The detail page follows the same Server Component → Client Component pattern as clients/[id]
+- No test framework configured yet — verification is via TypeScript compilation and check suite

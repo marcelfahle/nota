@@ -49,6 +49,7 @@ type InvoiceFormProps = {
     reverseCharge?: string;
     taxRate?: string;
   };
+  redirectTo?: string;
   submitLabel?: string;
 };
 
@@ -75,6 +76,7 @@ export function InvoiceForm({
   action,
   clients,
   defaultValues,
+  redirectTo = "/invoices",
   submitLabel = "Save Draft",
 }: InvoiceFormProps) {
   const [state, formAction, pending] = useActionState(action, null);
@@ -90,9 +92,9 @@ export function InvoiceForm({
 
   useEffect(() => {
     if (state?.success && state.invoiceId) {
-      router.push(`/invoices`);
+      router.push(redirectTo);
     }
-  }, [state, router]);
+  }, [state, router, redirectTo]);
 
   const updateItem = useCallback((index: number, field: keyof LineItem, value: string) => {
     setItems((prev) => prev.map((item, i) => (i === index ? { ...item, [field]: value } : item)));
