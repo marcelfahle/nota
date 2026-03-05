@@ -7,6 +7,7 @@ import { eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/neon-http";
 
 import { users } from "../src/lib/db/schema";
+import { getDbEnv } from "../src/lib/env";
 
 const scryptAsync = promisify(scrypt);
 
@@ -16,13 +17,7 @@ async function hashPassword(password: string): Promise<string> {
   return `${salt}:${key.toString("hex")}`;
 }
 
-const databaseUrl = process.env.DATABASE_URL;
-if (!databaseUrl) {
-  console.error("DATABASE_URL is required. Set it in .env");
-  process.exit(1);
-}
-
-const sql = neon(databaseUrl);
+const sql = neon(getDbEnv().DATABASE_URL);
 const db = drizzle({ client: sql });
 
 const email = process.env.SEED_EMAIL || "admin@inv.app";

@@ -13,6 +13,7 @@
     "check": "npm-run-all --parallel tsc lint format:check",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
+    "db:seed": "bun run scripts/seed.ts",
     "db:studio": "drizzle-kit studio"
   },
   "dependencies": {

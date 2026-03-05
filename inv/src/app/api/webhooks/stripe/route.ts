@@ -5,6 +5,7 @@ import { PaymentReceivedEmail } from "@/emails/payment-received";
 import { db } from "@/lib/db";
 import { activityLog, clients, invoices, users } from "@/lib/db/schema";
 import { resend } from "@/lib/email";
+import { getEmailEnv, getStripeWebhookEnv } from "@/lib/env";
 import { stripe } from "@/lib/stripe";
 
 export async function POST(request: Request) {
@@ -17,7 +18,11 @@ export async function POST(request: Request) {
 
   let event;
   try {
-    event = stripe.webhooks.constructEvent(body, signature, process.env.STRIPE_WEBHOOK_SECRET!);
+    event = stripe.webhooks.constructEvent(
+      body,
+      signature,
+      getStripeWebhookEnv().STRIPE_WEBHOOK_SECRET,
+    );
   } catch {
     return NextResponse.json({ error: "Invalid signature" }, { status: 400 });
   }
@@ -77,7 +82,7 @@ export async function POST(request: Request) {
 
       if (user) {
         const fromEmail =
-          process.env.RESEND_FROM_EMAIL ?? `${user.businessName ?? "inv."} <invoices@resend.dev>`;
+          getEmailEnv().RESEND_FROM_EMAIL ?? `${user.businessName ?? "inv."} <invoices@resend.dev>`;
 
         await resend.emails.send({
           from: fromEmail,

@@ -3,10 +3,11 @@ import { NextResponse } from "next/server";
 
 import { db } from "@/lib/db";
 import { activityLog, invoices } from "@/lib/db/schema";
+import { getCronEnv } from "@/lib/env";
 
 export async function GET(request: Request) {
   const authHeader = request.headers.get("authorization");
-  if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
+  if (authHeader !== `Bearer ${getCronEnv().CRON_SECRET}`) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 

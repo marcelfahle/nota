@@ -10,6 +10,7 @@ import { redirect } from "next/navigation";
 import { createSessionValue } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { users } from "@/lib/db/schema";
+import { getAuthEnv } from "@/lib/env";
 
 const scryptAsync = promisify(scrypt);
 
@@ -47,7 +48,7 @@ export async function login(_prevState: { error: string } | null, formData: Form
     maxAge: 60 * 60 * 24 * 30, // 30 days
     path: "/",
     sameSite: "lax",
-    secure: process.env.NODE_ENV === "production",
+    secure: getAuthEnv().NODE_ENV === "production",
   });
 
   redirect("/invoices");

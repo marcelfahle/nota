@@ -11,6 +11,7 @@ import { getCurrentUser } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { activityLog, bankAccounts, clients, invoices, lineItems, users } from "@/lib/db/schema";
 import { resend } from "@/lib/email";
+import { getEmailEnv } from "@/lib/env";
 import { formatInvoiceNumber } from "@/lib/invoice-number";
 import { createPaymentLink, deactivatePaymentLink } from "@/lib/stripe";
 
@@ -379,7 +380,7 @@ export async function sendInvoice(invoiceId: string) {
 
     // Step 5: Send email via Resend with PDF attachment and payment link
     const fromEmail =
-      process.env.RESEND_FROM_EMAIL ?? `${user.businessName ?? "inv."} <invoices@resend.dev>`;
+      getEmailEnv().RESEND_FROM_EMAIL ?? `${user.businessName ?? "inv."} <invoices@resend.dev>`;
     await resend.emails.send({
       attachments: [
         {
@@ -468,7 +469,7 @@ export async function sendReminder(invoiceId: string) {
   }
 
   const fromEmail =
-    process.env.RESEND_FROM_EMAIL ?? `${user.businessName ?? "inv."} <invoices@resend.dev>`;
+    getEmailEnv().RESEND_FROM_EMAIL ?? `${user.businessName ?? "inv."} <invoices@resend.dev>`;
 
   await resend.emails.send({
     from: fromEmail,

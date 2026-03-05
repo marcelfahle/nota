@@ -1,6 +1,8 @@
 import Stripe from "stripe";
 
-export const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
+import { getStripeEnv } from "@/lib/env";
+
+export const stripe = new Stripe(getStripeEnv().STRIPE_SECRET_KEY);
 
 export async function createPaymentLink(invoice: {
   currency: string | null;

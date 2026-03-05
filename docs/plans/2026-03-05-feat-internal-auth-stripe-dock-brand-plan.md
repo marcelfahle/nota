@@ -217,8 +217,8 @@ Follow-up operational additions:
 - [x] Text fallback remains usable when no logo is set
 
 ### Deployability
-- [ ] The repo has an app-specific plan and README trail
-- [ ] Env requirements are explicit and validated
+- [x] The repo has an app-specific plan and README trail
+- [x] Env requirements are explicit and validated
 - [x] The app still builds successfully after the changes
 
 ## Implementation Phases
@@ -257,8 +257,7 @@ Follow-up operational additions:
 
 ## Immediate Next Step
 
-Implement **Phase 4** next:
-- add explicit env validation
-- add `.env.example`
-- replace the starter README with app-specific setup and deploy documentation
-- move `middleware.ts` to `proxy.ts`
+Implement the next trust-and-operations pass:
+- add a few integration tests around login, scoped invoice access, and invoice lifecycle transitions
+- add a small deploy smoke checklist for webhook, cron, and payment-link verification
+- optionally add logo support to generated invoice PDFs

@@ -6,9 +6,10 @@ import { redirect } from "next/navigation";
 
 import { db } from "@/lib/db";
 import { users } from "@/lib/db/schema";
+import { getAuthEnv } from "@/lib/env";
 
 function signUserId(userId: string): string {
-  return createHmac("sha256", process.env.SESSION_SECRET!).update(userId).digest("hex");
+  return createHmac("sha256", getAuthEnv().SESSION_SECRET).update(userId).digest("hex");
 }
 
 export function createSessionValue(userId: string): string {
