@@ -15,6 +15,14 @@ const settingsSchema = z.object({
   invoiceDigits: z.coerce.number().int().min(3).max(10).default(4),
   invoicePrefix: z.string().optional().default("INV"),
   invoiceSeparator: z.enum(["-", "/", ".", ""]).default("-"),
+  logoUrl: z.preprocess((value) => {
+    if (typeof value !== "string") {
+      return undefined;
+    }
+
+    const trimmed = value.trim();
+    return trimmed === "" ? undefined : trimmed;
+  }, z.url("Invalid logo URL").optional()),
   nextInvoiceNumber: z.coerce.number().int().min(1).optional(),
   vatNumber: z.string().optional(),
 });
@@ -30,6 +38,7 @@ export async function updateSettings(
     invoiceDigits: formData.get("invoiceDigits") as string,
     invoicePrefix: (formData.get("invoicePrefix") as string) ?? "",
     invoiceSeparator: (formData.get("invoiceSeparator") as string) ?? "-",
+    logoUrl: (formData.get("logoUrl") as string) || undefined,
     nextInvoiceNumber: (formData.get("nextInvoiceNumber") as string) || undefined,
     vatNumber: (formData.get("vatNumber") as string) || undefined,
   };

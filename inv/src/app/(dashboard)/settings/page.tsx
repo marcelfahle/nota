@@ -30,6 +30,7 @@ export default async function SettingsPage() {
     invoiceDigits: user.invoiceDigits,
     invoicePrefix: user.invoicePrefix,
     invoiceSeparator: user.invoiceSeparator,
+    logoUrl: user.logoUrl,
     nextInvoiceNumber: user.nextInvoiceNumber,
     vatNumber: user.vatNumber,
   };

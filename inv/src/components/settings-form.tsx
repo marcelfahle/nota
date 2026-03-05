@@ -3,12 +3,8 @@
 import { Pencil, Plus, Star, Trash2 } from "lucide-react";
 import { useActionState, useMemo, useState } from "react";
 
+import { createBankAccount, deleteBankAccount, updateBankAccount } from "@/actions/bank-accounts";
 import { updateSettings } from "@/actions/settings";
-import {
-  createBankAccount,
-  deleteBankAccount,
-  updateBankAccount,
-} from "@/actions/bank-accounts";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -47,6 +43,7 @@ type SettingsData = {
   invoiceDigits: number;
   invoicePrefix: string | null;
   invoiceSeparator: string;
+  logoUrl: string | null;
   nextInvoiceNumber: number | null;
   vatNumber: string | null;
 };
@@ -56,26 +53,22 @@ export function SettingsForm({
   lastIssuedNumber,
   settings,
 }: {
-  bankAccounts: BankAccount[];
+  bankAccounts: Array<BankAccount>;
   lastIssuedNumber: string | null;
   settings: SettingsData;
 }) {
   const [state, formAction, pending] = useActionState(updateSettings, null);
 
   const [prefix, setPrefix] = useState(settings.invoicePrefix ?? "");
-  const [separator, setSeparator] = useState(
-    settings.invoiceSeparator || "none",
-  );
+  const [separator, setSeparator] = useState(settings.invoiceSeparator || "none");
   const [digits, setDigits] = useState(String(settings.invoiceDigits));
-  const [nextNumber, setNextNumber] = useState(
-    String(settings.nextInvoiceNumber ?? 1),
-  );
+  const [nextNumber, setNextNumber] = useState(String(settings.nextInvoiceNumber ?? 1));
 
   const effectiveSeparator = separator === "none" ? "" : separator;
 
   const preview = useMemo(() => {
-    const num = parseInt(nextNumber) || 1;
-    const d = parseInt(digits) || 4;
+    const num = Number.parseInt(nextNumber, 10) || 1;
+    const d = Number.parseInt(digits, 10) || 4;
     return [0, 1, 2].map((offset) =>
       formatInvoiceNumber({
         digits: d,
@@ -111,6 +104,20 @@ export function SettingsForm({
         </div>
 
         <div className="space-y-2">
+          <Label htmlFor="logoUrl">Logo URL</Label>
+          <Input
+            defaultValue={settings.logoUrl ?? ""}
+            id="logoUrl"
+            name="logoUrl"
+            placeholder="https://example.com/logo.png"
+            type="url"
+          />
+          <p className="text-xs text-zinc-500">
+            Used in the app header. Leave blank to keep the text mark.
+          </p>
+        </div>
+
+        <div className="space-y-2">
           <Label htmlFor="businessAddress">Business Address</Label>
           <textarea
             className="w-full min-w-0 rounded-md border border-input bg-transparent px-3 py-2 text-base shadow-xs transition-[color,box-shadow] outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50 md:text-sm"
@@ -124,10 +131,7 @@ export function SettingsForm({
 
         <div className="space-y-2">
           <Label>Default Currency</Label>
-          <Select
-            defaultValue={settings.defaultCurrency ?? "EUR"}
-            name="defaultCurrency"
-          >
+          <Select defaultValue={settings.defaultCurrency ?? "EUR"} name="defaultCurrency">
             <SelectTrigger className="w-full sm:w-48">
               <SelectValue />
             </SelectTrigger>
@@ -153,11 +157,7 @@ export function SettingsForm({
                 value={prefix}
               />
             </div>
-            <input
-              name="invoiceSeparator"
-              type="hidden"
-              value={effectiveSeparator}
-            />
+            <input name="invoiceSeparator" type="hidden" value={effectiveSeparator} />
             <div className={prefix ? "space-y-2" : "hidden"}>
               <Label>Separator</Label>
               <Select onValueChange={setSeparator} value={separator}>
@@ -174,11 +174,7 @@ export function SettingsForm({
             </div>
             <div className="space-y-2">
               <Label>Digits</Label>
-              <Select
-                name="invoiceDigits"
-                onValueChange={setDigits}
-                value={digits}
-              >
+              <Select name="invoiceDigits" onValueChange={setDigits} value={digits}>
                 <SelectTrigger className="w-full">
                   <SelectValue />
                 </SelectTrigger>
@@ -207,16 +203,13 @@ export function SettingsForm({
           <div className="rounded-lg border border-zinc-200 bg-zinc-50 p-4">
             <p className="mb-1 text-xs font-medium text-zinc-500">Preview</p>
             <p className="font-mono text-sm">
-              Your next invoice:{" "}
-              <span className="font-semibold">{preview[0]}</span>
+              Your next invoice: <span className="font-semibold">{preview[0]}</span>
             </p>
             <p className="font-mono text-xs text-zinc-500">
               Then: {preview[1]}, {preview[2]}
             </p>
             {lastIssuedNumber && (
-              <p className="mt-2 text-xs text-zinc-400">
-                Last issued: {lastIssuedNumber}
-              </p>
+              <p className="mt-2 text-xs text-zinc-400">Last issued: {lastIssuedNumber}</p>
             )}
           </div>
         </div>
@@ -227,9 +220,7 @@ export function SettingsForm({
           <Button disabled={pending} type="submit">
             {pending ? "Saving..." : "Save Settings"}
           </Button>
-          {state?.success && (
-            <span className="text-sm text-emerald-600">Settings saved</span>
-          )}
+          {state?.success && <span className="text-sm text-emerald-600">Settings saved</span>}
         </div>
       </form>
 
@@ -239,15 +230,9 @@ export function SettingsForm({
   );
 }
 
-function BankAccountsSection({
-  bankAccounts,
-}: {
-  bankAccounts: BankAccount[];
-}) {
+function BankAccountsSection({ bankAccounts }: { bankAccounts: Array<BankAccount> }) {
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [editingAccount, setEditingAccount] = useState<BankAccount | null>(
-    null,
-  );
+  const [editingAccount, setEditingAccount] = useState<BankAccount | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<BankAccount | null>(null);
   const [deleting, setDeleting] = useState(false);
 
@@ -262,7 +247,9 @@ function BankAccountsSection({
   }
 
   async function handleDelete() {
-    if (!deleteConfirm) return;
+    if (!deleteConfirm) {
+      return;
+    }
     setDeleting(true);
     await deleteBankAccount(deleteConfirm.id);
     setDeleting(false);
@@ -294,16 +281,12 @@ function BankAccountsSection({
                     </span>
                   )}
                 </div>
-                <p className="mt-1 line-clamp-2 text-xs text-zinc-500 whitespace-pre-line">
+                <p className="mt-1 line-clamp-2 text-xs whitespace-pre-line text-zinc-500">
                   {account.details}
                 </p>
               </div>
               <div className="ml-4 flex shrink-0 items-center gap-1">
-                <Button
-                  onClick={() => openEdit(account)}
-                  size="sm"
-                  variant="ghost"
-                >
+                <Button onClick={() => openEdit(account)} size="sm" variant="ghost">
                   <Pencil className="size-3.5" />
                 </Button>
                 {!account.isDefault && (
@@ -335,32 +318,20 @@ function BankAccountsSection({
       />
 
       {/* Delete Confirmation */}
-      <Dialog
-        onOpenChange={(open) => !open && setDeleteConfirm(null)}
-        open={!!deleteConfirm}
-      >
+      <Dialog onOpenChange={(open) => !open && setDeleteConfirm(null)} open={!!deleteConfirm}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Delete bank account</DialogTitle>
             <DialogDescription>
               Are you sure you want to delete &ldquo;{deleteConfirm?.name}
-              &rdquo;? Clients assigned to this account will lose their
-              assignment.
+              &rdquo;? Clients assigned to this account will lose their assignment.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
-            <Button
-              disabled={deleting}
-              onClick={() => setDeleteConfirm(null)}
-              variant="outline"
-            >
+            <Button disabled={deleting} onClick={() => setDeleteConfirm(null)} variant="outline">
               Cancel
             </Button>
-            <Button
-              disabled={deleting}
-              onClick={handleDelete}
-              variant="destructive"
-            >
+            <Button disabled={deleting} onClick={handleDelete} variant="destructive">
               {deleting ? "Deleting..." : "Delete"}
             </Button>
           </DialogFooter>
@@ -380,16 +351,13 @@ function BankAccountDialog({
   open: boolean;
 }) {
   const isEditing = !!account;
-  const action = isEditing
-    ? updateBankAccount.bind(null, account.id)
-    : createBankAccount;
+  const action = isEditing ? updateBankAccount.bind(null, account.id) : createBankAccount;
   const [state, formAction, pending] = useActionState(
-    async (
-      prev: { error?: string; success?: boolean } | null,
-      formData: FormData,
-    ) => {
+    async (prev: { error?: string; success?: boolean } | null, formData: FormData) => {
       const result = await action(prev, formData);
-      if (result?.success) onClose();
+      if (result?.success) {
+        onClose();
+      }
       return result;
     },
     null,
@@ -399,9 +367,7 @@ function BankAccountDialog({
     <Dialog onOpenChange={(o) => !o && onClose()} open={open}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>
-            {isEditing ? "Edit Bank Account" : "Add Bank Account"}
-          </DialogTitle>
+          <DialogTitle>{isEditing ? "Edit Bank Account" : "Add Bank Account"}</DialogTitle>
         </DialogHeader>
         <form action={formAction} className="space-y-4">
           <div className="space-y-2">
@@ -436,9 +402,7 @@ function BankAccountDialog({
             />
             <Label htmlFor="bankAccountDefault">Set as default account</Label>
           </div>
-          {state?.error && (
-            <p className="text-sm text-red-500">{state.error}</p>
-          )}
+          {state?.error && <p className="text-sm text-red-500">{state.error}</p>}
           <DialogFooter>
             <Button disabled={pending} type="submit">
               {pending ? "Saving..." : isEditing ? "Update" : "Add"}

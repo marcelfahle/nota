@@ -1,17 +1,23 @@
-import { asc, eq } from "drizzle-orm";
+import { and, asc, eq } from "drizzle-orm";
 import { ArrowLeft } from "lucide-react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { updateInvoice } from "@/actions/invoices";
 import { InvoiceForm } from "@/components/invoice-form";
+import { getCurrentUser } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { clients, invoices, lineItems } from "@/lib/db/schema";
 
 export default async function EditInvoicePage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
+  const user = await getCurrentUser();
 
-  const [invoice] = await db.select().from(invoices).where(eq(invoices.id, id)).limit(1);
+  const [invoice] = await db
+    .select()
+    .from(invoices)
+    .where(and(eq(invoices.id, id), eq(invoices.userId, user.id)))
+    .limit(1);
 
   if (!invoice) {
     notFound();
@@ -25,6 +31,7 @@ export default async function EditInvoicePage({ params }: { params: Promise<{ id
       name: clients.name,
     })
     .from(clients)
+    .where(eq(clients.userId, user.id))
     .orderBy(asc(clients.name));
 
   const items = await db

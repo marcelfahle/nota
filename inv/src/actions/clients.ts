@@ -1,12 +1,12 @@
 "use server";
 
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
 import { getCurrentUser } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { clients } from "@/lib/db/schema";
+import { bankAccounts, clients } from "@/lib/db/schema";
 
 const clientSchema = z.object({
   address: z.string().optional(),
@@ -45,6 +45,17 @@ export async function createClient(
   }
 
   const user = await getCurrentUser();
+  if (result.data.bankAccountId) {
+    const [bankAccount] = await db
+      .select({ id: bankAccounts.id })
+      .from(bankAccounts)
+      .where(and(eq(bankAccounts.id, result.data.bankAccountId), eq(bankAccounts.userId, user.id)))
+      .limit(1);
+
+    if (!bankAccount) {
+      return { error: "Invalid bank account" };
+    }
+  }
 
   await db.insert(clients).values({
     ...result.data,
@@ -67,10 +78,33 @@ export async function updateClient(
     return { error: result.error.issues[0].message };
   }
 
+  const user = await getCurrentUser();
+  const [client] = await db
+    .select({ id: clients.id })
+    .from(clients)
+    .where(and(eq(clients.id, clientId), eq(clients.userId, user.id)))
+    .limit(1);
+
+  if (!client) {
+    return { error: "Client not found" };
+  }
+
+  if (result.data.bankAccountId) {
+    const [bankAccount] = await db
+      .select({ id: bankAccounts.id })
+      .from(bankAccounts)
+      .where(and(eq(bankAccounts.id, result.data.bankAccountId), eq(bankAccounts.userId, user.id)))
+      .limit(1);
+
+    if (!bankAccount) {
+      return { error: "Invalid bank account" };
+    }
+  }
+
   await db
     .update(clients)
     .set({ ...result.data, updatedAt: new Date() })
-    .where(eq(clients.id, clientId));
+    .where(and(eq(clients.id, clientId), eq(clients.userId, user.id)));
 
   revalidatePath("/clients");
   revalidatePath(`/clients/${clientId}`);
@@ -78,6 +112,8 @@ export async function updateClient(
 }
 
 export async function deleteClient(clientId: string) {
-  await db.delete(clients).where(eq(clients.id, clientId));
+  const user = await getCurrentUser();
+
+  await db.delete(clients).where(and(eq(clients.id, clientId), eq(clients.userId, user.id)));
   revalidatePath("/clients");
 }

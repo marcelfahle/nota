@@ -22,8 +22,19 @@ export default function LoginPage() {
 
         <form action={action} className="space-y-4">
           <div className="space-y-2">
+            <Label htmlFor="email">Email</Label>
+            <Input autoComplete="email" autoFocus id="email" name="email" required type="email" />
+          </div>
+
+          <div className="space-y-2">
             <Label htmlFor="password">Password</Label>
-            <Input autoFocus id="password" name="password" required type="password" />
+            <Input
+              autoComplete="current-password"
+              id="password"
+              name="password"
+              required
+              type="password"
+            />
           </div>
 
           {state?.error && <p className="text-sm text-red-500">{state.error}</p>}

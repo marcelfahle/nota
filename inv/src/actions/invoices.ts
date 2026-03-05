@@ -71,6 +71,15 @@ export async function createInvoice(
   const userId = user.id;
   const { lineItems: items, taxRate, ...invoiceData } = result.data;
   const totals = calculateTotals(items, taxRate);
+  const [client] = await db
+    .select({ id: clients.id })
+    .from(clients)
+    .where(and(eq(clients.id, invoiceData.clientId), eq(clients.userId, userId)))
+    .limit(1);
+
+  if (!client) {
+    return { error: "Client not found" };
+  }
 
   const inserted = await db.transaction(async (tx) => {
     // Generate invoice number atomically
@@ -144,8 +153,28 @@ export async function updateInvoice(
     return { error: result.error.issues[0].message };
   }
 
+  const user = await getCurrentUser();
+  const [invoice] = await db
+    .select({ id: invoices.id })
+    .from(invoices)
+    .where(and(eq(invoices.id, invoiceId), eq(invoices.userId, user.id)))
+    .limit(1);
+
+  if (!invoice) {
+    return { error: "Invoice not found" };
+  }
+
   const { lineItems: items, taxRate, ...invoiceData } = result.data;
   const totals = calculateTotals(items, taxRate);
+  const [client] = await db
+    .select({ id: clients.id })
+    .from(clients)
+    .where(and(eq(clients.id, invoiceData.clientId), eq(clients.userId, user.id)))
+    .limit(1);
+
+  if (!client) {
+    return { error: "Client not found" };
+  }
 
   await db.transaction(async (tx) => {
     // Update invoice
@@ -156,7 +185,7 @@ export async function updateInvoice(
         ...totals,
         updatedAt: new Date(),
       })
-      .where(eq(invoices.id, invoiceId));
+      .where(and(eq(invoices.id, invoiceId), eq(invoices.userId, user.id)));
 
     // Replace line items: delete old, insert new
     await tx.delete(lineItems).where(eq(lineItems.invoiceId, invoiceId));
@@ -179,18 +208,30 @@ export async function updateInvoice(
 }
 
 export async function deleteInvoice(invoiceId: string) {
-  await db.delete(invoices).where(eq(invoices.id, invoiceId));
+  const user = await getCurrentUser();
+
+  await db.delete(invoices).where(and(eq(invoices.id, invoiceId), eq(invoices.userId, user.id)));
   revalidatePath("/invoices");
 }
 
 export async function sendInvoice(invoiceId: string) {
+  const user = await getCurrentUser();
+
   // Step 1: Query invoice with client and line items
-  const [invoice] = await db.select().from(invoices).where(eq(invoices.id, invoiceId)).limit(1);
+  const [invoice] = await db
+    .select()
+    .from(invoices)
+    .where(and(eq(invoices.id, invoiceId), eq(invoices.userId, user.id)))
+    .limit(1);
   if (!invoice) {
     return { error: "Invoice not found" };
   }
 
-  const [client] = await db.select().from(clients).where(eq(clients.id, invoice.clientId)).limit(1);
+  const [client] = await db
+    .select()
+    .from(clients)
+    .where(and(eq(clients.id, invoice.clientId), eq(clients.userId, user.id)))
+    .limit(1);
   if (!client) {
     return { error: "Client not found" };
   }
@@ -201,15 +242,13 @@ export async function sendInvoice(invoiceId: string) {
     .where(eq(lineItems.invoiceId, invoiceId))
     .orderBy(asc(lineItems.sortOrder));
 
-  const user = await getCurrentUser();
-
   // Step 2: Resolve bank account for this invoice
   let bankDetails: string | null = null;
   if (client.bankAccountId) {
     const [ba] = await db
       .select({ details: bankAccounts.details })
       .from(bankAccounts)
-      .where(eq(bankAccounts.id, client.bankAccountId))
+      .where(and(eq(bankAccounts.id, client.bankAccountId), eq(bankAccounts.userId, user.id)))
       .limit(1);
     bankDetails = ba?.details ?? null;
   }
@@ -274,7 +313,7 @@ export async function sendInvoice(invoiceId: string) {
     attachments: [
       {
         content: pdfBuffer.toString("base64"),
-        filename: `${invoice.number.replace(/\//g, "-")}.pdf`,
+        filename: `${invoice.number.replaceAll("/", "-")}.pdf`,
       },
     ],
     from: fromEmail,
@@ -301,7 +340,7 @@ export async function sendInvoice(invoiceId: string) {
       stripePaymentLinkUrl: paymentLink.url,
       updatedAt: new Date(),
     })
-    .where(eq(invoices.id, invoiceId));
+    .where(and(eq(invoices.id, invoiceId), eq(invoices.userId, user.id)));
 
   // Step 6: Log activity
   await db.insert(activityLog).values({
@@ -317,17 +356,24 @@ export async function sendInvoice(invoiceId: string) {
 }
 
 export async function sendReminder(invoiceId: string) {
-  const [invoice] = await db.select().from(invoices).where(eq(invoices.id, invoiceId)).limit(1);
+  const user = await getCurrentUser();
+  const [invoice] = await db
+    .select()
+    .from(invoices)
+    .where(and(eq(invoices.id, invoiceId), eq(invoices.userId, user.id)))
+    .limit(1);
   if (!invoice) {
     return { error: "Invoice not found" };
   }
 
-  const [client] = await db.select().from(clients).where(eq(clients.id, invoice.clientId)).limit(1);
+  const [client] = await db
+    .select()
+    .from(clients)
+    .where(and(eq(clients.id, invoice.clientId), eq(clients.userId, user.id)))
+    .limit(1);
   if (!client) {
     return { error: "Client not found" };
   }
-
-  const user = await getCurrentUser();
 
   const fromEmail =
     process.env.RESEND_FROM_EMAIL ?? `${user.businessName ?? "inv."} <invoices@resend.dev>`;
@@ -362,7 +408,12 @@ export async function sendReminder(invoiceId: string) {
 }
 
 export async function duplicateInvoice(invoiceId: string) {
-  const [original] = await db.select().from(invoices).where(eq(invoices.id, invoiceId)).limit(1);
+  const user = await getCurrentUser();
+  const [original] = await db
+    .select()
+    .from(invoices)
+    .where(and(eq(invoices.id, invoiceId), eq(invoices.userId, user.id)))
+    .limit(1);
 
   if (!original) {
     throw new Error("Invoice not found");

@@ -1,14 +1,20 @@
-import { asc, desc, eq } from "drizzle-orm";
+import { and, asc, desc, eq } from "drizzle-orm";
 import { notFound } from "next/navigation";
 
 import { InvoiceDetailView } from "@/components/invoice-detail";
+import { getCurrentUser } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { activityLog, clients, invoices, lineItems } from "@/lib/db/schema";
 
 export default async function InvoiceDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
+  const user = await getCurrentUser();
 
-  const [invoice] = await db.select().from(invoices).where(eq(invoices.id, id)).limit(1);
+  const [invoice] = await db
+    .select()
+    .from(invoices)
+    .where(and(eq(invoices.id, id), eq(invoices.userId, user.id)))
+    .limit(1);
 
   if (!invoice) {
     notFound();
@@ -17,7 +23,7 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
   const [client] = await db
     .select({ email: clients.email, name: clients.name })
     .from(clients)
-    .where(eq(clients.id, invoice.clientId))
+    .where(and(eq(clients.id, invoice.clientId), eq(clients.userId, user.id)))
     .limit(1);
 
   const items = await db

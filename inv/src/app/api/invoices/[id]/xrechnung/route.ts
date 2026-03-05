@@ -1,4 +1,4 @@
-import { asc, eq } from "drizzle-orm";
+import { and, asc, eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
 
 import { getCurrentUser } from "@/lib/auth";
@@ -8,14 +8,23 @@ import { generateXRechnung } from "@/lib/xrechnung";
 
 export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
+  const user = await getCurrentUser();
 
-  const [invoice] = await db.select().from(invoices).where(eq(invoices.id, id)).limit(1);
+  const [invoice] = await db
+    .select()
+    .from(invoices)
+    .where(and(eq(invoices.id, id), eq(invoices.userId, user.id)))
+    .limit(1);
 
   if (!invoice) {
     return NextResponse.json({ error: "Invoice not found" }, { status: 404 });
   }
 
-  const [client] = await db.select().from(clients).where(eq(clients.id, invoice.clientId)).limit(1);
+  const [client] = await db
+    .select()
+    .from(clients)
+    .where(and(eq(clients.id, invoice.clientId), eq(clients.userId, user.id)))
+    .limit(1);
 
   if (!client) {
     return NextResponse.json({ error: "Client not found" }, { status: 404 });
@@ -26,8 +35,6 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
     .from(lineItems)
     .where(eq(lineItems.invoiceId, id))
     .orderBy(asc(lineItems.sortOrder));
-
-  const user = await getCurrentUser();
 
   const xml = generateXRechnung({
     business: {

@@ -1,13 +1,16 @@
-import { asc } from "drizzle-orm";
+import { asc, eq } from "drizzle-orm";
 import { ArrowLeft } from "lucide-react";
 import Link from "next/link";
 
 import { createInvoice } from "@/actions/invoices";
 import { InvoiceForm } from "@/components/invoice-form";
+import { getCurrentUser } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { clients } from "@/lib/db/schema";
 
 export default async function NewInvoicePage() {
+  const user = await getCurrentUser();
+
   const clientList = await db
     .select({
       defaultCurrency: clients.defaultCurrency,
@@ -16,6 +19,7 @@ export default async function NewInvoicePage() {
       name: clients.name,
     })
     .from(clients)
+    .where(eq(clients.userId, user.id))
     .orderBy(asc(clients.name));
 
   return (

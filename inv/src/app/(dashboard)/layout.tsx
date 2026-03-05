@@ -1,67 +1,52 @@
-"use client";
+import { and, desc, eq, isNotNull, or } from "drizzle-orm";
 
-import { Plus, Settings } from "lucide-react";
-import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { DashboardShell } from "@/components/dashboard-shell";
+import { getCurrentUser } from "@/lib/auth";
+import { db } from "@/lib/db";
+import { clients, invoices } from "@/lib/db/schema";
 
-import { Button } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
+export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
+  const user = await getCurrentUser();
 
-const navItems = [
-  { href: "/invoices", label: "Invoices" },
-  { href: "/clients", label: "Clients" },
-];
-
-export default function DashboardLayout({ children }: { children: React.ReactNode }) {
-  const pathname = usePathname();
+  const stripeDockItems = await db
+    .select({
+      clientName: clients.name,
+      id: invoices.id,
+      number: invoices.number,
+      paidAt: invoices.paidAt,
+      sentAt: invoices.sentAt,
+      status: invoices.status,
+      stripePaymentIntentId: invoices.stripePaymentIntentId,
+      stripePaymentLinkId: invoices.stripePaymentLinkId,
+      stripePaymentLinkUrl: invoices.stripePaymentLinkUrl,
+      updatedAt: invoices.updatedAt,
+    })
+    .from(invoices)
+    .leftJoin(clients, and(eq(clients.id, invoices.clientId), eq(clients.userId, user.id)))
+    .where(
+      and(
+        eq(invoices.userId, user.id),
+        or(
+          isNotNull(invoices.stripePaymentIntentId),
+          isNotNull(invoices.stripePaymentLinkId),
+          isNotNull(invoices.stripePaymentLinkUrl),
+        ),
+      ),
+    )
+    .orderBy(desc(invoices.updatedAt), desc(invoices.createdAt))
+    .limit(8);
 
   return (
-    <div className="min-h-screen">
-      <header className="border-b border-zinc-100">
-        <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-4 sm:px-6">
-          <div className="flex items-center gap-4 sm:gap-8">
-            <Link className="flex items-center gap-2" href="/invoices">
-              <div className="flex h-7 w-7 items-center justify-center rounded-md bg-zinc-900">
-                <span className="text-[10px] font-semibold text-white">inv</span>
-              </div>
-              <span className="hidden text-sm font-semibold tracking-tight sm:inline">inv.</span>
-            </Link>
-
-            <nav className="flex items-center gap-1">
-              {navItems.map((item) => (
-                <Link
-                  className={cn(
-                    "rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
-                    pathname.startsWith(item.href)
-                      ? "bg-zinc-100 text-zinc-900"
-                      : "text-zinc-500 hover:text-zinc-900",
-                  )}
-                  href={item.href}
-                  key={item.href}
-                >
-                  {item.label}
-                </Link>
-              ))}
-            </nav>
-          </div>
-
-          <div className="flex items-center gap-2">
-            <Button asChild size="sm">
-              <Link href="/invoices/new">
-                <Plus />
-                <span className="hidden sm:inline">New Invoice</span>
-              </Link>
-            </Button>
-            <Button asChild size="sm" variant="ghost">
-              <Link href="/settings">
-                <Settings className="h-4 w-4" />
-              </Link>
-            </Button>
-          </div>
-        </div>
-      </header>
-
-      <main className="mx-auto max-w-6xl px-4 py-6 sm:px-6 sm:py-8">{children}</main>
-    </div>
+    <DashboardShell
+      brandName={user.businessName || "inv."}
+      logoUrl={user.logoUrl}
+      stripeDockItems={stripeDockItems.map((item) => ({
+        ...item,
+        sentAt: item.sentAt?.toISOString() ?? null,
+        updatedAt: item.updatedAt?.toISOString() ?? null,
+      }))}
+    >
+      {children}
+    </DashboardShell>
   );
 }

@@ -1,10 +1,11 @@
-import { desc, eq } from "drizzle-orm";
+import { and, desc, eq } from "drizzle-orm";
 import { FileText, Plus } from "lucide-react";
 import Link from "next/link";
 
 import { StatCard } from "@/components/stat-card";
 import { StatusBadge } from "@/components/status-badge";
 import { Button } from "@/components/ui/button";
+import { getCurrentUser } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { clients, invoices } from "@/lib/db/schema";
 import { formatCurrency } from "@/lib/utils";
@@ -17,6 +18,7 @@ export default async function InvoicesPage({
   searchParams: Promise<{ status?: string }>;
 }) {
   const { status: filterStatus } = await searchParams;
+  const user = await getCurrentUser();
 
   const invoiceList = await db
     .select({
@@ -31,7 +33,8 @@ export default async function InvoicesPage({
       total: invoices.total,
     })
     .from(invoices)
-    .leftJoin(clients, eq(invoices.clientId, clients.id))
+    .leftJoin(clients, and(eq(invoices.clientId, clients.id), eq(clients.userId, user.id)))
+    .where(eq(invoices.userId, user.id))
     .orderBy(desc(invoices.issuedAt));
 
   // Compute stats from all invoices (unfiltered)

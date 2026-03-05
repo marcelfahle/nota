@@ -3,8 +3,13 @@
 import { scrypt, timingSafeEqual } from "node:crypto";
 import { promisify } from "node:util";
 
+import { eq } from "drizzle-orm";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
+
+import { createSessionValue } from "@/lib/auth";
+import { db } from "@/lib/db";
+import { users } from "@/lib/db/schema";
 
 const scryptAsync = promisify(scrypt);
 
@@ -19,24 +24,25 @@ async function verifyPassword(password: string, hash: string): Promise<boolean> 
 }
 
 export async function login(_prevState: { error: string } | null, formData: FormData) {
+  const email = (formData.get("email") as string | null)?.trim().toLowerCase();
   const password = formData.get("password") as string;
 
-  if (!password) {
-    return { error: "Password is required" };
+  if (!email || !password) {
+    return { error: "Email and password are required" };
   }
 
-  const passwordHash = process.env.PASSWORD_HASH;
-  if (!passwordHash) {
-    return { error: "Server configuration error" };
+  const [user] = await db.select().from(users).where(eq(users.email, email)).limit(1);
+  if (!user) {
+    return { error: "Invalid email or password" };
   }
 
-  const valid = await verifyPassword(password, passwordHash);
+  const valid = await verifyPassword(password, user.passwordHash);
   if (!valid) {
-    return { error: "Invalid password" };
+    return { error: "Invalid email or password" };
   }
 
   const cookieStore = await cookies();
-  cookieStore.set("session", process.env.SESSION_SECRET!, {
+  cookieStore.set("session", createSessionValue(user.id), {
     httpOnly: true,
     maxAge: 60 * 60 * 24 * 30, // 30 days
     path: "/",

@@ -1,4 +1,4 @@
-import { asc, desc, eq } from "drizzle-orm";
+import { and, asc, desc, eq } from "drizzle-orm";
 import { notFound } from "next/navigation";
 
 import { ClientDetailView } from "@/components/client-detail";
@@ -8,14 +8,17 @@ import { bankAccounts, clients, invoices } from "@/lib/db/schema";
 
 export default async function ClientDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
+  const user = await getCurrentUser();
 
-  const [client] = await db.select().from(clients).where(eq(clients.id, id)).limit(1);
+  const [client] = await db
+    .select()
+    .from(clients)
+    .where(and(eq(clients.id, id), eq(clients.userId, user.id)))
+    .limit(1);
 
   if (!client) {
     notFound();
   }
-
-  const user = await getCurrentUser();
 
   const [clientInvoices, userBankAccounts] = await Promise.all([
     db
@@ -29,7 +32,7 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
         total: invoices.total,
       })
       .from(invoices)
-      .where(eq(invoices.clientId, id))
+      .where(and(eq(invoices.clientId, id), eq(invoices.userId, user.id)))
       .orderBy(desc(invoices.createdAt)),
     db
       .select({
@@ -43,10 +46,6 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
   ]);
 
   return (
-    <ClientDetailView
-      bankAccounts={userBankAccounts}
-      client={client}
-      invoices={clientInvoices}
-    />
+    <ClientDetailView bankAccounts={userBankAccounts} client={client} invoices={clientInvoices} />
   );
 }

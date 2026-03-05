@@ -9,14 +9,23 @@ import { bankAccounts, clients, invoices, lineItems } from "@/lib/db/schema";
 
 export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
+  const user = await getCurrentUser();
 
-  const [invoice] = await db.select().from(invoices).where(eq(invoices.id, id)).limit(1);
+  const [invoice] = await db
+    .select()
+    .from(invoices)
+    .where(and(eq(invoices.id, id), eq(invoices.userId, user.id)))
+    .limit(1);
 
   if (!invoice) {
     return NextResponse.json({ error: "Invoice not found" }, { status: 404 });
   }
 
-  const [client] = await db.select().from(clients).where(eq(clients.id, invoice.clientId)).limit(1);
+  const [client] = await db
+    .select()
+    .from(clients)
+    .where(and(eq(clients.id, invoice.clientId), eq(clients.userId, user.id)))
+    .limit(1);
 
   if (!client) {
     return NextResponse.json({ error: "Client not found" }, { status: 404 });
@@ -28,15 +37,13 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
     .where(eq(lineItems.invoiceId, id))
     .orderBy(asc(lineItems.sortOrder));
 
-  const user = await getCurrentUser();
-
   // Resolve bank account: client assignment -> default
   let bankDetails: string | null = null;
   if (client.bankAccountId) {
     const [ba] = await db
       .select({ details: bankAccounts.details })
       .from(bankAccounts)
-      .where(eq(bankAccounts.id, client.bankAccountId))
+      .where(and(eq(bankAccounts.id, client.bankAccountId), eq(bankAccounts.userId, user.id)))
       .limit(1);
     bankDetails = ba?.details ?? null;
   }
@@ -85,7 +92,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
     }),
   );
 
-  const safeFilename = invoice.number.replace(/\//g, "-");
+  const safeFilename = invoice.number.replaceAll("/", "-");
 
   return new Response(new Uint8Array(buffer), {
     headers: {

@@ -1,8 +1,9 @@
-import { asc, eq, sql } from "drizzle-orm";
+import { and, asc, eq, sql } from "drizzle-orm";
 import { Plus, Users } from "lucide-react";
 import Link from "next/link";
 
 import { Button } from "@/components/ui/button";
+import { getCurrentUser } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { clients, invoices } from "@/lib/db/schema";
 import { formatCurrency } from "@/lib/utils";
@@ -17,6 +18,8 @@ function getInitials(name: string): string {
 }
 
 export default async function ClientsPage() {
+  const user = await getCurrentUser();
+
   const clientList = await db
     .select({
       company: clients.company,
@@ -27,7 +30,8 @@ export default async function ClientsPage() {
       totalInvoiced: sql<string>`coalesce(sum(${invoices.total}::numeric), 0)`,
     })
     .from(clients)
-    .leftJoin(invoices, eq(clients.id, invoices.clientId))
+    .leftJoin(invoices, and(eq(clients.id, invoices.clientId), eq(invoices.userId, user.id)))
+    .where(eq(clients.userId, user.id))
     .groupBy(clients.id)
     .orderBy(asc(clients.name));
 

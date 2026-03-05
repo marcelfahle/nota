@@ -11,7 +11,7 @@ export function middleware(request: NextRequest) {
 
   const session = request.cookies.get("session")?.value;
 
-  if (!session || session !== process.env.SESSION_SECRET) {
+  if (!session || !session.includes(".")) {
     const loginUrl = new URL("/login", request.url);
     return NextResponse.redirect(loginUrl);
   }

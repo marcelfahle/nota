@@ -49,5 +49,5 @@ if (existing) {
   console.log(`Created user: ${email}`);
 }
 
-console.log(`Password hash: ${passwordHash}`);
-console.log("Set PASSWORD_HASH in .env to the hash above.");
+console.log(`Seeded login email: ${email}`);
+console.log("Seeded password from SEED_PASSWORD or default value.");
