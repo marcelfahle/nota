@@ -94,6 +94,7 @@ const ACTION_LABELS: Record<string, string> = {
 
 export function InvoiceDetailView({ activities, invoice }: InvoiceDetailProps) {
   const [actionError, setActionError] = useState<string | null>(null);
+  const [actionNotice, setActionNotice] = useState<string | null>(null);
   const [confirmAction, setConfirmAction] = useState<"cancel" | "delete" | null>(null);
   const [duplicating, setDuplicating] = useState(false);
   const [pendingAction, setPendingAction] = useState<string | null>(null);
@@ -114,6 +115,7 @@ export function InvoiceDetailView({ activities, invoice }: InvoiceDetailProps) {
 
     setPendingAction(confirmAction);
     setActionError(null);
+    setActionNotice(null);
 
     const result =
       confirmAction === "delete"
@@ -131,6 +133,18 @@ export function InvoiceDetailView({ activities, invoice }: InvoiceDetailProps) {
       return;
     }
 
+    const warning =
+      typeof result === "object" &&
+      result &&
+      "warning" in result &&
+      typeof result.warning === "string"
+        ? result.warning
+        : null;
+
+    if (warning) {
+      setActionNotice(warning);
+    }
+
     setConfirmAction(null);
     router.refresh();
     setPendingAction(null);
@@ -139,6 +153,7 @@ export function InvoiceDetailView({ activities, invoice }: InvoiceDetailProps) {
   async function handleSend() {
     setPendingAction("send");
     setActionError(null);
+    setActionNotice(null);
     const result = await sendInvoice(invoice.id);
     if (result?.error) {
       setActionError(result.error);
@@ -153,6 +168,7 @@ export function InvoiceDetailView({ activities, invoice }: InvoiceDetailProps) {
   async function handleReminder() {
     setPendingAction("remind");
     setActionError(null);
+    setActionNotice(null);
     const result = await sendReminder(invoice.id);
     if (result?.error) {
       setActionError(result.error);
@@ -167,6 +183,7 @@ export function InvoiceDetailView({ activities, invoice }: InvoiceDetailProps) {
   async function handleMarkSent() {
     setPendingAction("mark-sent");
     setActionError(null);
+    setActionNotice(null);
     const result = await markInvoiceSent(invoice.id);
     if (result?.error) {
       setActionError(result.error);
@@ -181,6 +198,7 @@ export function InvoiceDetailView({ activities, invoice }: InvoiceDetailProps) {
   async function handleMarkPaid() {
     setPendingAction("mark-paid");
     setActionError(null);
+    setActionNotice(null);
     const result = await markInvoicePaid(invoice.id);
     if (result?.error) {
       setActionError(result.error);
@@ -195,6 +213,7 @@ export function InvoiceDetailView({ activities, invoice }: InvoiceDetailProps) {
   async function handleDuplicate() {
     setDuplicating(true);
     setActionError(null);
+    setActionNotice(null);
     const newId = await duplicateInvoice(invoice.id);
     router.push(`/invoices/${newId}`);
   }
@@ -277,7 +296,7 @@ export function InvoiceDetailView({ activities, invoice }: InvoiceDetailProps) {
                   : "Send Reminder"}
             </Button>
           )}
-          {canMarkPaid && (
+          {canMarkPaid && !isDraft && (
             <Button
               disabled={pendingAction !== null}
               onClick={handleMarkPaid}
@@ -342,6 +361,11 @@ export function InvoiceDetailView({ activities, invoice }: InvoiceDetailProps) {
         {actionError && (
           <div className="mt-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
             {actionError}
+          </div>
+        )}
+        {actionNotice && (
+          <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+            {actionNotice}
           </div>
         )}
       </div>

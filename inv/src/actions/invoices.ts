@@ -80,6 +80,16 @@ async function getOwnedClient(userId: string, clientId: string) {
   return client ?? null;
 }
 
+async function hasSentActivity(invoiceId: string) {
+  const [entry] = await db
+    .select({ id: activityLog.id })
+    .from(activityLog)
+    .where(and(eq(activityLog.invoiceId, invoiceId), eq(activityLog.action, "sent")))
+    .limit(1);
+
+  return Boolean(entry);
+}
+
 export async function createInvoice(
   _prevState: { error?: string; invoiceId?: string; success?: boolean } | null,
   formData: FormData,
@@ -247,17 +257,49 @@ export async function sendInvoice(invoiceId: string) {
   const user = await getCurrentUser();
 
   // Step 1: Query invoice with client and line items
-  const invoice = await getOwnedInvoice(user.id, invoiceId);
-  if (!invoice) {
+  const existingInvoice = await getOwnedInvoice(user.id, invoiceId);
+  if (!existingInvoice) {
     return { error: "Invoice not found" };
   }
 
-  if (invoice.status !== "draft") {
+  if (existingInvoice.status !== "draft") {
     return { error: "Only draft invoices can be sent" };
+  }
+
+  const sentAt = new Date();
+  const [invoice] = await db
+    .update(invoices)
+    .set({
+      sentAt,
+      status: "sent",
+      updatedAt: sentAt,
+    })
+    .where(
+      and(eq(invoices.id, invoiceId), eq(invoices.userId, user.id), eq(invoices.status, "draft")),
+    )
+    .returning();
+
+  if (!invoice) {
+    return { error: "Invoice status changed. Refresh and try again." };
   }
 
   const client = await getOwnedClient(user.id, invoice.clientId);
   if (!client) {
+    await db
+      .update(invoices)
+      .set({
+        sentAt: null,
+        status: "draft",
+        updatedAt: new Date(),
+      })
+      .where(
+        and(
+          eq(invoices.id, invoiceId),
+          eq(invoices.userId, user.id),
+          eq(invoices.status, "sent"),
+          eq(invoices.sentAt, sentAt),
+        ),
+      );
     return { error: "Client not found" };
   }
 
@@ -286,94 +328,119 @@ export async function sendInvoice(invoiceId: string) {
     bankDetails = defaultBa?.details ?? null;
   }
 
-  // Step 3: Generate PDF buffer
-  const pdfBuffer = await renderToBuffer(
-    InvoicePdf({
-      business: {
-        address: user.businessAddress,
-        bankDetails,
-        name: user.businessName,
-        vatNumber: user.vatNumber,
-      },
-      client: {
-        address: client.address,
-        company: client.company,
-        email: client.email,
-        name: client.name,
-        vatNumber: client.vatNumber,
-      },
-      invoice: {
+  let paymentLinkId: string | null = null;
+
+  try {
+    // Step 3: Generate PDF buffer
+    const pdfBuffer = await renderToBuffer(
+      InvoicePdf({
+        business: {
+          address: user.businessAddress,
+          bankDetails,
+          name: user.businessName,
+          vatNumber: user.vatNumber,
+        },
+        client: {
+          address: client.address,
+          company: client.company,
+          email: client.email,
+          name: client.name,
+          vatNumber: client.vatNumber,
+        },
+        invoice: {
+          currency: invoice.currency ?? "EUR",
+          dueAt: invoice.dueAt,
+          issuedAt: invoice.issuedAt,
+          lineItems: items.map((item) => ({
+            amount: item.amount,
+            description: item.description,
+            quantity: item.quantity,
+            unitPrice: item.unitPrice,
+          })),
+          notes: invoice.notes,
+          number: invoice.number,
+          reverseCharge: invoice.reverseCharge,
+          subtotal: invoice.subtotal ?? "0",
+          taxAmount: invoice.taxAmount ?? "0",
+          taxRate: invoice.taxRate ?? "0",
+          total: invoice.total ?? "0",
+        },
+      }),
+    );
+
+    // Step 4: Create Stripe payment link
+    const paymentLink = await createPaymentLink({
+      currency: invoice.currency,
+      id: invoice.id,
+      number: invoice.number,
+      total: invoice.total,
+    });
+    paymentLinkId = paymentLink.id;
+
+    // Step 5: Send email via Resend with PDF attachment and payment link
+    const fromEmail =
+      process.env.RESEND_FROM_EMAIL ?? `${user.businessName ?? "inv."} <invoices@resend.dev>`;
+    await resend.emails.send({
+      attachments: [
+        {
+          content: pdfBuffer.toString("base64"),
+          filename: `${invoice.number.replaceAll("/", "-")}.pdf`,
+        },
+      ],
+      from: fromEmail,
+      react: InvoiceSentEmail({
+        businessName: user.businessName ?? "inv.",
+        clientName: client.name,
         currency: invoice.currency ?? "EUR",
         dueAt: invoice.dueAt,
-        issuedAt: invoice.issuedAt,
-        lineItems: items.map((item) => ({
-          amount: item.amount,
-          description: item.description,
-          quantity: item.quantity,
-          unitPrice: item.unitPrice,
-        })),
-        notes: invoice.notes,
-        number: invoice.number,
-        reverseCharge: invoice.reverseCharge,
-        subtotal: invoice.subtotal ?? "0",
-        taxAmount: invoice.taxAmount ?? "0",
-        taxRate: invoice.taxRate ?? "0",
+        invoiceNumber: invoice.number,
+        paymentLinkUrl: paymentLink.url,
         total: invoice.total ?? "0",
-      },
-    }),
-  );
+      }),
+      subject: `Invoice ${invoice.number} from ${user.businessName ?? "inv."}`,
+      to: [client.email],
+    });
 
-  // Step 3: Create Stripe payment link
-  const paymentLink = await createPaymentLink({
-    currency: invoice.currency,
-    id: invoice.id,
-    number: invoice.number,
-    total: invoice.total,
-  });
+    // Step 6: Persist Stripe link data without overwriting later state transitions.
+    await db
+      .update(invoices)
+      .set({
+        stripePaymentLinkId: paymentLink.id,
+        stripePaymentLinkUrl: paymentLink.url,
+        updatedAt: new Date(),
+      })
+      .where(and(eq(invoices.id, invoiceId), eq(invoices.userId, user.id)));
+  } catch {
+    if (paymentLinkId) {
+      await deactivatePaymentLink(paymentLinkId).catch(() => null);
+    }
 
-  // Step 4: Send email via Resend with PDF attachment and payment link
-  const fromEmail =
-    process.env.RESEND_FROM_EMAIL ?? `${user.businessName ?? "inv."} <invoices@resend.dev>`;
-  await resend.emails.send({
-    attachments: [
-      {
-        content: pdfBuffer.toString("base64"),
-        filename: `${invoice.number.replaceAll("/", "-")}.pdf`,
-      },
-    ],
-    from: fromEmail,
-    react: InvoiceSentEmail({
-      businessName: user.businessName ?? "inv.",
-      clientName: client.name,
-      currency: invoice.currency ?? "EUR",
-      dueAt: invoice.dueAt,
-      invoiceNumber: invoice.number,
-      paymentLinkUrl: paymentLink.url,
-      total: invoice.total ?? "0",
-    }),
-    subject: `Invoice ${invoice.number} from ${user.businessName ?? "inv."}`,
-    to: [client.email],
-  });
+    await db
+      .update(invoices)
+      .set({
+        sentAt: null,
+        status: "draft",
+        updatedAt: new Date(),
+      })
+      .where(
+        and(
+          eq(invoices.id, invoiceId),
+          eq(invoices.userId, user.id),
+          eq(invoices.status, "sent"),
+          eq(invoices.sentAt, sentAt),
+        ),
+      );
 
-  // Step 5: Update invoice status and Stripe link data
-  await db
-    .update(invoices)
-    .set({
-      sentAt: new Date(),
-      status: "sent",
-      stripePaymentLinkId: paymentLink.id,
-      stripePaymentLinkUrl: paymentLink.url,
-      updatedAt: new Date(),
-    })
-    .where(and(eq(invoices.id, invoiceId), eq(invoices.userId, user.id)));
+    return { error: "Invoice could not be sent. Please try again." };
+  }
 
-  // Step 6: Log activity
+  // Step 7: Log activity
   await db.insert(activityLog).values({
     action: "sent",
     invoiceId,
   });
 
-  // Step 7: Revalidate paths
+  // Step 8: Revalidate paths
   revalidatePath("/invoices");
   revalidatePath(`/invoices/${invoiceId}`);
 
@@ -563,9 +630,19 @@ export async function markInvoicePaid(invoiceId: string) {
     return { success: true };
   }
 
+  const currentStatus = invoice.status ?? "draft";
+
+  if (
+    currentStatus === "sent" &&
+    !invoice.stripePaymentLinkId &&
+    !(await hasSentActivity(invoiceId))
+  ) {
+    return { error: "Invoice is still being sent. Refresh and try again." };
+  }
+
   const now = new Date();
   const paidAt = now.toISOString().split("T")[0];
-  await db
+  const updatedInvoices = await db
     .update(invoices)
     .set({
       paidAt,
@@ -573,7 +650,18 @@ export async function markInvoicePaid(invoiceId: string) {
       status: "paid",
       updatedAt: now,
     })
-    .where(and(eq(invoices.id, invoiceId), eq(invoices.userId, user.id)));
+    .where(
+      and(
+        eq(invoices.id, invoiceId),
+        eq(invoices.userId, user.id),
+        eq(invoices.status, currentStatus),
+      ),
+    )
+    .returning({ id: invoices.id });
+
+  if (updatedInvoices.length === 0) {
+    return { error: "Invoice status changed. Refresh and try again." };
+  }
 
   await db.insert(activityLog).values({
     action: "paid",
@@ -603,17 +691,48 @@ export async function cancelInvoice(invoiceId: string) {
     return { success: true };
   }
 
-  if (invoice.stripePaymentLinkId) {
-    await deactivatePaymentLink(invoice.stripePaymentLinkId);
+  const currentStatus = invoice.status ?? "draft";
+
+  if (!REMINDABLE_STATUSES.has(currentStatus)) {
+    return { error: "Only sent or overdue invoices can be cancelled" };
   }
 
-  await db
+  if (
+    currentStatus === "sent" &&
+    !invoice.stripePaymentLinkId &&
+    !(await hasSentActivity(invoiceId))
+  ) {
+    return { error: "Invoice is still being sent. Refresh and try again." };
+  }
+
+  const warnings: Array<string> = [];
+
+  const updatedInvoices = await db
     .update(invoices)
     .set({
       status: "cancelled",
       updatedAt: new Date(),
     })
-    .where(and(eq(invoices.id, invoiceId), eq(invoices.userId, user.id)));
+    .where(
+      and(
+        eq(invoices.id, invoiceId),
+        eq(invoices.userId, user.id),
+        eq(invoices.status, currentStatus),
+      ),
+    )
+    .returning({ id: invoices.id });
+
+  if (updatedInvoices.length === 0) {
+    return { error: "Invoice status changed. Refresh and try again." };
+  }
+
+  if (invoice.stripePaymentLinkId) {
+    try {
+      await deactivatePaymentLink(invoice.stripePaymentLinkId);
+    } catch {
+      warnings.push("Stripe payment link is still active. Disable it in Stripe.");
+    }
+  }
 
   await db.insert(activityLog).values({
     action: "cancelled",
@@ -623,5 +742,5 @@ export async function cancelInvoice(invoiceId: string) {
   revalidatePath("/invoices");
   revalidatePath(`/invoices/${invoiceId}`);
 
-  return { success: true };
+  return { success: true, warning: warnings[0] };
 }
