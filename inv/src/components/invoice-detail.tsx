@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowLeft, Copy, Download, Mail, Pencil, Trash2 } from "lucide-react";
+import { ArrowLeft, Copy, Download, FileCode, Mail, Pencil, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
@@ -165,6 +165,16 @@ export function InvoiceDetailView({ activities, invoice }: InvoiceDetailProps) {
             <Button size="sm" variant="outline">
               <Download className="size-4" />
               Download PDF
+            </Button>
+          </a>
+          <a
+            href={`/api/invoices/${invoice.id}/xrechnung`}
+            rel="noopener noreferrer"
+            target="_blank"
+          >
+            <Button size="sm" variant="outline">
+              <FileCode className="size-4" />
+              XRechnung XML
             </Button>
           </a>
           <Button disabled={duplicating} onClick={handleDuplicate} size="sm" variant="outline">
