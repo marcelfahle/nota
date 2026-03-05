@@ -12,7 +12,7 @@ import { db } from "@/lib/db";
 import { activityLog, bankAccounts, clients, invoices, lineItems, users } from "@/lib/db/schema";
 import { resend } from "@/lib/email";
 import { formatInvoiceNumber } from "@/lib/invoice-number";
-import { createPaymentLink } from "@/lib/stripe";
+import { createPaymentLink, deactivatePaymentLink } from "@/lib/stripe";
 
 const lineItemSchema = z.object({
   description: z.string().min(1, "Description is required"),
@@ -31,6 +31,8 @@ const invoiceSchema = z.object({
   reverseCharge: z.string().default("false"),
   taxRate: z.coerce.number().min(0).max(100).default(0),
 });
+
+const REMINDABLE_STATUSES = new Set(["sent", "overdue"]);
 
 function calculateTotals(items: Array<{ quantity: number; unitPrice: number }>, taxRate: number) {
   const subtotal = items.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0);
@@ -56,6 +58,26 @@ function parseInvoiceFormData(formData: FormData) {
     reverseCharge: formData.get("reverseCharge") === "true" ? "true" : "false",
     taxRate: formData.get("taxRate") as string,
   };
+}
+
+async function getOwnedInvoice(userId: string, invoiceId: string) {
+  const [invoice] = await db
+    .select()
+    .from(invoices)
+    .where(and(eq(invoices.id, invoiceId), eq(invoices.userId, userId)))
+    .limit(1);
+
+  return invoice ?? null;
+}
+
+async function getOwnedClient(userId: string, clientId: string) {
+  const [client] = await db
+    .select()
+    .from(clients)
+    .where(and(eq(clients.id, clientId), eq(clients.userId, userId)))
+    .limit(1);
+
+  return client ?? null;
 }
 
 export async function createInvoice(
@@ -154,23 +176,19 @@ export async function updateInvoice(
   }
 
   const user = await getCurrentUser();
-  const [invoice] = await db
-    .select({ id: invoices.id })
-    .from(invoices)
-    .where(and(eq(invoices.id, invoiceId), eq(invoices.userId, user.id)))
-    .limit(1);
+  const invoice = await getOwnedInvoice(user.id, invoiceId);
 
   if (!invoice) {
     return { error: "Invoice not found" };
   }
 
+  if (invoice.status !== "draft") {
+    return { error: "Only draft invoices can be edited" };
+  }
+
   const { lineItems: items, taxRate, ...invoiceData } = result.data;
   const totals = calculateTotals(items, taxRate);
-  const [client] = await db
-    .select({ id: clients.id })
-    .from(clients)
-    .where(and(eq(clients.id, invoiceData.clientId), eq(clients.userId, user.id)))
-    .limit(1);
+  const client = await getOwnedClient(user.id, invoiceData.clientId);
 
   if (!client) {
     return { error: "Client not found" };
@@ -209,29 +227,36 @@ export async function updateInvoice(
 
 export async function deleteInvoice(invoiceId: string) {
   const user = await getCurrentUser();
+  const invoice = await getOwnedInvoice(user.id, invoiceId);
+
+  if (!invoice) {
+    return { error: "Invoice not found" };
+  }
+
+  if (invoice.status !== "draft") {
+    return { error: "Only draft invoices can be deleted" };
+  }
 
   await db.delete(invoices).where(and(eq(invoices.id, invoiceId), eq(invoices.userId, user.id)));
   revalidatePath("/invoices");
+
+  return { success: true };
 }
 
 export async function sendInvoice(invoiceId: string) {
   const user = await getCurrentUser();
 
   // Step 1: Query invoice with client and line items
-  const [invoice] = await db
-    .select()
-    .from(invoices)
-    .where(and(eq(invoices.id, invoiceId), eq(invoices.userId, user.id)))
-    .limit(1);
+  const invoice = await getOwnedInvoice(user.id, invoiceId);
   if (!invoice) {
     return { error: "Invoice not found" };
   }
 
-  const [client] = await db
-    .select()
-    .from(clients)
-    .where(and(eq(clients.id, invoice.clientId), eq(clients.userId, user.id)))
-    .limit(1);
+  if (invoice.status !== "draft") {
+    return { error: "Only draft invoices can be sent" };
+  }
+
+  const client = await getOwnedClient(user.id, invoice.clientId);
   if (!client) {
     return { error: "Client not found" };
   }
@@ -357,28 +382,26 @@ export async function sendInvoice(invoiceId: string) {
 
 export async function sendReminder(invoiceId: string) {
   const user = await getCurrentUser();
-  const [invoice] = await db
-    .select()
-    .from(invoices)
-    .where(and(eq(invoices.id, invoiceId), eq(invoices.userId, user.id)))
-    .limit(1);
+  const invoice = await getOwnedInvoice(user.id, invoiceId);
   if (!invoice) {
     return { error: "Invoice not found" };
   }
 
-  const [client] = await db
-    .select()
-    .from(clients)
-    .where(and(eq(clients.id, invoice.clientId), eq(clients.userId, user.id)))
-    .limit(1);
+  if (!invoice.status || !REMINDABLE_STATUSES.has(invoice.status)) {
+    return { error: "Only sent or overdue invoices can receive reminders" };
+  }
+
+  if (!invoice.stripePaymentLinkUrl) {
+    return { error: "This invoice has no Stripe payment link to include in a reminder" };
+  }
+
+  const client = await getOwnedClient(user.id, invoice.clientId);
   if (!client) {
     return { error: "Client not found" };
   }
 
   const fromEmail =
     process.env.RESEND_FROM_EMAIL ?? `${user.businessName ?? "inv."} <invoices@resend.dev>`;
-
-  const paymentLinkUrl = invoice.stripePaymentLinkUrl ?? "";
 
   await resend.emails.send({
     from: fromEmail,
@@ -388,7 +411,7 @@ export async function sendReminder(invoiceId: string) {
       currency: invoice.currency ?? "EUR",
       dueAt: invoice.dueAt,
       invoiceNumber: invoice.number,
-      paymentLinkUrl,
+      paymentLinkUrl: invoice.stripePaymentLinkUrl,
       reminder: true,
       total: invoice.total ?? "0",
     }),
@@ -409,11 +432,7 @@ export async function sendReminder(invoiceId: string) {
 
 export async function duplicateInvoice(invoiceId: string) {
   const user = await getCurrentUser();
-  const [original] = await db
-    .select()
-    .from(invoices)
-    .where(and(eq(invoices.id, invoiceId), eq(invoices.userId, user.id)))
-    .limit(1);
+  const original = await getOwnedInvoice(user.id, invoiceId);
 
   if (!original) {
     throw new Error("Invoice not found");
@@ -492,4 +511,117 @@ export async function duplicateInvoice(invoiceId: string) {
 
   revalidatePath("/invoices");
   return inserted.id;
+}
+
+export async function markInvoiceSent(invoiceId: string) {
+  const user = await getCurrentUser();
+  const invoice = await getOwnedInvoice(user.id, invoiceId);
+
+  if (!invoice) {
+    return { error: "Invoice not found" };
+  }
+
+  if (invoice.status !== "draft") {
+    return { error: "Only draft invoices can be marked as sent" };
+  }
+
+  const sentAt = new Date();
+  await db
+    .update(invoices)
+    .set({
+      sentAt,
+      status: "sent",
+      updatedAt: sentAt,
+    })
+    .where(and(eq(invoices.id, invoiceId), eq(invoices.userId, user.id)));
+
+  await db.insert(activityLog).values({
+    action: "sent",
+    invoiceId,
+    metadata: { manual: true },
+  });
+
+  revalidatePath("/invoices");
+  revalidatePath(`/invoices/${invoiceId}`);
+
+  return { success: true };
+}
+
+export async function markInvoicePaid(invoiceId: string) {
+  const user = await getCurrentUser();
+  const invoice = await getOwnedInvoice(user.id, invoiceId);
+
+  if (!invoice) {
+    return { error: "Invoice not found" };
+  }
+
+  if (invoice.status === "cancelled") {
+    return { error: "Cancelled invoices cannot be marked as paid" };
+  }
+
+  if (invoice.status === "paid") {
+    return { success: true };
+  }
+
+  const now = new Date();
+  const paidAt = now.toISOString().split("T")[0];
+  await db
+    .update(invoices)
+    .set({
+      paidAt,
+      sentAt: invoice.sentAt ?? now,
+      status: "paid",
+      updatedAt: now,
+    })
+    .where(and(eq(invoices.id, invoiceId), eq(invoices.userId, user.id)));
+
+  await db.insert(activityLog).values({
+    action: "paid",
+    invoiceId,
+    metadata: { manual: true },
+  });
+
+  revalidatePath("/invoices");
+  revalidatePath(`/invoices/${invoiceId}`);
+
+  return { success: true };
+}
+
+export async function cancelInvoice(invoiceId: string) {
+  const user = await getCurrentUser();
+  const invoice = await getOwnedInvoice(user.id, invoiceId);
+
+  if (!invoice) {
+    return { error: "Invoice not found" };
+  }
+
+  if (invoice.status === "paid") {
+    return { error: "Paid invoices cannot be cancelled" };
+  }
+
+  if (invoice.status === "cancelled") {
+    return { success: true };
+  }
+
+  if (invoice.stripePaymentLinkId) {
+    await deactivatePaymentLink(invoice.stripePaymentLinkId);
+  }
+
+  await db
+    .update(invoices)
+    .set({
+      status: "cancelled",
+      updatedAt: new Date(),
+    })
+    .where(and(eq(invoices.id, invoiceId), eq(invoices.userId, user.id)));
+
+  await db.insert(activityLog).values({
+    action: "cancelled",
+    invoiceId,
+  });
+
+  revalidatePath("/invoices");
+  revalidatePath(`/invoices/${invoiceId}`);
+
+  return { success: true };
 }

@@ -23,3 +23,7 @@ export async function createPaymentLink(invoice: {
 
   return paymentLink;
 }
+
+export async function deactivatePaymentLink(paymentLinkId: string) {
+  return stripe.paymentLinks.update(paymentLinkId, { active: false });
+}

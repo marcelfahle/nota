@@ -23,6 +23,10 @@ export default async function EditInvoicePage({ params }: { params: Promise<{ id
     notFound();
   }
 
+  if (invoice.status !== "draft") {
+    notFound();
+  }
+
   const clientList = await db
     .select({
       defaultCurrency: clients.defaultCurrency,

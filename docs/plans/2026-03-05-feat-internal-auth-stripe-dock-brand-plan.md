@@ -199,27 +199,27 @@ Follow-up operational additions:
 ## Acceptance Criteria
 
 ### Auth / Authorization
-- [ ] Every invoice, client, and bank account list is owner-scoped
-- [ ] Invoice detail/edit/PDF/XML routes return not found or equivalent when the record is not owned
-- [ ] Client update/delete and invoice update/delete/send/reminder actions fail closed on non-owned records
-- [ ] The codebase no longer assumes “first user in the DB” is enough for authorization
+- [x] Every invoice, client, and bank account list is owner-scoped
+- [x] Invoice detail/edit/PDF/XML routes return not found or equivalent when the record is not owned
+- [x] Client update/delete and invoice update/delete/send/reminder actions fail closed on non-owned records
+- [x] The codebase no longer assumes “first user in the DB” is enough for authorization
 
 ### Stripe Dev Dock
-- [ ] A bottom dock exists on dashboard pages
-- [ ] The dock is visually distinct and dark-themed
-- [ ] The dock can be toggled open/closed
-- [ ] The dock shows recent Stripe-related invoice data from the app
-- [ ] The dock provides copy/open affordances for relevant Stripe values
+- [x] A bottom dock exists on dashboard pages
+- [x] The dock is visually distinct and dark-themed
+- [x] The dock can be toggled open/closed
+- [x] The dock shows recent Stripe-related invoice data from the app
+- [x] The dock provides copy/open affordances for relevant Stripe values
 
 ### Branding
-- [ ] Settings include a `Logo URL` input
-- [ ] Header shows the configured logo when present
-- [ ] Text fallback remains usable when no logo is set
+- [x] Settings include a `Logo URL` input
+- [x] Header shows the configured logo when present
+- [x] Text fallback remains usable when no logo is set
 
 ### Deployability
 - [ ] The repo has an app-specific plan and README trail
 - [ ] Env requirements are explicit and validated
-- [ ] The app still builds successfully after the changes
+- [x] The app still builds successfully after the changes
 
 ## Implementation Phases
 
@@ -257,4 +257,8 @@ Follow-up operational additions:
 
 ## Immediate Next Step
 
-Implement **Phase 1** first, then ship the initial **Stripe Dev Dock** and **Logo URL** support in the same branch.
+Implement **Phase 4** next:
+- add explicit env validation
+- add `.env.example`
+- replace the starter README with app-specific setup and deploy documentation
+- move `middleware.ts` to `proxy.ts`

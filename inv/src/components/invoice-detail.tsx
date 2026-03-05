@@ -1,11 +1,30 @@
 "use client";
 
-import { ArrowLeft, Copy, Download, FileCode, Mail, Pencil, Trash2 } from "lucide-react";
+import {
+  ArrowLeft,
+  Ban,
+  CheckCircle2,
+  Copy,
+  Download,
+  FileCode,
+  Mail,
+  Pencil,
+  Send,
+  Trash2,
+} from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
-import { deleteInvoice, duplicateInvoice, sendInvoice, sendReminder } from "@/actions/invoices";
+import {
+  cancelInvoice,
+  deleteInvoice,
+  duplicateInvoice,
+  markInvoicePaid,
+  markInvoiceSent,
+  sendInvoice,
+  sendReminder,
+} from "@/actions/invoices";
 import { StatusBadge } from "@/components/status-badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -65,6 +84,7 @@ function formatDate(dateStr: string): string {
 }
 
 const ACTION_LABELS: Record<string, string> = {
+  cancelled: "Invoice cancelled",
   created: "Invoice created",
   marked_overdue: "Marked overdue",
   paid: "Payment received",
@@ -73,38 +93,108 @@ const ACTION_LABELS: Record<string, string> = {
 };
 
 export function InvoiceDetailView({ activities, invoice }: InvoiceDetailProps) {
-  const [deleteOpen, setDeleteOpen] = useState(false);
-  const [deleting, setDeleting] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [confirmAction, setConfirmAction] = useState<"cancel" | "delete" | null>(null);
   const [duplicating, setDuplicating] = useState(false);
-  const [sending, setSending] = useState(false);
-  const [reminding, setReminding] = useState(false);
+  const [pendingAction, setPendingAction] = useState<string | null>(null);
   const router = useRouter();
 
   const currency = invoice.currency ?? "EUR";
   const status = invoice.status ?? "draft";
+  const isDraft = status === "draft";
+  const canSendReminder =
+    (status === "sent" || status === "overdue") && Boolean(invoice.stripePaymentLinkUrl);
+  const canCancel = status === "sent" || status === "overdue";
+  const canMarkPaid = status !== "paid" && status !== "cancelled";
 
-  async function handleDelete() {
-    setDeleting(true);
-    await deleteInvoice(invoice.id);
-    router.push("/invoices");
+  async function handleDeleteOrCancel() {
+    if (!confirmAction) {
+      return;
+    }
+
+    setPendingAction(confirmAction);
+    setActionError(null);
+
+    const result =
+      confirmAction === "delete"
+        ? await deleteInvoice(invoice.id)
+        : await cancelInvoice(invoice.id);
+
+    if (result?.error) {
+      setActionError(result.error);
+      setPendingAction(null);
+      return;
+    }
+
+    if (confirmAction === "delete") {
+      router.push("/invoices");
+      return;
+    }
+
+    setConfirmAction(null);
+    router.refresh();
+    setPendingAction(null);
   }
 
   async function handleSend() {
-    setSending(true);
-    await sendInvoice(invoice.id);
+    setPendingAction("send");
+    setActionError(null);
+    const result = await sendInvoice(invoice.id);
+    if (result?.error) {
+      setActionError(result.error);
+      setPendingAction(null);
+      return;
+    }
+
     router.refresh();
-    setSending(false);
+    setPendingAction(null);
   }
 
   async function handleReminder() {
-    setReminding(true);
-    await sendReminder(invoice.id);
+    setPendingAction("remind");
+    setActionError(null);
+    const result = await sendReminder(invoice.id);
+    if (result?.error) {
+      setActionError(result.error);
+      setPendingAction(null);
+      return;
+    }
+
     router.refresh();
-    setReminding(false);
+    setPendingAction(null);
+  }
+
+  async function handleMarkSent() {
+    setPendingAction("mark-sent");
+    setActionError(null);
+    const result = await markInvoiceSent(invoice.id);
+    if (result?.error) {
+      setActionError(result.error);
+      setPendingAction(null);
+      return;
+    }
+
+    router.refresh();
+    setPendingAction(null);
+  }
+
+  async function handleMarkPaid() {
+    setPendingAction("mark-paid");
+    setActionError(null);
+    const result = await markInvoicePaid(invoice.id);
+    if (result?.error) {
+      setActionError(result.error);
+      setPendingAction(null);
+      return;
+    }
+
+    router.refresh();
+    setPendingAction(null);
   }
 
   async function handleDuplicate() {
     setDuplicating(true);
+    setActionError(null);
     const newId = await duplicateInvoice(invoice.id);
     router.push(`/invoices/${newId}`);
   }
@@ -135,34 +225,71 @@ export function InvoiceDetailView({ activities, invoice }: InvoiceDetailProps) {
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          {status === "draft" && (
+          {isDraft && (
             <>
-              <Button disabled={sending} onClick={handleSend} size="sm" variant="outline">
+              <Button
+                disabled={pendingAction !== null}
+                onClick={handleSend}
+                size="sm"
+                variant="outline"
+              >
                 <Mail className="size-4" />
-                {sending ? "Sending..." : "Send Invoice"}
+                {pendingAction === "send" ? "Sending..." : "Send Invoice"}
+              </Button>
+              <Button
+                disabled={pendingAction !== null}
+                onClick={handleMarkSent}
+                size="sm"
+                variant="outline"
+              >
+                <Send className="size-4" />
+                {pendingAction === "mark-sent" ? "Marking..." : "Mark Sent"}
+              </Button>
+              <Button
+                disabled={pendingAction !== null}
+                onClick={handleMarkPaid}
+                size="sm"
+                variant="outline"
+              >
+                <CheckCircle2 className="size-4" />
+                {pendingAction === "mark-paid" ? "Marking..." : "Mark Paid"}
               </Button>
               <Link href={`/invoices/${invoice.id}/edit`}>
-                <Button size="sm" variant="outline">
+                <Button disabled={pendingAction !== null} size="sm" variant="outline">
                   <Pencil className="size-4" />
                   Edit
                 </Button>
               </Link>
             </>
           )}
-          {status === "sent" && (
-            <Button disabled={reminding} onClick={handleReminder} size="sm" variant="outline">
+          {canSendReminder && (
+            <Button
+              disabled={pendingAction !== null}
+              onClick={handleReminder}
+              size="sm"
+              variant="outline"
+            >
               <Mail className="size-4" />
-              {reminding ? "Sending..." : "Send Reminder"}
+              {pendingAction === "remind"
+                ? "Sending..."
+                : status === "overdue"
+                  ? "Send Overdue Notice"
+                  : "Send Reminder"}
             </Button>
           )}
-          {status === "overdue" && (
-            <Button disabled={reminding} onClick={handleReminder} size="sm" variant="outline">
-              <Mail className="size-4" />
-              {reminding ? "Sending..." : "Send Overdue Notice"}
+          {canMarkPaid && (
+            <Button
+              disabled={pendingAction !== null}
+              onClick={handleMarkPaid}
+              size="sm"
+              variant="outline"
+            >
+              <CheckCircle2 className="size-4" />
+              {pendingAction === "mark-paid" ? "Marking..." : "Mark Paid"}
             </Button>
           )}
           <a href={`/api/invoices/${invoice.id}/pdf`} rel="noopener noreferrer" target="_blank">
-            <Button size="sm" variant="outline">
+            <Button disabled={pendingAction !== null} size="sm" variant="outline">
               <Download className="size-4" />
               Download PDF
             </Button>
@@ -172,29 +299,55 @@ export function InvoiceDetailView({ activities, invoice }: InvoiceDetailProps) {
             rel="noopener noreferrer"
             target="_blank"
           >
-            <Button size="sm" variant="outline">
+            <Button disabled={pendingAction !== null} size="sm" variant="outline">
               <FileCode className="size-4" />
               XRechnung XML
             </Button>
           </a>
-          <Button disabled={duplicating} onClick={handleDuplicate} size="sm" variant="outline">
-            <Copy className="size-4" />
-            {duplicating ? "Duplicating..." : "Duplicate"}
-          </Button>
           <Button
-            className="text-red-600 hover:bg-red-50 hover:text-red-700"
-            onClick={() => setDeleteOpen(true)}
+            disabled={duplicating || pendingAction !== null}
+            onClick={handleDuplicate}
             size="sm"
             variant="outline"
           >
-            <Trash2 className="size-4" />
-            Delete
+            <Copy className="size-4" />
+            {duplicating ? "Duplicating..." : "Duplicate"}
           </Button>
+          {canCancel && (
+            <Button
+              className="text-red-600 hover:bg-red-50 hover:text-red-700"
+              disabled={pendingAction !== null}
+              onClick={() => setConfirmAction("cancel")}
+              size="sm"
+              variant="outline"
+            >
+              <Ban className="size-4" />
+              Cancel Invoice
+            </Button>
+          )}
+          {isDraft && (
+            <Button
+              className="text-red-600 hover:bg-red-50 hover:text-red-700"
+              disabled={pendingAction !== null}
+              onClick={() => setConfirmAction("delete")}
+              size="sm"
+              variant="outline"
+            >
+              <Trash2 className="size-4" />
+              Delete Draft
+            </Button>
+          )}
         </div>
+
+        {actionError && (
+          <div className="mt-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+            {actionError}
+          </div>
+        )}
       </div>
 
       {/* Stripe Payment Link Indicator */}
-      {status === "sent" && invoice.stripePaymentLinkUrl && (
+      {(status === "sent" || status === "overdue") && invoice.stripePaymentLinkUrl && (
         <div className="mb-6 flex items-center gap-2 rounded-lg border border-blue-100 bg-blue-50 px-4 py-3 text-sm text-blue-700">
           <Copy className="size-4" />
           <span>Stripe payment link active</span>
@@ -317,21 +470,41 @@ export function InvoiceDetailView({ activities, invoice }: InvoiceDetailProps) {
       )}
 
       {/* Delete Confirmation Dialog */}
-      <Dialog onOpenChange={setDeleteOpen} open={deleteOpen}>
+      <Dialog
+        onOpenChange={(open) => !open && setConfirmAction(null)}
+        open={confirmAction !== null}
+      >
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Delete invoice</DialogTitle>
+            <DialogTitle>
+              {confirmAction === "delete" ? "Delete draft" : "Cancel invoice"}
+            </DialogTitle>
             <DialogDescription>
-              Are you sure you want to delete invoice {invoice.number}? This action cannot be
-              undone.
+              {confirmAction === "delete"
+                ? `Are you sure you want to delete invoice ${invoice.number}? This action cannot be undone.`
+                : `Are you sure you want to cancel invoice ${invoice.number}? The invoice will remain visible, but it can no longer be sent or marked overdue.`}
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
-            <Button disabled={deleting} onClick={() => setDeleteOpen(false)} variant="outline">
+            <Button
+              disabled={pendingAction === "delete" || pendingAction === "cancel"}
+              onClick={() => setConfirmAction(null)}
+              variant="outline"
+            >
               Cancel
             </Button>
-            <Button disabled={deleting} onClick={handleDelete} variant="destructive">
-              {deleting ? "Deleting..." : "Delete"}
+            <Button
+              disabled={pendingAction === "delete" || pendingAction === "cancel"}
+              onClick={handleDeleteOrCancel}
+              variant="destructive"
+            >
+              {pendingAction === "delete"
+                ? "Deleting..."
+                : pendingAction === "cancel"
+                  ? "Cancelling..."
+                  : confirmAction === "delete"
+                    ? "Delete Draft"
+                    : "Cancel Invoice"}
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -10,7 +10,7 @@ import { db } from "@/lib/db";
 import { clients, invoices } from "@/lib/db/schema";
 import { formatCurrency } from "@/lib/utils";
 
-const FILTER_STATUSES = ["all", "draft", "sent", "paid", "overdue"] as const;
+const FILTER_STATUSES = ["all", "draft", "sent", "paid", "overdue", "cancelled"] as const;
 
 export default async function InvoicesPage({
   searchParams,
