@@ -20,9 +20,12 @@
     "dev:turbo": "next dev --turbopack"
   },
   "dependencies": {
+    "@ai-sdk/anthropic": "^3.0.58",
+    "@ai-sdk/react": "^3.0.118",
     "@neondatabase/serverless": "^1.0.2",
     "@react-email/components": "^1.0.8",
     "@react-pdf/renderer": "^4.3.2",
+    "ai": "^6.0.116",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "drizzle-orm": "^0.45.1",
