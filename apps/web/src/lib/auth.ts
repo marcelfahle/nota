@@ -1,15 +1,37 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 
-import { eq } from "drizzle-orm";
+import { asc, eq } from "drizzle-orm";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 
 import { db } from "@/lib/db";
-import { users } from "@/lib/db/schema";
+import { orgMembers, orgRoleEnum, orgs, users } from "@/lib/db/schema";
 import { getAuthEnv } from "@/lib/env";
+
+type UserRecord = typeof users.$inferSelect;
+type OrgRecord = typeof orgs.$inferSelect;
+export type AuthenticatedRole = (typeof orgRoleEnum.enumValues)[number];
+export type AuthenticatedUserContext = UserRecord & {
+  org: OrgRecord;
+  role: AuthenticatedRole;
+  user: UserRecord;
+};
 
 function signUserId(userId: string): string {
   return createHmac("sha256", getAuthEnv().SESSION_SECRET).update(userId).digest("hex");
+}
+
+function buildAuthContext(
+  user: UserRecord,
+  org: OrgRecord,
+  role: AuthenticatedRole,
+): AuthenticatedUserContext {
+  return {
+    ...user,
+    org,
+    role,
+    user,
+  };
 }
 
 export function createSessionValue(userId: string): string {
@@ -57,7 +79,7 @@ export async function clearSessionCookie() {
   cookieStore.delete("session");
 }
 
-export async function getCurrentUserOrNull() {
+export async function getCurrentUserOrNull(): Promise<AuthenticatedUserContext | null> {
   const cookieStore = await cookies();
   const sessionUserId = getSessionUserId(cookieStore.get("session")?.value);
 
@@ -65,15 +87,36 @@ export async function getCurrentUserOrNull() {
     return null;
   }
 
-  const [user] = await db.select().from(users).where(eq(users.id, sessionUserId)).limit(1);
-  return user ?? null;
+  const [context] = await db
+    .select({
+      org: orgs,
+      role: orgMembers.role,
+      user: users,
+    })
+    .from(users)
+    .innerJoin(orgMembers, eq(orgMembers.userId, users.id))
+    .innerJoin(orgs, eq(orgs.id, orgMembers.orgId))
+    .where(eq(users.id, sessionUserId))
+    .orderBy(asc(orgMembers.createdAt))
+    .limit(1);
+
+  if (!context) {
+    return null;
+  }
+
+  return buildAuthContext(context.user, context.org, context.role);
 }
 
-export async function getCurrentUser() {
+export async function getCurrentUser(): Promise<AuthenticatedUserContext> {
   const user = await getCurrentUserOrNull();
   if (!user) {
     redirect("/login");
   }
 
   return user;
+}
+
+export async function getCurrentOrg(): Promise<OrgRecord> {
+  const user = await getCurrentUser();
+  return user.org;
 }
