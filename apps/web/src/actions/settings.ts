@@ -7,6 +7,7 @@ import { z } from "zod";
 import { getCurrentUser } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { orgs } from "@/lib/db/schema";
+import { canManageSettings, getInsufficientPermissionsError } from "@/lib/roles";
 
 const settingsSchema = z.object({
   businessAddress: z.string().optional(),
@@ -48,7 +49,11 @@ export async function updateSettings(
     return { error: result.error.issues[0].message };
   }
 
-  const { org } = await getCurrentUser();
+  const { org, role } = await getCurrentUser();
+
+  if (!canManageSettings(role)) {
+    return { error: getInsufficientPermissionsError() };
+  }
 
   await db.update(orgs).set(result.data).where(eq(orgs.id, org.id));
 

@@ -7,6 +7,7 @@ import { z } from "zod";
 import { getCurrentUser } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { bankAccounts } from "@/lib/db/schema";
+import { canManageBankAccounts, getInsufficientPermissionsError } from "@/lib/roles";
 
 const bankAccountSchema = z.object({
   details: z.string().min(1, "Bank details are required"),
@@ -31,7 +32,11 @@ export async function createBankAccount(
     return { error: result.error.issues[0].message };
   }
 
-  const { org, user } = await getCurrentUser();
+  const { org, role, user } = await getCurrentUser();
+
+  if (!canManageBankAccounts(role)) {
+    return { error: getInsufficientPermissionsError() };
+  }
 
   await db.transaction(async (tx) => {
     // If this is the first account or marked as default, ensure only one default
@@ -69,7 +74,11 @@ export async function updateBankAccount(
     return { error: result.error.issues[0].message };
   }
 
-  const { org } = await getCurrentUser();
+  const { org, role } = await getCurrentUser();
+
+  if (!canManageBankAccounts(role)) {
+    return { error: getInsufficientPermissionsError() };
+  }
 
   await db.transaction(async (tx) => {
     if (result.data.isDefault) {
@@ -92,7 +101,11 @@ export async function updateBankAccount(
 }
 
 export async function deleteBankAccount(accountId: string) {
-  const { org } = await getCurrentUser();
+  const { org, role } = await getCurrentUser();
+
+  if (!canManageBankAccounts(role)) {
+    return { error: getInsufficientPermissionsError() };
+  }
 
   // Prevent deleting the default account
   const [account] = await db

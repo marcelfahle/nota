@@ -16,17 +16,27 @@ import {
   orgs,
 } from "@/lib/db/schema";
 import {
-  canCancelInvoice,
-  canDeleteInvoice,
-  canEditInvoice,
-  canMarkInvoicePaid,
-  canSendInvoice,
-  canSendInvoiceReminder,
+  canCancelInvoice as canCancelInvoiceStatus,
+  canDeleteInvoice as canDeleteInvoiceStatus,
+  canEditInvoice as canEditInvoiceStatus,
+  canMarkInvoicePaid as canMarkInvoicePaidStatus,
+  canSendInvoice as canSendInvoiceStatus,
+  canSendInvoiceReminder as canSendInvoiceReminderStatus,
   isInvoiceSendFinalized,
   normalizeInvoiceStatus,
 } from "@/lib/invoice-lifecycle";
 import { formatInvoiceNumber } from "@/lib/invoice-number";
 import { processPendingEmailJobs } from "@/lib/jobs";
+import {
+  canCancelInvoice as canCancelInvoiceRole,
+  canCreateInvoice,
+  canDeleteInvoice as canDeleteInvoiceRole,
+  canEditDraft,
+  canMarkInvoicePaid as canMarkInvoicePaidRole,
+  canSendInvoice as canSendInvoiceRole,
+  canSendInvoiceReminder as canSendInvoiceReminderRole,
+  getInsufficientPermissionsError,
+} from "@/lib/roles";
 import { createPaymentLink, deactivatePaymentLink } from "@/lib/stripe";
 
 const lineItemSchema = z.object({
@@ -112,7 +122,11 @@ export async function createInvoice(
     return { error: result.error.issues[0].message };
   }
 
-  const { org, user } = await getCurrentUser();
+  const { org, role, user } = await getCurrentUser();
+
+  if (!canCreateInvoice(role)) {
+    return { error: getInsufficientPermissionsError() };
+  }
   const { lineItems: items, taxRate, ...invoiceData } = result.data;
   const totals = calculateTotals(items, taxRate);
   const client = await getOwnedClient(org.id, invoiceData.clientId);
@@ -194,14 +208,19 @@ export async function updateInvoice(
     return { error: result.error.issues[0].message };
   }
 
-  const { org } = await getCurrentUser();
+  const { org, role } = await getCurrentUser();
+
+  if (!canEditDraft(role)) {
+    return { error: getInsufficientPermissionsError() };
+  }
+
   const invoice = await getOwnedInvoice(org.id, invoiceId);
 
   if (!invoice) {
     return { error: "Invoice not found" };
   }
 
-  if (!canEditInvoice(invoice.status)) {
+  if (!canEditInvoiceStatus(invoice.status)) {
     return { error: "Only draft invoices can be edited" };
   }
 
@@ -243,14 +262,19 @@ export async function updateInvoice(
 }
 
 export async function deleteInvoice(invoiceId: string) {
-  const { org } = await getCurrentUser();
+  const { org, role } = await getCurrentUser();
+
+  if (!canDeleteInvoiceRole(role)) {
+    return { error: getInsufficientPermissionsError() };
+  }
+
   const invoice = await getOwnedInvoice(org.id, invoiceId);
 
   if (!invoice) {
     return { error: "Invoice not found" };
   }
 
-  if (!canDeleteInvoice(invoice.status)) {
+  if (!canDeleteInvoiceStatus(invoice.status)) {
     return { error: "Only draft invoices can be deleted" };
   }
 
@@ -261,7 +285,11 @@ export async function deleteInvoice(invoiceId: string) {
 }
 
 export async function sendInvoice(invoiceId: string) {
-  const { org } = await getCurrentUser();
+  const { org, role } = await getCurrentUser();
+
+  if (!canSendInvoiceRole(role)) {
+    return { error: getInsufficientPermissionsError() };
+  }
 
   const existingInvoice = await getOwnedInvoice(org.id, invoiceId);
   if (!existingInvoice) {
@@ -278,7 +306,7 @@ export async function sendInvoice(invoiceId: string) {
     return { success: true };
   }
 
-  if (!canSendInvoice(existingInvoice.status)) {
+  if (!canSendInvoiceStatus(existingInvoice.status)) {
     return { error: "Only draft invoices can be sent" };
   }
 
@@ -410,13 +438,18 @@ export async function sendInvoice(invoiceId: string) {
 }
 
 export async function sendReminder(invoiceId: string) {
-  const { org } = await getCurrentUser();
+  const { org, role } = await getCurrentUser();
+
+  if (!canSendInvoiceReminderRole(role)) {
+    return { error: getInsufficientPermissionsError() };
+  }
+
   const invoice = await getOwnedInvoice(org.id, invoiceId);
   if (!invoice) {
     return { error: "Invoice not found" };
   }
 
-  if (!canSendInvoiceReminder(invoice.status, Boolean(invoice.stripePaymentLinkUrl))) {
+  if (!canSendInvoiceReminderStatus(invoice.status, Boolean(invoice.stripePaymentLinkUrl))) {
     return { error: "Only sent or overdue invoices can receive reminders" };
   }
 
@@ -434,7 +467,12 @@ export async function sendReminder(invoiceId: string) {
 }
 
 export async function duplicateInvoice(invoiceId: string) {
-  const { org, user } = await getCurrentUser();
+  const { org, role, user } = await getCurrentUser();
+
+  if (!canCreateInvoice(role)) {
+    return getInsufficientPermissionsError();
+  }
+
   const original = await getOwnedInvoice(org.id, invoiceId);
 
   if (!original) {
@@ -522,14 +560,19 @@ export async function duplicateInvoice(invoiceId: string) {
 }
 
 export async function markInvoiceSent(invoiceId: string) {
-  const { org } = await getCurrentUser();
+  const { org, role } = await getCurrentUser();
+
+  if (!canSendInvoiceRole(role)) {
+    return { error: getInsufficientPermissionsError() };
+  }
+
   const invoice = await getOwnedInvoice(org.id, invoiceId);
 
   if (!invoice) {
     return { error: "Invoice not found" };
   }
 
-  if (!canSendInvoice(invoice.status)) {
+  if (!canSendInvoiceStatus(invoice.status)) {
     return { error: "Only draft invoices can be marked as sent" };
   }
 
@@ -556,7 +599,12 @@ export async function markInvoiceSent(invoiceId: string) {
 }
 
 export async function markInvoicePaid(invoiceId: string) {
-  const { org } = await getCurrentUser();
+  const { org, role } = await getCurrentUser();
+
+  if (!canMarkInvoicePaidRole(role)) {
+    return { error: getInsufficientPermissionsError() };
+  }
+
   const invoice = await getOwnedInvoice(org.id, invoiceId);
 
   if (!invoice) {
@@ -569,7 +617,7 @@ export async function markInvoicePaid(invoiceId: string) {
     return { error: "Cancelled invoices cannot be marked as paid" };
   }
 
-  if (!canMarkInvoicePaid(normalizedStatus)) {
+  if (!canMarkInvoicePaidStatus(normalizedStatus)) {
     return { success: true };
   }
 
@@ -617,7 +665,12 @@ export async function markInvoicePaid(invoiceId: string) {
 }
 
 export async function cancelInvoice(invoiceId: string) {
-  const { org } = await getCurrentUser();
+  const { org, role } = await getCurrentUser();
+
+  if (!canCancelInvoiceRole(role)) {
+    return { error: getInsufficientPermissionsError() };
+  }
+
   const invoice = await getOwnedInvoice(org.id, invoiceId);
 
   if (!invoice) {
@@ -634,7 +687,7 @@ export async function cancelInvoice(invoiceId: string) {
     return { success: true };
   }
 
-  if (!canCancelInvoice(normalizedStatus)) {
+  if (!canCancelInvoiceStatus(normalizedStatus)) {
     return { error: "Only sent or overdue invoices can be cancelled" };
   }
 
