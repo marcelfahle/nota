@@ -381,4 +381,54 @@ describe("nota MCP server", () => {
 
     await client.close();
   });
+
+  test("tool errors surface API auth failures and missing records", async () => {
+    const client = new Client({ name: "nota-test-errors", version: "0.1.0" });
+    const transport = new StdioClientTransport({
+      command: "node",
+      args: ["dist/index.js"],
+      cwd: process.cwd(),
+      env: {
+        ...process.env,
+        NOTA_API_KEY: "nota_bad_key",
+        NOTA_URL: baseUrl,
+      },
+      stderr: "pipe",
+    });
+
+    await client.connect(transport);
+
+    const unauthorizedResult = await client.callTool({
+      name: "list_clients",
+      arguments: {},
+    });
+    expect(unauthorizedResult.isError).toBe(true);
+    expect(JSON.stringify(unauthorizedResult.content)).toContain("Nota API error (401): Unauthorized");
+
+    await client.close();
+
+    const validClient = new Client({ name: "nota-test-missing", version: "0.1.0" });
+    const validTransport = new StdioClientTransport({
+      command: "node",
+      args: ["dist/index.js"],
+      cwd: process.cwd(),
+      env: {
+        ...process.env,
+        NOTA_API_KEY: apiKey,
+        NOTA_URL: baseUrl,
+      },
+      stderr: "pipe",
+    });
+
+    await validClient.connect(validTransport);
+
+    const missingInvoiceResult = await validClient.callTool({
+      name: "get_invoice",
+      arguments: { invoiceNumber: "INV-9999" },
+    });
+    expect(missingInvoiceResult.isError).toBe(true);
+    expect(JSON.stringify(missingInvoiceResult.content)).toContain("Invoice 'INV-9999' not found.");
+
+    await validClient.close();
+  });
 });

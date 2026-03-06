@@ -1,56 +1,6 @@
-import { expect, test, type Browser, type Page } from "@playwright/test";
+import { expect, test } from "@playwright/test";
 
-function uniqueSuffix() {
-  return `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-}
-
-async function registerAccount(page: Page, name = "Playwright Owner") {
-  const suffix = uniqueSuffix();
-  const email = `playwright-${suffix}@example.com`;
-  const password = `Playwright-${suffix}`;
-
-  await page.goto("/register");
-  await page.getByTestId("register-name").fill(name);
-  await page.getByTestId("register-email").fill(email);
-  await page.getByTestId("register-password").fill(password);
-  await page.getByTestId("register-submit").click();
-  await expect(page).toHaveURL(/\/invoices$/);
-
-  return { email, password };
-}
-
-async function createClient(page: Page, suffix: string) {
-  const clientName = `Browser Client ${suffix}`;
-
-  await page.goto("/clients/new");
-  await page.getByTestId("client-name").fill(clientName);
-  await page.getByTestId("client-email").fill(`client-${suffix}@example.com`);
-  await page.getByTestId("client-company").fill("Browser Testing GmbH");
-  await page.getByRole("button", { name: "Create Client" }).click();
-  await expect(page).toHaveURL(/\/clients$/);
-  await expect(page.getByText(clientName)).toBeVisible();
-
-  return clientName;
-}
-
-async function selectClient(page: Page, clientName: string) {
-  await page.getByTestId("invoice-client-select").click();
-  await page.getByRole("option", { name: clientName }).click();
-}
-
-async function acceptInvite(browser: Browser, inviteUrl: string, password: string) {
-  const context = await browser.newContext();
-  const page = await context.newPage();
-
-  await page.goto(inviteUrl);
-  await expect(page.getByTestId("register-invite-banner")).toBeVisible();
-  await page.getByTestId("register-name").fill("Playwright Teammate");
-  await page.getByTestId("register-password").fill(password);
-  await page.getByTestId("register-submit").click();
-  await expect(page).toHaveURL(/\/invoices$/);
-
-  await context.close();
-}
+import { acceptInvite, createClient, registerAccount, selectClient, uniqueSuffix } from "./helpers";
 
 test("registers, signs out, and signs back in", async ({ page }) => {
   const credentials = await registerAccount(page);
