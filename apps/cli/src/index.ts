@@ -4,6 +4,7 @@ import chalk from "chalk";
 import { Command } from "commander";
 
 import { registerConfigCommands } from "./commands/config.js";
+import { registerInvoiceCommands } from "./commands/invoices.js";
 import { registerWhoAmICommand } from "./commands/whoami.js";
 import { getCliErrorMessage } from "./helpers.js";
 
@@ -13,6 +14,7 @@ program.name("nota").description("CLI for Nota").showHelpAfterError().version("0
 
 registerConfigCommands(program);
 registerWhoAmICommand(program);
+registerInvoiceCommands(program);
 
 async function main() {
   try {
