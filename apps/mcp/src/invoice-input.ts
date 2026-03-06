@@ -1,11 +1,39 @@
-import type { InvoiceLineItemInput } from "./client";
+import type { InvoiceLineItemInput } from "./client.js";
 
 const structuredLineItemSchemaError =
   "Provide line items as an array or newline-separated text like 'Design work | 2 | 500' or '2 x Design work @ 500'.";
 
+function normalizeNumericToken(value: string) {
+  const stripped = value.replace(/[^0-9,.-]/g, "").trim();
+  if (!stripped) {
+    return null;
+  }
+
+  const lastComma = stripped.lastIndexOf(",");
+  const lastDot = stripped.lastIndexOf(".");
+
+  if (lastComma !== -1 && lastDot !== -1) {
+    const decimalSeparator = lastComma > lastDot ? "," : ".";
+    const thousandsSeparator = decimalSeparator === "," ? "." : ",";
+    const normalized = stripped.split(thousandsSeparator).join("").replace(decimalSeparator, ".");
+    return Number.parseFloat(normalized);
+  }
+
+  const separator = lastComma !== -1 ? "," : lastDot !== -1 ? "." : null;
+  if (!separator) {
+    return Number.parseFloat(stripped);
+  }
+
+  const [integerPart, fractionalPart = ""] = stripped.split(separator);
+  if (fractionalPart.length === 3 && integerPart.replace(/^-/, "").length >= 1) {
+    return Number.parseFloat(`${integerPart}${fractionalPart}`);
+  }
+
+  return Number.parseFloat(`${integerPart}.${fractionalPart}`);
+}
+
 function parseNumericToken(value: string) {
-  const normalized = value.replace(/,/g, ".").replace(/[^0-9.-]/g, "").trim();
-  const parsed = Number.parseFloat(normalized);
+  const parsed = normalizeNumericToken(value);
   return Number.isFinite(parsed) ? parsed : null;
 }
 

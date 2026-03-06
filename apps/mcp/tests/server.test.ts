@@ -290,8 +290,8 @@ describe("nota MCP server", () => {
   test("handshake exposes tools, resources, and invoice actions", async () => {
     const client = new Client({ name: "nota-test", version: "0.1.0" });
     const transport = new StdioClientTransport({
-      command: "bun",
-      args: ["run", "src/index.ts"],
+      command: "node",
+      args: ["dist/index.js"],
       cwd: process.cwd(),
       env: {
         ...process.env,
@@ -327,6 +327,12 @@ describe("nota MCP server", () => {
     expect(templates.resourceTemplates.map((template) => template.uriTemplate)).toEqual(
       expect.arrayContaining(["nota://invoices/{invoiceId}", "nota://clients/{clientId}"]),
     );
+
+    const listInvoicesResult = await client.callTool({
+      name: "list_invoices",
+      arguments: { status: "draft" },
+    });
+    expect(listInvoicesResult.isError).toBeFalsy();
 
     const listClientsResult = await client.callTool({
       name: "list_clients",

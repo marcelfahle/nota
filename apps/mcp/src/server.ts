@@ -11,8 +11,8 @@ import {
   type InvoiceMutationResponse,
   type InvoiceStatus,
   type NotaClient,
-} from "./client";
-import { getDefaultInvoiceDates, resolveLineItems } from "./invoice-input";
+} from "./client.js";
+import { getDefaultInvoiceDates, resolveLineItems } from "./invoice-input.js";
 
 type ClientMatch = {
   company?: string | null;
@@ -111,7 +111,7 @@ function buildServer(client: NotaClient) {
     },
     async ({ clientId, clientName, page, perPage, search, status }) => {
       return handleTool(async () => {
-        const resolvedClientId = clientId ?? (await resolveClientId(client, clientName));
+        const resolvedClientId = clientId ?? (clientName ? await resolveClientId(client, clientName) : undefined);
         const result = await client.listInvoices({
           clientId: resolvedClientId,
           page,
