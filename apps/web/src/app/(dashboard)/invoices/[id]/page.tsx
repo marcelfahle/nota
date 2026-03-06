@@ -8,7 +8,7 @@ import { activityLog, clients, invoices, lineItems } from "@/lib/db/schema";
 
 export default async function InvoiceDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const { org } = await getCurrentUser();
+  const { org, role } = await getCurrentUser();
 
   const [invoice] = await db
     .select()
@@ -51,6 +51,7 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
         lineItems: items,
         status: invoice.status ?? "draft",
       }}
+      role={role}
     />
   );
 }

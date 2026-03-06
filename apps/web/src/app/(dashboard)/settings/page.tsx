@@ -6,9 +6,10 @@ import { Button } from "@/components/ui/button";
 import { getCurrentUser } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { bankAccounts, invoices } from "@/lib/db/schema";
+import { canManageBankAccounts, canManageSettings } from "@/lib/roles";
 
 export default async function SettingsPage() {
-  const { org } = await getCurrentUser();
+  const { org, role } = await getCurrentUser();
 
   const [lastInvoice] = await db
     .select({ number: invoices.number })
@@ -48,6 +49,8 @@ export default async function SettingsPage() {
       <div className="max-w-2xl">
         <SettingsForm
           bankAccounts={organizationBankAccounts}
+          canManageBankAccounts={canManageBankAccounts(role)}
+          canManageSettings={canManageSettings(role)}
           lastIssuedNumber={lastInvoice?.number ?? null}
           settings={settings}
         />

@@ -50,10 +50,14 @@ type SettingsData = {
 
 export function SettingsForm({
   bankAccounts,
+  canManageBankAccounts,
+  canManageSettings,
   lastIssuedNumber,
   settings,
 }: {
   bankAccounts: Array<BankAccount>;
+  canManageBankAccounts: boolean;
+  canManageSettings: boolean;
   lastIssuedNumber: string | null;
   settings: SettingsData;
 }) {
@@ -65,6 +69,7 @@ export function SettingsForm({
   const [nextNumber, setNextNumber] = useState(String(settings.nextInvoiceNumber ?? 1));
 
   const effectiveSeparator = separator === "none" ? "" : separator;
+  const readOnlySettings = !canManageSettings;
 
   const preview = useMemo(() => {
     const num = Number.parseInt(nextNumber, 10) || 1;
@@ -82,155 +87,184 @@ export function SettingsForm({
   return (
     <div className="space-y-10">
       <form action={formAction} className="space-y-6">
-        <div className="grid gap-4 sm:grid-cols-2">
-          <div className="space-y-2">
-            <Label htmlFor="businessName">Business Name</Label>
-            <Input
-              defaultValue={settings.businessName ?? ""}
-              id="businessName"
-              name="businessName"
-              placeholder="Your Business Name"
-            />
+        {readOnlySettings && (
+          <div className="rounded-lg border border-zinc-200 bg-zinc-50 px-4 py-3 text-sm text-zinc-600">
+            Only organization owners can update these settings.
           </div>
-          <div className="space-y-2">
-            <Label htmlFor="vatNumber">VAT Number</Label>
-            <Input
-              defaultValue={settings.vatNumber ?? ""}
-              id="vatNumber"
-              name="vatNumber"
-              placeholder="e.g. DE123456789"
-            />
-          </div>
-        </div>
-
-        <div className="space-y-2">
-          <Label htmlFor="logoUrl">Logo URL</Label>
-          <Input
-            defaultValue={settings.logoUrl ?? ""}
-            id="logoUrl"
-            name="logoUrl"
-            placeholder="https://example.com/logo.png"
-            type="url"
-          />
-          <p className="text-xs text-zinc-500">
-            Used in the app header. Leave blank to keep the text mark.
-          </p>
-        </div>
-
-        <div className="space-y-2">
-          <Label htmlFor="businessAddress">Business Address</Label>
-          <textarea
-            className="w-full min-w-0 rounded-md border border-input bg-transparent px-3 py-2 text-base shadow-xs transition-[color,box-shadow] outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50 md:text-sm"
-            defaultValue={settings.businessAddress ?? ""}
-            id="businessAddress"
-            name="businessAddress"
-            placeholder={"123 Business Street\nCity, Country"}
-            rows={3}
-          />
-        </div>
-
-        <div className="space-y-2">
-          <Label>Default Currency</Label>
-          <Select defaultValue={settings.defaultCurrency ?? "EUR"} name="defaultCurrency">
-            <SelectTrigger className="w-full sm:w-48">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="EUR">EUR</SelectItem>
-              <SelectItem value="USD">USD</SelectItem>
-              <SelectItem value="GBP">GBP</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-
-        {/* Invoice Numbering Section */}
-        <div className="space-y-4">
-          <h2 className="text-sm font-semibold">Invoice Numbering</h2>
-          <div className="grid gap-4 sm:grid-cols-3">
+        )}
+        <fieldset className="space-y-6" disabled={readOnlySettings}>
+          <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-2">
-              <Label htmlFor="invoicePrefix">Prefix</Label>
+              <Label htmlFor="businessName">Business Name</Label>
               <Input
-                id="invoicePrefix"
-                name="invoicePrefix"
-                onChange={(e) => setPrefix(e.target.value)}
-                placeholder="e.g. INV"
-                value={prefix}
+                defaultValue={settings.businessName ?? ""}
+                id="businessName"
+                name="businessName"
+                placeholder="Your Business Name"
               />
             </div>
-            <input name="invoiceSeparator" type="hidden" value={effectiveSeparator} />
-            <div className={prefix ? "space-y-2" : "hidden"}>
-              <Label>Separator</Label>
-              <Select onValueChange={setSeparator} value={separator}>
-                <SelectTrigger className="w-full">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="-">Dash (-)</SelectItem>
-                  <SelectItem value="/">Slash (/)</SelectItem>
-                  <SelectItem value=".">Dot (.)</SelectItem>
-                  <SelectItem value="none">None</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
             <div className="space-y-2">
-              <Label>Digits</Label>
-              <Select name="invoiceDigits" onValueChange={setDigits} value={digits}>
-                <SelectTrigger className="w-full">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {[3, 4, 5, 6, 7, 8, 9, 10].map((n) => (
-                    <SelectItem key={n} value={String(n)}>
-                      {n} digits
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <Label htmlFor="vatNumber">VAT Number</Label>
+              <Input
+                defaultValue={settings.vatNumber ?? ""}
+                id="vatNumber"
+                name="vatNumber"
+                placeholder="e.g. DE123456789"
+              />
             </div>
           </div>
+
           <div className="space-y-2">
-            <Label htmlFor="nextInvoiceNumber">Next Number</Label>
+            <Label htmlFor="logoUrl">Logo URL</Label>
             <Input
-              className="w-full sm:w-48"
-              id="nextInvoiceNumber"
-              min="1"
-              name="nextInvoiceNumber"
-              onChange={(e) => setNextNumber(e.target.value)}
-              type="number"
-              value={nextNumber}
+              defaultValue={settings.logoUrl ?? ""}
+              id="logoUrl"
+              name="logoUrl"
+              placeholder="https://example.com/logo.png"
+              type="url"
+            />
+            <p className="text-xs text-zinc-500">
+              Used in the app header. Leave blank to keep the text mark.
+            </p>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="businessAddress">Business Address</Label>
+            <textarea
+              className="w-full min-w-0 rounded-md border border-input bg-transparent px-3 py-2 text-base shadow-xs transition-[color,box-shadow] outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50 md:text-sm"
+              defaultValue={settings.businessAddress ?? ""}
+              id="businessAddress"
+              name="businessAddress"
+              placeholder={"123 Business Street\nCity, Country"}
+              rows={3}
             />
           </div>
-          <div className="rounded-lg border border-zinc-200 bg-zinc-50 p-4">
-            <p className="mb-1 text-xs font-medium text-zinc-500">Preview</p>
-            <p className="font-mono text-sm">
-              Your next invoice: <span className="font-semibold">{preview[0]}</span>
-            </p>
-            <p className="font-mono text-xs text-zinc-500">
-              Then: {preview[1]}, {preview[2]}
-            </p>
-            {lastIssuedNumber && (
-              <p className="mt-2 text-xs text-zinc-400">Last issued: {lastIssuedNumber}</p>
-            )}
-          </div>
-        </div>
 
-        {state?.error && <p className="text-sm text-red-500">{state.error}</p>}
+          <div className="space-y-2">
+            <Label>Default Currency</Label>
+            <Select
+              defaultValue={settings.defaultCurrency ?? "EUR"}
+              disabled={readOnlySettings}
+              name="defaultCurrency"
+            >
+              <SelectTrigger className="w-full sm:w-48">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="EUR">EUR</SelectItem>
+                <SelectItem value="USD">USD</SelectItem>
+                <SelectItem value="GBP">GBP</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* Invoice Numbering Section */}
+          <div className="space-y-4">
+            <h2 className="text-sm font-semibold">Invoice Numbering</h2>
+            <div className="grid gap-4 sm:grid-cols-3">
+              <div className="space-y-2">
+                <Label htmlFor="invoicePrefix">Prefix</Label>
+                <Input
+                  id="invoicePrefix"
+                  name="invoicePrefix"
+                  onChange={(e) => setPrefix(e.target.value)}
+                  placeholder="e.g. INV"
+                  value={prefix}
+                />
+              </div>
+              <input name="invoiceSeparator" type="hidden" value={effectiveSeparator} />
+              <div className={prefix ? "space-y-2" : "hidden"}>
+                <Label>Separator</Label>
+                <Select disabled={readOnlySettings} onValueChange={setSeparator} value={separator}>
+                  <SelectTrigger className="w-full">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="-">Dash (-)</SelectItem>
+                    <SelectItem value="/">Slash (/)</SelectItem>
+                    <SelectItem value=".">Dot (.)</SelectItem>
+                    <SelectItem value="none">None</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>Digits</Label>
+                <Select
+                  disabled={readOnlySettings}
+                  name="invoiceDigits"
+                  onValueChange={setDigits}
+                  value={digits}
+                >
+                  <SelectTrigger className="w-full">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {[3, 4, 5, 6, 7, 8, 9, 10].map((n) => (
+                      <SelectItem key={n} value={String(n)}>
+                        {n} digits
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="nextInvoiceNumber">Next Number</Label>
+              <Input
+                className="w-full sm:w-48"
+                id="nextInvoiceNumber"
+                min="1"
+                name="nextInvoiceNumber"
+                onChange={(e) => setNextNumber(e.target.value)}
+                type="number"
+                value={nextNumber}
+              />
+            </div>
+            <div className="rounded-lg border border-zinc-200 bg-zinc-50 p-4">
+              <p className="mb-1 text-xs font-medium text-zinc-500">Preview</p>
+              <p className="font-mono text-sm">
+                Your next invoice: <span className="font-semibold">{preview[0]}</span>
+              </p>
+              <p className="font-mono text-xs text-zinc-500">
+                Then: {preview[1]}, {preview[2]}
+              </p>
+              {lastIssuedNumber && (
+                <p className="mt-2 text-xs text-zinc-400">Last issued: {lastIssuedNumber}</p>
+              )}
+            </div>
+          </div>
+
+          {state?.error && <p className="text-sm text-red-500">{state.error}</p>}
+        </fieldset>
 
         <div className="flex items-center gap-3">
-          <Button disabled={pending} type="submit">
-            {pending ? "Saving..." : "Save Settings"}
-          </Button>
+          {canManageSettings ? (
+            <Button disabled={pending} type="submit">
+              {pending ? "Saving..." : "Save Settings"}
+            </Button>
+          ) : (
+            <span className="text-sm text-zinc-500">Read-only for your role</span>
+          )}
           {state?.success && <span className="text-sm text-emerald-600">Settings saved</span>}
         </div>
       </form>
 
       {/* Bank Accounts Section */}
-      <BankAccountsSection bankAccounts={bankAccounts} />
+      <BankAccountsSection
+        bankAccounts={bankAccounts}
+        canManageBankAccounts={canManageBankAccounts}
+      />
     </div>
   );
 }
 
-function BankAccountsSection({ bankAccounts }: { bankAccounts: Array<BankAccount> }) {
+function BankAccountsSection({
+  bankAccounts,
+  canManageBankAccounts,
+}: {
+  bankAccounts: Array<BankAccount>;
+  canManageBankAccounts: boolean;
+}) {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingAccount, setEditingAccount] = useState<BankAccount | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<BankAccount | null>(null);
@@ -262,7 +296,9 @@ function BankAccountsSection({ bankAccounts }: { bankAccounts: Array<BankAccount
 
       {bankAccounts.length === 0 ? (
         <p className="text-sm text-zinc-400">
-          No bank accounts yet. Add one to include payment details on invoices.
+          {canManageBankAccounts
+            ? "No bank accounts yet. Add one to include payment details on invoices."
+            : "No bank accounts configured yet."}
         </p>
       ) : (
         <div className="space-y-3">
@@ -285,40 +321,47 @@ function BankAccountsSection({ bankAccounts }: { bankAccounts: Array<BankAccount
                   {account.details}
                 </p>
               </div>
-              <div className="ml-4 flex shrink-0 items-center gap-1">
-                <Button onClick={() => openEdit(account)} size="sm" variant="ghost">
-                  <Pencil className="size-3.5" />
-                </Button>
-                {!account.isDefault && (
-                  <Button
-                    className="text-red-500 hover:text-red-700"
-                    onClick={() => setDeleteConfirm(account)}
-                    size="sm"
-                    variant="ghost"
-                  >
-                    <Trash2 className="size-3.5" />
+              {canManageBankAccounts && (
+                <div className="ml-4 flex shrink-0 items-center gap-1">
+                  <Button onClick={() => openEdit(account)} size="sm" variant="ghost">
+                    <Pencil className="size-3.5" />
                   </Button>
-                )}
-              </div>
+                  {!account.isDefault && (
+                    <Button
+                      className="text-red-500 hover:text-red-700"
+                      onClick={() => setDeleteConfirm(account)}
+                      size="sm"
+                      variant="ghost"
+                    >
+                      <Trash2 className="size-3.5" />
+                    </Button>
+                  )}
+                </div>
+              )}
             </div>
           ))}
         </div>
       )}
 
-      <Button onClick={openCreate} size="sm" variant="outline">
-        <Plus className="size-4" />
-        Add Bank Account
-      </Button>
+      {canManageBankAccounts && (
+        <Button onClick={openCreate} size="sm" variant="outline">
+          <Plus className="size-4" />
+          Add Bank Account
+        </Button>
+      )}
 
       {/* Create / Edit Dialog */}
       <BankAccountDialog
         account={editingAccount}
         onClose={() => setDialogOpen(false)}
-        open={dialogOpen}
+        open={canManageBankAccounts && dialogOpen}
       />
 
       {/* Delete Confirmation */}
-      <Dialog onOpenChange={(open) => !open && setDeleteConfirm(null)} open={!!deleteConfirm}>
+      <Dialog
+        onOpenChange={(open) => !open && setDeleteConfirm(null)}
+        open={canManageBankAccounts && !!deleteConfirm}
+      >
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Delete bank account</DialogTitle>

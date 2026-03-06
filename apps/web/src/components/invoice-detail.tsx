@@ -35,12 +35,20 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import type { AuthenticatedRole } from "@/lib/auth";
 import {
-  canCancelInvoice,
-  canMarkInvoicePaid,
-  canSendInvoiceReminder,
+  canCancelInvoice as canCancelInvoiceStatus,
+  canMarkInvoicePaid as canMarkInvoicePaidStatus,
+  canSendInvoiceReminder as canSendInvoiceReminderStatus,
   normalizeInvoiceStatus,
 } from "@/lib/invoice-lifecycle";
+import {
+  canCancelInvoice as canCancelInvoiceRole,
+  canDeleteInvoice as canDeleteInvoiceRole,
+  canMarkInvoicePaid as canMarkInvoicePaidRole,
+  canSendInvoice as canSendInvoiceRole,
+  canSendInvoiceReminder as canSendInvoiceReminderRole,
+} from "@/lib/roles";
 import { formatCurrency } from "@/lib/utils";
 
 type LineItem = {
@@ -79,6 +87,7 @@ type InvoiceDetailProps = {
     taxRate: string | null;
     total: string | null;
   };
+  role: AuthenticatedRole;
 };
 
 function formatDate(dateStr: string): string {
@@ -98,7 +107,7 @@ const ACTION_LABELS: Record<string, string> = {
   sent: "Invoice sent",
 };
 
-export function InvoiceDetailView({ activities, invoice }: InvoiceDetailProps) {
+export function InvoiceDetailView({ activities, invoice, role }: InvoiceDetailProps) {
   const [actionError, setActionError] = useState<string | null>(null);
   const [actionNotice, setActionNotice] = useState<string | null>(null);
   const [confirmAction, setConfirmAction] = useState<"cancel" | "delete" | null>(null);
@@ -109,9 +118,16 @@ export function InvoiceDetailView({ activities, invoice }: InvoiceDetailProps) {
   const currency = invoice.currency ?? "EUR";
   const status = normalizeInvoiceStatus(invoice.status);
   const isDraft = status === "draft";
-  const canSendReminder = canSendInvoiceReminder(status, Boolean(invoice.stripePaymentLinkUrl));
-  const canCancel = canCancelInvoice(status);
-  const canMarkPaid = canMarkInvoicePaid(status);
+  const canManageSending = canSendInvoiceRole(role);
+  const canManageDelete = canDeleteInvoiceRole(role);
+  const canManageCancel = canCancelInvoiceRole(role);
+  const canManageMarkPaid = canMarkInvoicePaidRole(role);
+  const canManageReminders = canSendInvoiceReminderRole(role);
+  const canSendReminder =
+    canManageReminders &&
+    canSendInvoiceReminderStatus(status, Boolean(invoice.stripePaymentLinkUrl));
+  const canCancel = canManageCancel && canCancelInvoiceStatus(status);
+  const canMarkPaid = canManageMarkPaid && canMarkInvoicePaidStatus(status);
 
   async function handleDeleteOrCancel() {
     if (!confirmAction) {
@@ -251,7 +267,7 @@ export function InvoiceDetailView({ activities, invoice }: InvoiceDetailProps) {
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          {isDraft && (
+          {isDraft && canManageSending && (
             <>
               <Button
                 data-testid="invoice-send"
@@ -273,23 +289,27 @@ export function InvoiceDetailView({ activities, invoice }: InvoiceDetailProps) {
                 <Send className="size-4" />
                 {pendingAction === "mark-sent" ? "Marking..." : "Mark Sent"}
               </Button>
-              <Button
-                data-testid="invoice-mark-paid"
-                disabled={pendingAction !== null}
-                onClick={handleMarkPaid}
-                size="sm"
-                variant="outline"
-              >
-                <CheckCircle2 className="size-4" />
-                {pendingAction === "mark-paid" ? "Marking..." : "Mark Paid"}
-              </Button>
-              <Link href={`/invoices/${invoice.id}/edit`}>
-                <Button disabled={pendingAction !== null} size="sm" variant="outline">
-                  <Pencil className="size-4" />
-                  Edit
-                </Button>
-              </Link>
             </>
+          )}
+          {isDraft && canManageMarkPaid && (
+            <Button
+              data-testid="invoice-mark-paid"
+              disabled={pendingAction !== null}
+              onClick={handleMarkPaid}
+              size="sm"
+              variant="outline"
+            >
+              <CheckCircle2 className="size-4" />
+              {pendingAction === "mark-paid" ? "Marking..." : "Mark Paid"}
+            </Button>
+          )}
+          {isDraft && (
+            <Link href={`/invoices/${invoice.id}/edit`}>
+              <Button disabled={pendingAction !== null} size="sm" variant="outline">
+                <Pencil className="size-4" />
+                Edit
+              </Button>
+            </Link>
           )}
           {canSendReminder && (
             <Button
@@ -357,7 +377,7 @@ export function InvoiceDetailView({ activities, invoice }: InvoiceDetailProps) {
               Cancel Invoice
             </Button>
           )}
-          {isDraft && (
+          {isDraft && canManageDelete && (
             <Button
               className="text-red-600 hover:bg-red-50 hover:text-red-700"
               data-testid="invoice-delete-draft"
