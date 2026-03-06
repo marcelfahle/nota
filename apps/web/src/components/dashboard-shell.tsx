@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
 
+import { ChatPanel } from "@/components/chat-panel";
 import {
   StripeDevDock,
   type EmailJobDockItem,
@@ -110,6 +111,7 @@ export function DashboardShell({
       </header>
 
       <main className="mx-auto max-w-6xl px-4 py-6 pb-28 sm:px-6 sm:py-8 sm:pb-32">{children}</main>
+      <ChatPanel />
       <StripeDevDock items={stripeDockItems} jobs={emailJobItems} jobSummary={emailJobSummary} />
     </div>
   );
