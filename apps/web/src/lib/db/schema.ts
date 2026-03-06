@@ -64,6 +64,24 @@ export const orgMembers = pgTable(
   (table) => [unique("org_members_org_id_user_id_unique").on(table.orgId, table.userId)],
 );
 
+export const invites = pgTable(
+  "invites",
+  {
+    acceptedAt: timestamp("accepted_at"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    email: text().notNull(),
+    expiresAt: timestamp("expires_at").notNull(),
+    id: uuid().defaultRandom().primaryKey(),
+    invitedBy: uuid("invited_by").references(() => users.id, { onDelete: "set null" }),
+    orgId: uuid("org_id")
+      .notNull()
+      .references(() => orgs.id, { onDelete: "cascade" }),
+    role: orgRoleEnum().notNull().default("member"),
+    token: text().notNull().unique(),
+  },
+  (table) => [unique("invites_org_id_email_unique").on(table.orgId, table.email)],
+);
+
 export const bankAccounts = pgTable("bank_accounts", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
   details: text().notNull(),
@@ -187,6 +205,7 @@ export const jobs = pgTable("jobs", {
 export const usersRelations = relations(users, ({ many }) => ({
   bankAccounts: many(bankAccounts),
   clients: many(clients),
+  invites: many(invites),
   invoices: many(invoices),
   orgMembers: many(orgMembers),
 }));
@@ -194,6 +213,7 @@ export const usersRelations = relations(users, ({ many }) => ({
 export const orgsRelations = relations(orgs, ({ many }) => ({
   bankAccounts: many(bankAccounts),
   clients: many(clients),
+  invites: many(invites),
   invoices: many(invoices),
   orgMembers: many(orgMembers),
 }));
@@ -201,6 +221,11 @@ export const orgsRelations = relations(orgs, ({ many }) => ({
 export const orgMembersRelations = relations(orgMembers, ({ one }) => ({
   org: one(orgs, { fields: [orgMembers.orgId], references: [orgs.id] }),
   user: one(users, { fields: [orgMembers.userId], references: [users.id] }),
+}));
+
+export const invitesRelations = relations(invites, ({ one }) => ({
+  invitedByUser: one(users, { fields: [invites.invitedBy], references: [users.id] }),
+  org: one(orgs, { fields: [invites.orgId], references: [orgs.id] }),
 }));
 
 export const bankAccountsRelations = relations(bankAccounts, ({ one }) => ({
