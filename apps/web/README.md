@@ -97,6 +97,10 @@ Open `http://localhost:3000/login`.
 - `SEED_NAME`
 - `SEED_PASSWORD`
 
+## API
+
+- Full API reference: [docs/api.md](./docs/api.md)
+
 ## Common commands
 
 ```bash
