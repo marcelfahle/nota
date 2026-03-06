@@ -1,28 +1,18 @@
-# nota
+# nota web
 
-`nota` is a single-owner invoicing app built with Next.js, Drizzle, Neon, Stripe, and Resend.
+`nota web` is the Next.js app for Nota: an org-scoped invoicing workspace with a REST API, terminal and MCP integrations, and an in-app AI assistant.
 
-It is designed for the use case this repo actually has today:
+## Current capabilities
 
-- one business owner
-- a small number of invoices per month
-- Stripe payment links for card payments
-- PDF and XRechnung invoice exports
-- enough operational visibility to self-host or deploy on Vercel without guessing
-
-## Current scope
-
-- owner login with database-backed user records
-- self-service registration and password reset
-- clients, bank accounts, invoices, and activity log stored in Postgres
-- PDF invoice generation
-- XRechnung XML export
-- Stripe payment link creation and Stripe webhook handling
-- overdue marking via cron
-- retryable outbound email jobs via cron
-- internal Stripe dock for inspecting created Stripe resources
-
-This is intentionally not a multi-tenant SaaS. There is no public signup, team model, or client portal.
+- email/password auth with workspace creation on registration
+- `owner`, `admin`, and `member` roles
+- invite links and team management
+- clients, bank accounts, invoices, activity log, PDF, and XRechnung
+- Stripe payment links and Stripe webhook handling
+- API keys and bearer-token REST API under `/api/v1`
+- in-app chat powered by Vercel AI SDK
+- queued email jobs plus overdue/job crons
+- ops dock for Stripe and job visibility
 
 ## Stack
 
@@ -32,7 +22,8 @@ This is intentionally not a multi-tenant SaaS. There is no public signup, team m
 - Neon Postgres
 - Stripe
 - Resend
-- Bun for local development commands
+- Vercel AI SDK with Anthropic
+- Bun for local commands
 
 ## Local setup
 
@@ -48,13 +39,13 @@ bun install
 cp .env.example .env
 ```
 
-3. Run the database migrations.
+3. Run database migrations.
 
 ```bash
 bun run db:migrate
 ```
 
-4. Seed the owner account.
+4. Seed an owner account.
 
 ```bash
 bun run db:seed
@@ -64,6 +55,7 @@ By default the seed command creates:
 
 - email: `admin@nota.app`
 - password: `changeme`
+- workspace: `Admin's Workspace`
 
 Override those with `SEED_EMAIL`, `SEED_NAME`, and `SEED_PASSWORD`.
 
@@ -81,15 +73,17 @@ Open `http://localhost:3000/login`.
 
 - `DATABASE_URL`: Postgres connection string
 - `SESSION_SECRET`: HMAC secret for signed session cookies
-- `APP_URL`: absolute app URL used in password reset emails
-- `RESEND_API_KEY`: API key used to send invoice and payment emails
+- `APP_URL`: absolute app URL used in invites and password reset emails
+- `RESEND_API_KEY`: API key used to send invites, invoices, reminders, and payment emails
 - `STRIPE_SECRET_KEY`: Stripe secret key used to create payment links
 - `STRIPE_WEBHOOK_SECRET`: webhook signing secret for `/api/webhooks/stripe`
-- `CRON_SECRET`: bearer token expected by `/api/cron/overdue`
+- `CRON_SECRET`: bearer token expected by `/api/cron/overdue` and `/api/cron/jobs`
+- `ANTHROPIC_API_KEY`: provider key for the in-app AI assistant
 
 ### Recommended
 
 - `RESEND_FROM_EMAIL`: branded sender, for example `Your Business <billing@example.com>`
+- `NOTA_CHAT_MODEL`: override the default Anthropic model used by `/api/chat`
 
 ### Optional seed values
 
@@ -97,9 +91,25 @@ Open `http://localhost:3000/login`.
 - `SEED_NAME`
 - `SEED_PASSWORD`
 
+## Teams
+
+- registration creates a user, a workspace, and an `owner` membership
+- owners can manage settings, invites, members, and roles
+- admins can operate invoices and bank accounts but cannot manage workspace settings or membership
+- members can create and edit drafts, but cannot send, cancel, delete, or mark invoices paid
+- the current auth model assumes one active workspace per user and uses the first membership returned by `org_members`
+
 ## API
 
-- Full API reference: [docs/api.md](./docs/api.md)
+- create API keys in Settings
+- REST API reference: [docs/api.md](./docs/api.md)
+- web UI and API routes share the same invoice service layer
+
+## Integrations
+
+- CLI: [`../cli/README.md`](../cli/README.md)
+- MCP server: [`../mcp/README.md`](../mcp/README.md)
+- in-app AI assistant: available inside the authenticated dashboard via `/api/chat`
 
 ## Common commands
 
@@ -117,65 +127,40 @@ bun run db:studio
 
 ## Deploying on Vercel
 
-1. Provision a Postgres database. Neon is the path already used by this app.
+1. Provision a Postgres database.
 2. Add all required environment variables from `.env.example` in the Vercel project.
 3. Run Drizzle migrations against the production database.
-4. Seed the owner user once.
-5. Configure a Stripe webhook that points to:
+4. Seed the first owner account once.
+5. Configure a Stripe webhook that points to `https://your-domain.com/api/webhooks/stripe`.
+6. Configure a verified sending domain in Resend and set `RESEND_FROM_EMAIL`.
+7. Keep `vercel.json` committed so Vercel runs the overdue and job crons.
 
-```text
-https://your-domain.com/api/webhooks/stripe
+## Tests
+
+Unit and integration tests:
+
+```bash
+bun test
 ```
 
-Listen for:
-
-- `checkout.session.completed`
-
-6. Configure a verified sending domain in Resend and set `RESEND_FROM_EMAIL`.
-7. Keep `vercel.json` committed so Vercel runs both the overdue cron and the email-job cron automatically.
-
-When `CRON_SECRET` is present, Vercel Cron requests will include the expected bearer token for `/api/cron/overdue`.
-
-## Browser tests
-
-Install Chromium for Playwright once:
+Browser tests:
 
 ```bash
 bunx playwright install chromium
-```
-
-Then run:
-
-```bash
 bun run test:e2e
 ```
 
-The browser suite uses the real app against your configured Postgres database, so point `.env` at a disposable local or development database before running it.
-
-## Hosting notes
-
-- `src/proxy.ts` protects dashboard routes and keeps `/login` plus the Stripe webhook public.
-- `src/proxy.ts` keeps `/register`, `/forgot-password`, `/reset-password`, `/api/webhooks/*`, and `/api/cron/*` public.
-- Session cookies are signed with `SESSION_SECRET`.
-- Stripe-created resources are visible in the bottom dock on dashboard pages.
-- Sent invoices are treated as historical records. Drafts are editable, while sent/paid invoices are constrained by lifecycle rules.
-- Outbound invoice emails are queued in the database and retried by `/api/cron/jobs`.
+The Playwright suite uses the real app against your configured Postgres database, so point `.env` at a disposable local or development database before running it.
 
 ## Known limits
 
-- This is still an internal app, not a public product.
-- Registration is currently open and does not include email verification yet.
-- Manual `Mark Sent` does not create a Stripe payment link, so Stripe reminders are only available for invoices that were sent through the app.
+- one active workspace per user for now
+- registration is open and does not include email verification yet
+- the ops/jobs layer still uses database-backed cron processing rather than dedicated workflow infrastructure
 
-## Suggested production checklist
+## Production checklist
 
-Before relying on the app in production:
+Use the runbooks in [docs/runbooks](./docs/runbooks) before relying on the app in production, especially:
 
-1. Verify Stripe webhook delivery in the Stripe dashboard.
-2. Send a real invoice to yourself and confirm PDF, email, payment link, and webhook settlement.
-3. Confirm the overdue cron marks a test invoice correctly.
-4. Confirm `/api/cron/jobs` drains queued emails.
-5. Export and restore a database backup at least once.
-6. Set a real `RESEND_FROM_EMAIL` on a verified domain.
-
-For a fuller post-deploy flow, use [docs/runbooks/nota-deploy-smoke-checklist.md](./docs/runbooks/nota-deploy-smoke-checklist.md) and [docs/runbooks/vercel-first-deploy.md](./docs/runbooks/vercel-first-deploy.md).
+- [docs/runbooks/nota-deploy-smoke-checklist.md](./docs/runbooks/nota-deploy-smoke-checklist.md)
+- [docs/runbooks/vercel-first-deploy.md](./docs/runbooks/vercel-first-deploy.md)
