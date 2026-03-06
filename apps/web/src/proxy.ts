@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 
 const PUBLIC_PATHS = [
   "/api/cron",
+  "/api/v1",
   "/api/webhooks",
   "/forgot-password",
   "/login",
