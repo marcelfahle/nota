@@ -1,0 +1,41 @@
+{
+  "name": "@nota-app/sdk",
+  "version": "0.1.0",
+  "private": false,
+  "description": "TypeScript SDK for Nota's REST API.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/marcelfahle/nota.git",
+    "directory": "packages/sdk"
+  },
+  "homepage": "https://github.com/marcelfahle/nota/tree/main/packages/sdk",
+  "keywords": [
+    "nota",
+    "sdk",
+    "typescript",
+    "invoicing"
+  ],
+  "type": "module",
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "rm -rf dist && tsc -p tsconfig.json",
+    "check": "tsc --noEmit",
+    "prepublishOnly": "bun run build"
+  },
+  "devDependencies": {
+    "@types/node": "^25.3.5",
+    "typescript": "^5.9.3"
+  }
+}
