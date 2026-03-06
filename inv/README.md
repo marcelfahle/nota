@@ -3,6 +3,7 @@
 `inv` is a single-owner invoicing app built with Next.js, Drizzle, Neon, Stripe, and Resend.
 
 It is designed for the use case this repo actually has today:
+
 - one business owner
 - a small number of invoices per month
 - Stripe payment links for card payments
@@ -60,6 +61,7 @@ bun run db:seed
 ```
 
 By default the seed command creates:
+
 - email: `admin@inv.app`
 - password: `changeme`
 
@@ -101,6 +103,7 @@ Open `http://localhost:3000/login`.
 bun run dev
 bun run build
 bun test
+bun run test:e2e
 bun run lint
 bun run format:check
 bun run db:migrate
@@ -121,12 +124,29 @@ https://your-domain.com/api/webhooks/stripe
 ```
 
 Listen for:
+
 - `checkout.session.completed`
 
 6. Configure a verified sending domain in Resend and set `RESEND_FROM_EMAIL`.
 7. Keep `vercel.json` committed so Vercel runs both the overdue cron and the email-job cron automatically.
 
 When `CRON_SECRET` is present, Vercel Cron requests will include the expected bearer token for `/api/cron/overdue`.
+
+## Browser tests
+
+Install Chromium for Playwright once:
+
+```bash
+bunx playwright install chromium
+```
+
+Then run:
+
+```bash
+bun run test:e2e
+```
+
+The browser suite uses the real app against your configured Postgres database, so point `.env` at a disposable local or development database before running it.
 
 ## Hosting notes
 
@@ -154,4 +174,4 @@ Before relying on the app in production:
 5. Export and restore a database backup at least once.
 6. Set a real `RESEND_FROM_EMAIL` on a verified domain.
 
-For a fuller post-deploy flow, use [inv-deploy-smoke-checklist.md](/Users/mf/code/payme/docs/runbooks/inv-deploy-smoke-checklist.md).
+For a fuller post-deploy flow, use [docs/runbooks/inv-deploy-smoke-checklist.md](./docs/runbooks/inv-deploy-smoke-checklist.md) and [docs/runbooks/vercel-first-deploy.md](./docs/runbooks/vercel-first-deploy.md).
