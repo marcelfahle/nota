@@ -3,8 +3,8 @@ import { Pool } from "@neondatabase/serverless";
 import { and, eq, isNull, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/neon-serverless";
 
-import { getDbEnv } from "../src/lib/env";
 import { bankAccounts, clients, invoices, orgMembers, orgs, users } from "../src/lib/db/schema";
+import { getDbEnv } from "../src/lib/env";
 
 const pool = new Pool({ connectionString: getDbEnv().DATABASE_URL });
 const db = drizzle({ client: pool });
