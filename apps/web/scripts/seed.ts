@@ -6,8 +6,8 @@ import { Pool } from "@neondatabase/serverless";
 import { eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/neon-serverless";
 
-import { getDbEnv } from "../src/lib/env";
 import { orgMembers, orgs, users } from "../src/lib/db/schema";
+import { getDbEnv } from "../src/lib/env";
 
 const scryptAsync = promisify(scrypt);
 

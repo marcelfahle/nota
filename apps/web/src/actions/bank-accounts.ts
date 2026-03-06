@@ -109,7 +109,9 @@ export async function deleteBankAccount(accountId: string) {
     return { error: "Cannot delete the default account. Set another account as default first." };
   }
 
-  await db.delete(bankAccounts).where(and(eq(bankAccounts.id, accountId), eq(bankAccounts.orgId, org.id)));
+  await db
+    .delete(bankAccounts)
+    .where(and(eq(bankAccounts.id, accountId), eq(bankAccounts.orgId, org.id)));
 
   revalidatePath("/settings");
   return { success: true };
