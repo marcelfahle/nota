@@ -6,30 +6,21 @@ import { z } from "zod";
 
 import { getCurrentUser } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { activityLog, bankAccounts, clients, invoices, jobs, lineItems } from "@/lib/db/schema";
+import { activityLog, invoices } from "@/lib/db/schema";
+import { canSendInvoice as canSendInvoiceStatus } from "@/lib/invoice-lifecycle";
 import {
-  canCancelInvoice as canCancelInvoiceStatus,
-  canDeleteInvoice as canDeleteInvoiceStatus,
-  canEditInvoice as canEditInvoiceStatus,
-  canMarkInvoicePaid as canMarkInvoicePaidStatus,
-  canSendInvoice as canSendInvoiceStatus,
-  canSendInvoiceReminder as canSendInvoiceReminderStatus,
-  isInvoiceSendFinalized,
-  normalizeInvoiceStatus,
-} from "@/lib/invoice-lifecycle";
-import { calculateInvoiceTotals, createNextInvoiceNumber } from "@/lib/invoice-service";
-import { processPendingEmailJobs } from "@/lib/jobs";
-import {
-  canCancelInvoice as canCancelInvoiceRole,
-  canCreateInvoice,
-  canDeleteInvoice as canDeleteInvoiceRole,
-  canEditDraft,
-  canMarkInvoicePaid as canMarkInvoicePaidRole,
-  canSendInvoice as canSendInvoiceRole,
-  canSendInvoiceReminder as canSendInvoiceReminderRole,
-  getInsufficientPermissionsError,
-} from "@/lib/roles";
-import { createPaymentLink, deactivatePaymentLink } from "@/lib/stripe";
+  cancelInvoice as cancelInvoiceService,
+  createInvoice as createInvoiceService,
+  deleteInvoice as deleteInvoiceService,
+  duplicateInvoice as duplicateInvoiceService,
+  getOwnedInvoice,
+  markInvoicePaid as markInvoicePaidService,
+  sendInvoice as sendInvoiceService,
+  sendReminder as sendReminderService,
+  type InvoiceServiceContext,
+  updateInvoice as updateInvoiceService,
+} from "@/lib/invoice-service";
+import { canSendInvoice as canSendInvoiceRole, getInsufficientPermissionsError } from "@/lib/roles";
 
 const lineItemSchema = z.object({
   description: z.string().min(1, "Description is required"),
@@ -63,34 +54,14 @@ function parseInvoiceFormData(formData: FormData) {
   };
 }
 
-async function getOwnedInvoice(orgId: string, invoiceId: string) {
-  const [invoice] = await db
-    .select()
-    .from(invoices)
-    .where(and(eq(invoices.id, invoiceId), eq(invoices.orgId, orgId)))
-    .limit(1);
-
-  return invoice ?? null;
-}
-
-async function getOwnedClient(orgId: string, clientId: string) {
-  const [client] = await db
-    .select()
-    .from(clients)
-    .where(and(eq(clients.id, clientId), eq(clients.orgId, orgId)))
-    .limit(1);
-
-  return client ?? null;
-}
-
-async function hasSentActivity(invoiceId: string) {
-  const [entry] = await db
-    .select({ id: activityLog.id })
-    .from(activityLog)
-    .where(and(eq(activityLog.invoiceId, invoiceId), eq(activityLog.action, "sent")))
-    .limit(1);
-
-  return Boolean(entry);
+function buildServiceContext(
+  user: Awaited<ReturnType<typeof getCurrentUser>>,
+): InvoiceServiceContext {
+  return {
+    orgId: user.org.id,
+    role: user.role,
+    userId: user.user.id,
+  };
 }
 
 export async function createInvoice(
@@ -102,54 +73,14 @@ export async function createInvoice(
     return { error: result.error.issues[0].message };
   }
 
-  const { org, role, user } = await getCurrentUser();
-
-  if (!canCreateInvoice(role)) {
-    return { error: getInsufficientPermissionsError() };
+  const currentUser = await getCurrentUser();
+  const serviceResult = await createInvoiceService(buildServiceContext(currentUser), result.data);
+  if ("error" in serviceResult) {
+    return { error: serviceResult.error };
   }
-  const { lineItems: items, taxRate, ...invoiceData } = result.data;
-  const totals = calculateInvoiceTotals(items, taxRate);
-  const client = await getOwnedClient(org.id, invoiceData.clientId);
-
-  if (!client) {
-    return { error: "Client not found" };
-  }
-
-  const inserted = await db.transaction(async (tx) => {
-    const number = await createNextInvoiceNumber(tx, org.id);
-
-    const [inv] = await tx
-      .insert(invoices)
-      .values({
-        orgId: org.id,
-        userId: user.id,
-        ...invoiceData,
-        number,
-        ...totals,
-      })
-      .returning({ id: invoices.id });
-
-    await tx.insert(lineItems).values(
-      items.map((item, index) => ({
-        amount: (item.quantity * item.unitPrice).toFixed(2),
-        description: item.description,
-        invoiceId: inv.id,
-        quantity: item.quantity.toFixed(2),
-        sortOrder: index,
-        unitPrice: item.unitPrice.toFixed(2),
-      })),
-    );
-
-    await tx.insert(activityLog).values({
-      action: "created",
-      invoiceId: inv.id,
-    });
-
-    return inv;
-  });
 
   revalidatePath("/invoices");
-  return { invoiceId: inserted.id, success: true };
+  return { invoiceId: serviceResult.invoiceId, success: true };
 }
 
 export async function updateInvoice(
@@ -162,343 +93,76 @@ export async function updateInvoice(
     return { error: result.error.issues[0].message };
   }
 
-  const { org, role } = await getCurrentUser();
-
-  if (!canEditDraft(role)) {
-    return { error: getInsufficientPermissionsError() };
+  const currentUser = await getCurrentUser();
+  const serviceResult = await updateInvoiceService(
+    buildServiceContext(currentUser),
+    invoiceId,
+    result.data,
+  );
+  if ("error" in serviceResult) {
+    return { error: serviceResult.error };
   }
-
-  const invoice = await getOwnedInvoice(org.id, invoiceId);
-
-  if (!invoice) {
-    return { error: "Invoice not found" };
-  }
-
-  if (!canEditInvoiceStatus(invoice.status)) {
-    return { error: "Only draft invoices can be edited" };
-  }
-
-  const { lineItems: items, taxRate, ...invoiceData } = result.data;
-  const totals = calculateInvoiceTotals(items, taxRate);
-  const client = await getOwnedClient(org.id, invoiceData.clientId);
-
-  if (!client) {
-    return { error: "Client not found" };
-  }
-
-  await db.transaction(async (tx) => {
-    await tx
-      .update(invoices)
-      .set({
-        ...invoiceData,
-        ...totals,
-        updatedAt: new Date(),
-      })
-      .where(and(eq(invoices.id, invoiceId), eq(invoices.orgId, org.id)));
-
-    await tx.delete(lineItems).where(eq(lineItems.invoiceId, invoiceId));
-
-    await tx.insert(lineItems).values(
-      items.map((item, index) => ({
-        amount: (item.quantity * item.unitPrice).toFixed(2),
-        description: item.description,
-        invoiceId,
-        quantity: item.quantity.toFixed(2),
-        sortOrder: index,
-        unitPrice: item.unitPrice.toFixed(2),
-      })),
-    );
-  });
 
   revalidatePath("/invoices");
   revalidatePath(`/invoices/${invoiceId}`);
-  return { invoiceId, success: true };
+
+  return { invoiceId: serviceResult.invoiceId, success: true };
 }
 
 export async function deleteInvoice(invoiceId: string) {
-  const { org, role } = await getCurrentUser();
-
-  if (!canDeleteInvoiceRole(role)) {
-    return { error: getInsufficientPermissionsError() };
+  const currentUser = await getCurrentUser();
+  const serviceResult = await deleteInvoiceService(buildServiceContext(currentUser), invoiceId);
+  if ("error" in serviceResult) {
+    return { error: serviceResult.error };
   }
 
-  const invoice = await getOwnedInvoice(org.id, invoiceId);
-
-  if (!invoice) {
-    return { error: "Invoice not found" };
-  }
-
-  if (!canDeleteInvoiceStatus(invoice.status)) {
-    return { error: "Only draft invoices can be deleted" };
-  }
-
-  await db.transaction(async (tx) => {
-    await tx.delete(activityLog).where(eq(activityLog.invoiceId, invoiceId));
-    await tx.delete(invoices).where(and(eq(invoices.id, invoiceId), eq(invoices.orgId, org.id)));
-  });
   revalidatePath("/invoices");
-
   return { success: true };
 }
 
 export async function sendInvoice(invoiceId: string) {
-  const { org, role } = await getCurrentUser();
-
-  if (!canSendInvoiceRole(role)) {
-    return { error: getInsufficientPermissionsError() };
-  }
-
-  const existingInvoice = await getOwnedInvoice(org.id, invoiceId);
-  if (!existingInvoice) {
-    return { error: "Invoice not found" };
-  }
-
-  if (
-    isInvoiceSendFinalized(
-      existingInvoice.status,
-      await hasSentActivity(invoiceId),
-      Boolean(existingInvoice.stripePaymentLinkId && existingInvoice.stripePaymentLinkUrl),
-    )
-  ) {
-    return { success: true };
-  }
-
-  if (!canSendInvoiceStatus(existingInvoice.status)) {
-    return { error: "Only draft invoices can be sent" };
-  }
-
-  const sentAt = new Date();
-  const [invoice] = await db
-    .update(invoices)
-    .set({
-      sentAt,
-      status: "sent",
-      updatedAt: sentAt,
-    })
-    .where(
-      and(eq(invoices.id, invoiceId), eq(invoices.orgId, org.id), eq(invoices.status, "draft")),
-    )
-    .returning();
-
-  if (!invoice) {
-    return { error: "Invoice status changed. Refresh and try again." };
-  }
-
-  const client = await getOwnedClient(org.id, invoice.clientId);
-  if (!client) {
-    await db
-      .update(invoices)
-      .set({
-        sentAt: null,
-        status: "draft",
-        updatedAt: new Date(),
-      })
-      .where(
-        and(
-          eq(invoices.id, invoiceId),
-          eq(invoices.orgId, org.id),
-          eq(invoices.status, "sent"),
-          eq(invoices.sentAt, sentAt),
-        ),
-      );
-    return { error: "Client not found" };
-  }
-
-  if (client.bankAccountId) {
-    const [bankAccount] = await db
-      .select({ id: bankAccounts.id })
-      .from(bankAccounts)
-      .where(and(eq(bankAccounts.id, client.bankAccountId), eq(bankAccounts.orgId, org.id)))
-      .limit(1);
-
-    if (!bankAccount) {
-      await db
-        .update(invoices)
-        .set({
-          sentAt: null,
-          status: "draft",
-          updatedAt: new Date(),
-        })
-        .where(
-          and(
-            eq(invoices.id, invoiceId),
-            eq(invoices.orgId, org.id),
-            eq(invoices.status, "sent"),
-            eq(invoices.sentAt, sentAt),
-          ),
-        );
-      return { error: "Assigned bank account not found" };
-    }
-  }
-
-  let paymentLinkId: string | null = null;
-
-  try {
-    const paymentLink = await createPaymentLink({
-      currency: invoice.currency,
-      id: invoice.id,
-      number: invoice.number,
-      total: invoice.total,
-    });
-    paymentLinkId = paymentLink.id;
-
-    await db.transaction(async (tx) => {
-      await tx
-        .update(invoices)
-        .set({
-          stripePaymentLinkId: paymentLink.id,
-          stripePaymentLinkUrl: paymentLink.url,
-          updatedAt: new Date(),
-        })
-        .where(and(eq(invoices.id, invoiceId), eq(invoices.orgId, org.id)));
-
-      await tx.insert(activityLog).values({
-        action: "sent",
-        invoiceId,
-      });
-
-      await tx.insert(jobs).values({
-        invoiceId,
-        payload: { invoiceId },
-        type: "send_invoice_email",
-      });
-    });
-  } catch {
-    if (paymentLinkId) {
-      await deactivatePaymentLink(paymentLinkId).catch(() => null);
-    }
-
-    await db
-      .update(invoices)
-      .set({
-        sentAt: null,
-        status: "draft",
-        updatedAt: new Date(),
-      })
-      .where(
-        and(
-          eq(invoices.id, invoiceId),
-          eq(invoices.orgId, org.id),
-          eq(invoices.status, "sent"),
-          eq(invoices.sentAt, sentAt),
-        ),
-      );
-
-    return { error: "Invoice could not be sent. Please try again." };
+  const currentUser = await getCurrentUser();
+  const serviceResult = await sendInvoiceService(buildServiceContext(currentUser), invoiceId);
+  if ("error" in serviceResult) {
+    return { error: serviceResult.error };
   }
 
   revalidatePath("/invoices");
   revalidatePath(`/invoices/${invoiceId}`);
-  await processPendingEmailJobs(1);
-
   return { success: true };
 }
 
 export async function sendReminder(invoiceId: string) {
-  const { org, role } = await getCurrentUser();
-
-  if (!canSendInvoiceReminderRole(role)) {
-    return { error: getInsufficientPermissionsError() };
+  const currentUser = await getCurrentUser();
+  const serviceResult = await sendReminderService(buildServiceContext(currentUser), invoiceId);
+  if ("error" in serviceResult) {
+    return { error: serviceResult.error };
   }
-
-  const invoice = await getOwnedInvoice(org.id, invoiceId);
-  if (!invoice) {
-    return { error: "Invoice not found" };
-  }
-
-  if (!canSendInvoiceReminderStatus(invoice.status, Boolean(invoice.stripePaymentLinkUrl))) {
-    return { error: "Only sent or overdue invoices can receive reminders" };
-  }
-
-  await db.insert(jobs).values({
-    invoiceId,
-    payload: { invoiceId },
-    type: "send_invoice_reminder_email",
-  });
 
   revalidatePath("/invoices");
   revalidatePath(`/invoices/${invoiceId}`);
-  await processPendingEmailJobs(1);
-
   return { success: true };
 }
 
 export async function duplicateInvoice(invoiceId: string) {
-  const { org, role, user } = await getCurrentUser();
-
-  if (!canCreateInvoice(role)) {
-    return getInsufficientPermissionsError();
+  const currentUser = await getCurrentUser();
+  const serviceResult = await duplicateInvoiceService(buildServiceContext(currentUser), invoiceId);
+  if ("error" in serviceResult) {
+    return serviceResult.error;
   }
-
-  const original = await getOwnedInvoice(org.id, invoiceId);
-
-  if (!original) {
-    throw new Error("Invoice not found");
-  }
-
-  const originalItems = await db.select().from(lineItems).where(eq(lineItems.invoiceId, invoiceId));
-
-  const today = new Date().toISOString().split("T")[0];
-  const dueDate = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
-
-  const inserted = await db.transaction(async (tx) => {
-    const number = await createNextInvoiceNumber(tx, org.id);
-
-    const [inv] = await tx
-      .insert(invoices)
-      .values({
-        clientId: original.clientId,
-        currency: original.currency,
-        dueAt: dueDate,
-        internalNotes: original.internalNotes,
-        issuedAt: today,
-        notes: original.notes,
-        number,
-        orgId: org.id,
-        reverseCharge: original.reverseCharge,
-        subtotal: original.subtotal,
-        taxAmount: original.taxAmount,
-        taxRate: original.taxRate,
-        total: original.total,
-        userId: user.id,
-      })
-      .returning({ id: invoices.id });
-
-    if (originalItems.length > 0) {
-      await tx.insert(lineItems).values(
-        originalItems.map((item, index) => ({
-          amount: item.amount,
-          description: item.description,
-          invoiceId: inv.id,
-          quantity: item.quantity,
-          sortOrder: index,
-          unitPrice: item.unitPrice,
-        })),
-      );
-    }
-
-    await tx.insert(activityLog).values({
-      action: "created",
-      invoiceId: inv.id,
-      metadata: { duplicatedFrom: invoiceId },
-    });
-
-    return inv;
-  });
 
   revalidatePath("/invoices");
-  return inserted.id;
+  return serviceResult.invoiceId;
 }
 
 export async function markInvoiceSent(invoiceId: string) {
-  const { org, role } = await getCurrentUser();
+  const currentUser = await getCurrentUser();
 
-  if (!canSendInvoiceRole(role)) {
+  if (!canSendInvoiceRole(currentUser.role)) {
     return { error: getInsufficientPermissionsError() };
   }
 
-  const invoice = await getOwnedInvoice(org.id, invoiceId);
-
+  const invoice = await getOwnedInvoice(currentUser.org.id, invoiceId);
   if (!invoice) {
     return { error: "Invoice not found" };
   }
@@ -515,7 +179,7 @@ export async function markInvoiceSent(invoiceId: string) {
       status: "sent",
       updatedAt: sentAt,
     })
-    .where(and(eq(invoices.id, invoiceId), eq(invoices.orgId, org.id)));
+    .where(and(eq(invoices.id, invoiceId), eq(invoices.orgId, currentUser.org.id)));
 
   await db.insert(activityLog).values({
     action: "sent",
@@ -530,142 +194,25 @@ export async function markInvoiceSent(invoiceId: string) {
 }
 
 export async function markInvoicePaid(invoiceId: string) {
-  const { org, role } = await getCurrentUser();
-
-  if (!canMarkInvoicePaidRole(role)) {
-    return { error: getInsufficientPermissionsError() };
+  const currentUser = await getCurrentUser();
+  const serviceResult = await markInvoicePaidService(buildServiceContext(currentUser), invoiceId);
+  if ("error" in serviceResult) {
+    return { error: serviceResult.error };
   }
-
-  const invoice = await getOwnedInvoice(org.id, invoiceId);
-
-  if (!invoice) {
-    return { error: "Invoice not found" };
-  }
-
-  const normalizedStatus = normalizeInvoiceStatus(invoice.status);
-
-  if (normalizedStatus === "cancelled") {
-    return { error: "Cancelled invoices cannot be marked as paid" };
-  }
-
-  if (!canMarkInvoicePaidStatus(normalizedStatus)) {
-    return { success: true };
-  }
-
-  if (
-    normalizedStatus === "sent" &&
-    !invoice.stripePaymentLinkId &&
-    !(await hasSentActivity(invoiceId))
-  ) {
-    return { error: "Invoice is still being sent. Refresh and try again." };
-  }
-
-  const now = new Date();
-  const paidAt = now.toISOString().split("T")[0];
-  const updatedInvoices = await db
-    .update(invoices)
-    .set({
-      paidAt,
-      sentAt: invoice.sentAt ?? now,
-      status: "paid",
-      updatedAt: now,
-    })
-    .where(
-      and(
-        eq(invoices.id, invoiceId),
-        eq(invoices.orgId, org.id),
-        eq(invoices.status, normalizedStatus),
-      ),
-    )
-    .returning({ id: invoices.id });
-
-  if (updatedInvoices.length === 0) {
-    return { error: "Invoice status changed. Refresh and try again." };
-  }
-
-  await db.insert(activityLog).values({
-    action: "paid",
-    invoiceId,
-    metadata: { manual: true },
-  });
 
   revalidatePath("/invoices");
   revalidatePath(`/invoices/${invoiceId}`);
-
   return { success: true };
 }
 
 export async function cancelInvoice(invoiceId: string) {
-  const { org, role } = await getCurrentUser();
-
-  if (!canCancelInvoiceRole(role)) {
-    return { error: getInsufficientPermissionsError() };
+  const currentUser = await getCurrentUser();
+  const serviceResult = await cancelInvoiceService(buildServiceContext(currentUser), invoiceId);
+  if ("error" in serviceResult) {
+    return { error: serviceResult.error };
   }
-
-  const invoice = await getOwnedInvoice(org.id, invoiceId);
-
-  if (!invoice) {
-    return { error: "Invoice not found" };
-  }
-
-  const normalizedStatus = normalizeInvoiceStatus(invoice.status);
-
-  if (normalizedStatus === "paid") {
-    return { error: "Paid invoices cannot be cancelled" };
-  }
-
-  if (normalizedStatus === "cancelled") {
-    return { success: true };
-  }
-
-  if (!canCancelInvoiceStatus(normalizedStatus)) {
-    return { error: "Only sent or overdue invoices can be cancelled" };
-  }
-
-  if (
-    normalizedStatus === "sent" &&
-    !invoice.stripePaymentLinkId &&
-    !(await hasSentActivity(invoiceId))
-  ) {
-    return { error: "Invoice is still being sent. Refresh and try again." };
-  }
-
-  const warnings: Array<string> = [];
-
-  const updatedInvoices = await db
-    .update(invoices)
-    .set({
-      status: "cancelled",
-      updatedAt: new Date(),
-    })
-    .where(
-      and(
-        eq(invoices.id, invoiceId),
-        eq(invoices.orgId, org.id),
-        eq(invoices.status, normalizedStatus),
-      ),
-    )
-    .returning({ id: invoices.id });
-
-  if (updatedInvoices.length === 0) {
-    return { error: "Invoice status changed. Refresh and try again." };
-  }
-
-  if (invoice.stripePaymentLinkId) {
-    try {
-      await deactivatePaymentLink(invoice.stripePaymentLinkId);
-    } catch {
-      warnings.push("Stripe payment link is still active. Disable it in Stripe.");
-    }
-  }
-
-  await db.insert(activityLog).values({
-    action: "cancelled",
-    invoiceId,
-  });
 
   revalidatePath("/invoices");
   revalidatePath(`/invoices/${invoiceId}`);
-
-  return { success: true, warning: warnings[0] };
+  return { success: true, warning: serviceResult.warning };
 }
