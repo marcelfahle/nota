@@ -28,6 +28,10 @@ export default defineConfig({
     ? undefined
     : {
         command: "bun run dev -- --port 3001",
+        env: {
+          ...process.env,
+          APP_URL: baseURL,
+        },
         reuseExistingServer: !process.env.CI,
         timeout: 120_000,
         url: baseURL,

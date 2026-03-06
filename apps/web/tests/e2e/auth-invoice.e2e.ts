@@ -1,16 +1,16 @@
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Browser, type Page } from "@playwright/test";
 
 function uniqueSuffix() {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
-async function registerAccount(page: Page) {
+async function registerAccount(page: Page, name = "Playwright Owner") {
   const suffix = uniqueSuffix();
   const email = `playwright-${suffix}@example.com`;
   const password = `Playwright-${suffix}`;
 
   await page.goto("/register");
-  await page.getByTestId("register-name").fill("Playwright Owner");
+  await page.getByTestId("register-name").fill(name);
   await page.getByTestId("register-email").fill(email);
   await page.getByTestId("register-password").fill(password);
   await page.getByTestId("register-submit").click();
@@ -36,6 +36,20 @@ async function createClient(page: Page, suffix: string) {
 async function selectClient(page: Page, clientName: string) {
   await page.getByTestId("invoice-client-select").click();
   await page.getByRole("option", { name: clientName }).click();
+}
+
+async function acceptInvite(browser: Browser, inviteUrl: string, password: string) {
+  const context = await browser.newContext();
+  const page = await context.newPage();
+
+  await page.goto(inviteUrl);
+  await expect(page.getByTestId("register-invite-banner")).toBeVisible();
+  await page.getByTestId("register-name").fill("Playwright Teammate");
+  await page.getByTestId("register-password").fill(password);
+  await page.getByTestId("register-submit").click();
+  await expect(page).toHaveURL(/\/invoices$/);
+
+  await context.close();
 }
 
 test("registers, signs out, and signs back in", async ({ page }) => {
@@ -64,6 +78,34 @@ test("updates organization settings and reflects branding", async ({ page }) => 
 
   await expect(page.getByText("Settings saved")).toBeVisible();
   await expect(page.locator("header").getByText(businessName)).toBeVisible();
+});
+
+test("owner invites a teammate who joins from the invite link", async ({ browser, page }) => {
+  const suffix = uniqueSuffix();
+  const teammateEmail = `teammate-${suffix}@example.com`;
+  const teammatePassword = `Teammate-${suffix}`;
+
+  await registerAccount(page);
+  await page.goto("/settings");
+
+  await page.getByTestId("team-invite-email").fill(teammateEmail);
+  await page.getByTestId("team-invite-role").click();
+  await page.getByRole("option", { name: "Admin" }).click();
+  await page.getByTestId("team-invite-submit").click();
+
+  const inviteLink = page.locator('[data-testid^="team-open-invite-"]').first();
+  await expect(inviteLink).toBeVisible();
+  const inviteUrl = await inviteLink.getAttribute("href");
+  if (!inviteUrl) {
+    throw new Error("Expected invite URL to be present");
+  }
+
+  await acceptInvite(browser, inviteUrl, teammatePassword);
+
+  await page.goto("/settings");
+  await expect(page.getByTestId("team-members-table")).toContainText(teammateEmail);
+  await expect(page.getByTestId("team-members-table")).toContainText("Admin");
+  await expect(page.locator('[data-testid^="team-invite-row-"]')).toHaveCount(0);
 });
 
 test("creates a client and moves an invoice through the manual lifecycle", async ({ page }) => {

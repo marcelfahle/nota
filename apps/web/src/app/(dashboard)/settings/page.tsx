@@ -1,15 +1,19 @@
 import { asc, desc, eq } from "drizzle-orm";
 
 import { logout } from "@/actions/auth";
+import { listMembers } from "@/actions/members";
 import { SettingsForm } from "@/components/settings-form";
+import { TeamSettings } from "@/components/team-settings";
 import { Button } from "@/components/ui/button";
 import { getCurrentUser } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { bankAccounts, invoices } from "@/lib/db/schema";
-import { canManageBankAccounts, canManageSettings } from "@/lib/roles";
+import { getAppEnv } from "@/lib/env";
+import { buildInviteUrl } from "@/lib/invites";
+import { canManageBankAccounts, canManageMembers, canManageSettings } from "@/lib/roles";
 
 export default async function SettingsPage() {
-  const { org, role } = await getCurrentUser();
+  const { org, role, user } = await getCurrentUser();
 
   const [lastInvoice] = await db
     .select({ number: invoices.number })
@@ -24,6 +28,8 @@ export default async function SettingsPage() {
     .where(eq(bankAccounts.orgId, org.id))
     .orderBy(asc(bankAccounts.sortOrder), asc(bankAccounts.createdAt));
 
+  const teamData = canManageMembers(role) ? await listMembers() : null;
+
   const settings = {
     businessAddress: org.businessAddress,
     businessName: org.businessName,
@@ -37,8 +43,8 @@ export default async function SettingsPage() {
   };
 
   return (
-    <div>
-      <div className="mb-6 flex items-center justify-between gap-3">
+    <div className="space-y-8">
+      <div className="flex items-center justify-between gap-3">
         <h1 className="text-2xl font-semibold tracking-tight">Settings</h1>
         <form action={logout}>
           <Button data-testid="logout-button" type="submit" variant="outline">
@@ -46,7 +52,8 @@ export default async function SettingsPage() {
           </Button>
         </form>
       </div>
-      <div className="max-w-2xl">
+
+      <div className="max-w-4xl space-y-8">
         <SettingsForm
           bankAccounts={organizationBankAccounts}
           canManageBankAccounts={canManageBankAccounts(role)}
@@ -54,6 +61,22 @@ export default async function SettingsPage() {
           lastIssuedNumber={lastInvoice?.number ?? null}
           settings={settings}
         />
+
+        {canManageMembers(role) && teamData && !("error" in teamData) ? (
+          <TeamSettings
+            currentUserId={user.id}
+            members={teamData.members}
+            organizationName={teamData.organizationName}
+            pendingInvites={teamData.pendingInvites.map((invite) => ({
+              createdAt: invite.createdAt,
+              email: invite.email,
+              expiresAt: invite.expiresAt,
+              id: invite.id,
+              inviteUrl: buildInviteUrl(getAppEnv().APP_URL, invite.token),
+              role: invite.role,
+            }))}
+          />
+        ) : null}
       </div>
     </div>
   );

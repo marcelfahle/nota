@@ -8,9 +8,10 @@ import { PasswordResetEmail } from "@/emails/password-reset";
 import { DEFAULT_FROM_EMAIL } from "@/lib/app-brand";
 import { clearSessionCookie, setSessionCookie } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { orgMembers, orgs, users } from "@/lib/db/schema";
+import { invites, orgMembers, orgs, users } from "@/lib/db/schema";
 import { resend } from "@/lib/email";
 import { getAppEnv, getEmailEnv } from "@/lib/env";
+import { getActiveInviteByToken } from "@/lib/invites";
 import { hashPassword, verifyPassword } from "@/lib/password";
 import { createPasswordResetToken, verifyPasswordResetToken } from "@/lib/password-reset";
 
@@ -21,6 +22,7 @@ const loginSchema = z.object({
 
 const registerSchema = z.object({
   email: z.email("Enter a valid email address"),
+  invite: z.string().trim().optional(),
   name: z.string().trim().min(1, "Name is required"),
   password: z.string().min(8, "Password must be at least 8 characters"),
 });
@@ -69,6 +71,7 @@ export async function login(_prevState: AuthFormState, formData: FormData) {
 export async function register(_prevState: AuthFormState, formData: FormData) {
   const result = registerSchema.safeParse({
     email: (formData.get("email") as string | null)?.trim().toLowerCase(),
+    invite: (formData.get("invite") as string | null)?.trim() || undefined,
     name: formData.get("name"),
     password: formData.get("password"),
   });
@@ -88,6 +91,16 @@ export async function register(_prevState: AuthFormState, formData: FormData) {
   }
 
   const passwordHash = await hashPassword(result.data.password);
+  const invite = result.data.invite ? await getActiveInviteByToken(result.data.invite) : null;
+
+  if (result.data.invite && !invite) {
+    return { error: "Invite link is invalid or expired" };
+  }
+
+  if (invite && invite.email !== result.data.email) {
+    return { error: `This invite is reserved for ${invite.email}` };
+  }
+
   const [created] = await db.transaction(async (tx) => {
     const [user] = await tx
       .insert(users)
@@ -98,18 +111,28 @@ export async function register(_prevState: AuthFormState, formData: FormData) {
       })
       .returning({ id: users.id });
 
-    const [org] = await tx
-      .insert(orgs)
-      .values({
-        name: getWorkspaceName(result.data.name),
-      })
-      .returning({ id: orgs.id });
+    if (invite) {
+      await tx.insert(orgMembers).values({
+        orgId: invite.orgId,
+        role: invite.role,
+        userId: user.id,
+      });
 
-    await tx.insert(orgMembers).values({
-      orgId: org.id,
-      role: "owner",
-      userId: user.id,
-    });
+      await tx.update(invites).set({ acceptedAt: new Date() }).where(eq(invites.id, invite.id));
+    } else {
+      const [org] = await tx
+        .insert(orgs)
+        .values({
+          name: getWorkspaceName(result.data.name),
+        })
+        .returning({ id: orgs.id });
+
+      await tx.insert(orgMembers).values({
+        orgId: org.id,
+        role: "owner",
+        userId: user.id,
+      });
+    }
 
     return [{ id: user.id }];
   });

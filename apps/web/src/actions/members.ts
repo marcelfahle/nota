@@ -12,6 +12,7 @@ import { db } from "@/lib/db";
 import { invites, orgMembers, orgRoleEnum, orgs, users } from "@/lib/db/schema";
 import { resend } from "@/lib/email";
 import { getAppEnv, getEmailEnv } from "@/lib/env";
+import { buildInviteUrl } from "@/lib/invites";
 import { canManageMembers, getInsufficientPermissionsError } from "@/lib/roles";
 
 const inviteSchema = z.object({
@@ -22,6 +23,13 @@ const inviteSchema = z.object({
 const memberRoleSchema = z.object({
   role: z.enum(orgRoleEnum.enumValues),
 });
+
+export type InviteMemberState = {
+  error?: string;
+  inviteUrl?: string;
+  success?: boolean;
+  warning?: string;
+} | null;
 
 function createInviteToken() {
   return randomBytes(32).toString("base64url");
@@ -46,10 +54,7 @@ async function countOwners(tx: Parameters<Parameters<typeof db.transaction>[0]>[
   return members.filter((member) => member.role === "owner").length;
 }
 
-export async function inviteMember(
-  _prevState: { error?: string; success?: boolean } | null,
-  formData: FormData,
-) {
+export async function inviteMember(_prevState: InviteMemberState, formData: FormData) {
   const ownerResult = await requireOwnerContext();
   if ("error" in ownerResult) {
     return { error: ownerResult.error };
@@ -87,8 +92,7 @@ export async function inviteMember(
 
   const token = createInviteToken();
   const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
-  const inviteUrl = new URL("/register", getAppEnv().APP_URL);
-  inviteUrl.searchParams.set("invite", token);
+  const inviteUrl = buildInviteUrl(getAppEnv().APP_URL, token);
 
   if (existingInvite) {
     await db
@@ -116,7 +120,7 @@ export async function inviteMember(
     await resend.emails.send({
       from: getEmailEnv().RESEND_FROM_EMAIL ?? DEFAULT_FROM_EMAIL,
       react: InviteEmail({
-        inviteUrl: inviteUrl.toString(),
+        inviteUrl,
         orgName: org.businessName ?? org.name,
         role: result.data.role,
       }),
@@ -124,10 +128,14 @@ export async function inviteMember(
       to: [result.data.email],
     });
   } catch {
-    return { error: "Invite email could not be sent. Please try again." };
+    return {
+      inviteUrl,
+      success: true,
+      warning: "Invite created, but the email could not be sent. Share the link manually.",
+    };
   }
 
-  return { success: true };
+  return { inviteUrl, success: true };
 }
 
 export async function removeMember(memberId: string) {
@@ -236,6 +244,7 @@ export async function listMembers() {
         expiresAt: invites.expiresAt,
         id: invites.id,
         role: invites.role,
+        token: invites.token,
       })
       .from(invites)
       .where(and(eq(invites.orgId, org.id), isNull(invites.acceptedAt))),
