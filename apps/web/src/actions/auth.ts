@@ -9,8 +9,7 @@ import { DEFAULT_FROM_EMAIL } from "@/lib/app-brand";
 import { clearSessionCookie, setSessionCookie } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { invites, orgMembers, orgs, users } from "@/lib/db/schema";
-import { resend } from "@/lib/email";
-import { getAppEnv, getEmailEnv } from "@/lib/env";
+import { getResend } from "@/lib/email";
 import { getActiveInviteByToken } from "@/lib/invites";
 import { hashPassword, verifyPassword } from "@/lib/password";
 import { createPasswordResetToken, verifyPasswordResetToken } from "@/lib/password-reset";
@@ -36,6 +35,12 @@ const passwordResetSchema = z.object({
   token: z.string().min(1, "Reset token is required"),
 });
 
+const passwordResetDeliveryEnvSchema = z.object({
+  APP_URL: z.url("APP_URL must be a valid absolute URL"),
+  RESEND_API_KEY: z.string().min(1, "RESEND_API_KEY is required"),
+  RESEND_FROM_EMAIL: z.string().min(1).optional(),
+});
+
 type AuthFormState = {
   error?: string;
   success?: string;
@@ -43,6 +48,18 @@ type AuthFormState = {
 
 function getWorkspaceName(name: string) {
   return `${name}'s Workspace`;
+}
+
+function getPasswordResetDeliveryConfig() {
+  const result = passwordResetDeliveryEnvSchema.safeParse(process.env);
+  if (!result.success) {
+    return { error: result.error.issues[0]?.message ?? "Password reset is not configured" };
+  }
+
+  return {
+    appUrl: result.data.APP_URL,
+    fromEmail: result.data.RESEND_FROM_EMAIL ?? DEFAULT_FROM_EMAIL,
+  };
 }
 
 export async function login(_prevState: AuthFormState, formData: FormData) {
@@ -150,6 +167,11 @@ export async function requestPasswordReset(_prevState: AuthFormState, formData: 
     return { error: result.error.issues[0].message };
   }
 
+  const deliveryConfig = getPasswordResetDeliveryConfig();
+  if ("error" in deliveryConfig) {
+    return { error: deliveryConfig.error };
+  }
+
   const [user] = await db
     .select({
       email: users.email,
@@ -163,11 +185,11 @@ export async function requestPasswordReset(_prevState: AuthFormState, formData: 
 
   if (user) {
     const token = createPasswordResetToken(user.id, user.passwordHash);
-    const resetUrl = new URL("/reset-password", getAppEnv().APP_URL);
+    const resetUrl = new URL("/reset-password", deliveryConfig.appUrl);
     resetUrl.searchParams.set("token", token);
 
-    await resend.emails.send({
-      from: getEmailEnv().RESEND_FROM_EMAIL ?? DEFAULT_FROM_EMAIL,
+    await getResend().emails.send({
+      from: deliveryConfig.fromEmail,
       react: PasswordResetEmail({
         name: user.name,
         resetUrl: resetUrl.toString(),

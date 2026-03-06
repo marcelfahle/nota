@@ -2,4 +2,12 @@ import { Resend } from "resend";
 
 import { getEmailEnv } from "@/lib/env";
 
-export const resend = new Resend(getEmailEnv().RESEND_API_KEY);
+let cachedResend: Resend | null = null;
+
+export function getResend() {
+  if (!cachedResend) {
+    cachedResend = new Resend(getEmailEnv().RESEND_API_KEY);
+  }
+
+  return cachedResend;
+}

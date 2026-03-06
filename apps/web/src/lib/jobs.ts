@@ -17,7 +17,7 @@ import {
   orgs,
   users,
 } from "@/lib/db/schema";
-import { resend } from "@/lib/email";
+import { getResend } from "@/lib/email";
 import { getEmailEnv } from "@/lib/env";
 
 const JOB_LOCK_TIMEOUT_MS = 1000 * 60 * 10;
@@ -144,7 +144,7 @@ async function sendInvoiceEmail(invoiceId: string) {
   const fromEmail = getEmailEnv().RESEND_FROM_EMAIL ?? DEFAULT_FROM_EMAIL;
   const businessName = org.businessName ?? org.name ?? APP_NAME;
 
-  await resend.emails.send({
+  await getResend().emails.send({
     attachments: [
       {
         content: pdfBuffer.toString("base64"),
@@ -176,7 +176,7 @@ async function sendInvoiceReminderEmail(invoiceId: string) {
   const fromEmail = getEmailEnv().RESEND_FROM_EMAIL ?? DEFAULT_FROM_EMAIL;
   const businessName = org.businessName ?? org.name ?? APP_NAME;
 
-  await resend.emails.send({
+  await getResend().emails.send({
     from: fromEmail,
     react: InvoiceSentEmail({
       businessName,
@@ -234,7 +234,7 @@ async function sendPaymentReceivedEmail(invoiceId: string) {
 
   const fromEmail = getEmailEnv().RESEND_FROM_EMAIL ?? DEFAULT_FROM_EMAIL;
 
-  await resend.emails.send({
+  await getResend().emails.send({
     from: fromEmail,
     react: PaymentReceivedEmail({
       clientName: client?.name ?? "Client",
