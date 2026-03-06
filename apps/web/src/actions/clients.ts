@@ -44,12 +44,12 @@ export async function createClient(
     return { error: result.error.issues[0].message };
   }
 
-  const user = await getCurrentUser();
+  const { org, user } = await getCurrentUser();
   if (result.data.bankAccountId) {
     const [bankAccount] = await db
       .select({ id: bankAccounts.id })
       .from(bankAccounts)
-      .where(and(eq(bankAccounts.id, result.data.bankAccountId), eq(bankAccounts.userId, user.id)))
+      .where(and(eq(bankAccounts.id, result.data.bankAccountId), eq(bankAccounts.orgId, org.id)))
       .limit(1);
 
     if (!bankAccount) {
@@ -59,6 +59,7 @@ export async function createClient(
 
   await db.insert(clients).values({
     ...result.data,
+    orgId: org.id,
     userId: user.id,
   });
 
@@ -78,11 +79,11 @@ export async function updateClient(
     return { error: result.error.issues[0].message };
   }
 
-  const user = await getCurrentUser();
+  const { org } = await getCurrentUser();
   const [client] = await db
     .select({ id: clients.id })
     .from(clients)
-    .where(and(eq(clients.id, clientId), eq(clients.userId, user.id)))
+    .where(and(eq(clients.id, clientId), eq(clients.orgId, org.id)))
     .limit(1);
 
   if (!client) {
@@ -93,7 +94,7 @@ export async function updateClient(
     const [bankAccount] = await db
       .select({ id: bankAccounts.id })
       .from(bankAccounts)
-      .where(and(eq(bankAccounts.id, result.data.bankAccountId), eq(bankAccounts.userId, user.id)))
+      .where(and(eq(bankAccounts.id, result.data.bankAccountId), eq(bankAccounts.orgId, org.id)))
       .limit(1);
 
     if (!bankAccount) {
@@ -104,7 +105,7 @@ export async function updateClient(
   await db
     .update(clients)
     .set({ ...result.data, updatedAt: new Date() })
-    .where(and(eq(clients.id, clientId), eq(clients.userId, user.id)));
+    .where(and(eq(clients.id, clientId), eq(clients.orgId, org.id)));
 
   revalidatePath("/clients");
   revalidatePath(`/clients/${clientId}`);
@@ -112,8 +113,8 @@ export async function updateClient(
 }
 
 export async function deleteClient(clientId: string) {
-  const user = await getCurrentUser();
+  const { org } = await getCurrentUser();
 
-  await db.delete(clients).where(and(eq(clients.id, clientId), eq(clients.userId, user.id)));
+  await db.delete(clients).where(and(eq(clients.id, clientId), eq(clients.orgId, org.id)));
   revalidatePath("/clients");
 }
