@@ -1,20 +1,15 @@
 import { and, desc, eq, ilike, or, sql } from "drizzle-orm";
 import { z } from "zod";
 
-import type { AuthenticatedRole } from "@/lib/auth";
+import {
+  createInvoiceFromApi,
+  deleteInvoiceFromApi,
+  updateInvoiceFromApi,
+} from "@/lib/api-invoice-actions";
 import { db } from "@/lib/db";
 import { clients, invoices } from "@/lib/db/schema";
-import { canDeleteInvoice, canEditInvoice, normalizeInvoiceStatus } from "@/lib/invoice-lifecycle";
-import {
-  calculateInvoiceTotals,
-  createNextInvoiceNumber,
-  getInvoiceDetail,
-} from "@/lib/invoice-service";
-import {
-  canCreateInvoice,
-  canDeleteInvoice as canDeleteInvoiceRole,
-  canEditDraft,
-} from "@/lib/roles";
+import { normalizeInvoiceStatus } from "@/lib/invoice-lifecycle";
+import { getInvoiceDetail } from "@/lib/invoice-service";
 
 export const apiLineItemSchema = z.object({
   description: z.string().trim().min(1, "Description is required"),
@@ -36,7 +31,7 @@ export const apiInvoicePayloadSchema = z.object({
 
 export type ApiInvoicePayload = z.infer<typeof apiInvoicePayloadSchema>;
 
-export { calculateInvoiceTotals, createNextInvoiceNumber, getInvoiceDetail };
+export { createInvoiceFromApi, deleteInvoiceFromApi, getInvoiceDetail, updateInvoiceFromApi };
 
 export function getInvoiceValidationError(result: z.ZodSafeParseError<ApiInvoicePayload>) {
   return result.error.issues[0]?.message ?? "Invalid invoice payload";
@@ -61,21 +56,6 @@ export function normalizeInvoicePayload(payload: Record<string, unknown>) {
       payload.reverseCharge === true || payload.reverseCharge === "true" ? "true" : "false",
     taxRate: payload.taxRate,
   };
-}
-
-export async function getScopedClient(orgId: string, clientId: string) {
-  const [client] = await db
-    .select({
-      defaultCurrency: clients.defaultCurrency,
-      email: clients.email,
-      id: clients.id,
-      name: clients.name,
-    })
-    .from(clients)
-    .where(and(eq(clients.id, clientId), eq(clients.orgId, orgId)))
-    .limit(1);
-
-  return client ?? null;
 }
 
 export async function getInvoiceList(
@@ -161,19 +141,4 @@ function getInvoiceWhereClause(
   }
 
   return and(...clauses);
-}
-
-export function canCreateInvoiceFromApi(role: AuthenticatedRole) {
-  return canCreateInvoice(role);
-}
-
-export function canEditInvoiceFromApi(role: AuthenticatedRole, status: string | null | undefined) {
-  return canEditDraft(role) && canEditInvoice(status);
-}
-
-export function canDeleteInvoiceFromApi(
-  role: AuthenticatedRole,
-  status: string | null | undefined,
-) {
-  return canDeleteInvoiceRole(role) && canDeleteInvoice(status);
 }

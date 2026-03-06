@@ -2,19 +2,12 @@ import { z } from "zod";
 
 import {
   apiInvoicePayloadSchema,
-  calculateInvoiceTotals,
-  canCreateInvoiceFromApi,
-  createNextInvoiceNumber,
-  getInvoiceDetail,
+  createInvoiceFromApi,
   getInvoiceList,
   getInvoiceValidationError,
-  getScopedClient,
   normalizeInvoicePayload,
 } from "@/lib/api-invoices";
 import { error, json, paginated, requireAuth } from "@/lib/api-response";
-import { db } from "@/lib/db";
-import { activityLog, invoices, lineItems } from "@/lib/db/schema";
-import { getInsufficientPermissionsError } from "@/lib/roles";
 
 const invoiceListQuerySchema = z.object({
   client_id: z.string().uuid().optional(),
@@ -60,10 +53,6 @@ export async function POST(request: Request) {
     return authResult.error;
   }
 
-  if (!canCreateInvoiceFromApi(authResult.auth.role)) {
-    return error(getInsufficientPermissionsError(), 403);
-  }
-
   let payload: Record<string, unknown>;
   try {
     payload = (await request.json()) as Record<string, unknown>;
@@ -76,50 +65,10 @@ export async function POST(request: Request) {
     return error(getInvoiceValidationError(result));
   }
 
-  const client = await getScopedClient(authResult.auth.org.id, result.data.clientId);
-  if (!client) {
-    return error("Client not found", 404);
+  const serviceResult = await createInvoiceFromApi(authResult.auth, result.data);
+  if ("error" in serviceResult) {
+    return error(serviceResult.error, serviceResult.status);
   }
 
-  const { lineItems: items, taxRate, ...invoiceData } = result.data;
-  const totals = calculateInvoiceTotals(items, taxRate);
-
-  const insertedInvoice = await db.transaction(async (tx) => {
-    const number = await createNextInvoiceNumber(tx, authResult.auth.org.id);
-    const [invoice] = await tx
-      .insert(invoices)
-      .values({
-        ...invoiceData,
-        ...totals,
-        number,
-        orgId: authResult.auth.org.id,
-        userId: authResult.auth.user.id,
-      })
-      .returning({ id: invoices.id });
-
-    await tx.insert(lineItems).values(
-      items.map((item, index) => ({
-        amount: (item.quantity * item.unitPrice).toFixed(2),
-        description: item.description,
-        invoiceId: invoice.id,
-        quantity: item.quantity.toFixed(2),
-        sortOrder: index,
-        unitPrice: item.unitPrice.toFixed(2),
-      })),
-    );
-
-    await tx.insert(activityLog).values({
-      action: "created",
-      invoiceId: invoice.id,
-    });
-
-    return invoice;
-  });
-
-  const invoice = await getInvoiceDetail(authResult.auth.org.id, insertedInvoice.id);
-  if (!invoice) {
-    return error("Invoice could not be loaded", 500);
-  }
-
-  return json({ data: invoice }, 201);
+  return json({ data: serviceResult.invoice, warning: serviceResult.warning }, 201);
 }
