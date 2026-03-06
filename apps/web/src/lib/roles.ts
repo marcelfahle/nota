@@ -19,6 +19,10 @@ export function canManageSettings(role: AuthenticatedRole) {
   return hasMinimumRole(role, "owner");
 }
 
+export function canManageApiKeys(role: AuthenticatedRole) {
+  return hasMinimumRole(role, "admin");
+}
+
 export function canSendInvoice(role: AuthenticatedRole) {
   return hasMinimumRole(role, "admin");
 }

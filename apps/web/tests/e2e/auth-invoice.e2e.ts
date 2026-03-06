@@ -80,6 +80,24 @@ test("updates organization settings and reflects branding", async ({ page }) => 
   await expect(page.locator("header").getByText(businessName)).toBeVisible();
 });
 
+test("creates and deletes an API key from settings", async ({ page }) => {
+  const suffix = uniqueSuffix();
+  const keyName = `Local CLI ${suffix}`;
+
+  await registerAccount(page);
+  await page.goto("/settings");
+
+  await page.getByTestId("api-keys-name").fill(keyName);
+  await page.getByTestId("api-keys-submit").click();
+
+  await expect(page.getByTestId("api-key-copy-created")).toBeVisible();
+  await expect(page.getByTestId("api-keys-settings")).toContainText("nota_");
+  await expect(page.getByTestId("api-keys-table")).toContainText(keyName);
+
+  await page.locator(`tr:has-text("${keyName}")`).getByRole("button", { name: "Delete" }).click();
+  await expect(page.locator(`tr:has-text("${keyName}")`)).toHaveCount(0);
+});
+
 test("owner invites a teammate who joins from the invite link", async ({ browser, page }) => {
   const suffix = uniqueSuffix();
   const teammateEmail = `teammate-${suffix}@example.com`;
