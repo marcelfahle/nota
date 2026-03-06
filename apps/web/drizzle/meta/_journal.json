@@ -36,6 +36,13 @@
       "when": 1772782041791,
       "tag": "0004_glorious_miracleman",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1772788142933,
+      "tag": "0005_sad_thaddeus_ross",
+      "breakpoints": true
     }
   ]
 }
