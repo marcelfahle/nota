@@ -1,11 +1,15 @@
-import { and, asc, desc, eq, ilike, or, sql } from "drizzle-orm";
+import { and, desc, eq, ilike, or, sql } from "drizzle-orm";
 import { z } from "zod";
 
 import type { AuthenticatedRole } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { activityLog, clients, invoices, lineItems, orgs } from "@/lib/db/schema";
+import { clients, invoices } from "@/lib/db/schema";
 import { canDeleteInvoice, canEditInvoice, normalizeInvoiceStatus } from "@/lib/invoice-lifecycle";
-import { formatInvoiceNumber } from "@/lib/invoice-number";
+import {
+  calculateInvoiceTotals,
+  createNextInvoiceNumber,
+  getInvoiceDetail,
+} from "@/lib/invoice-service";
 import {
   canCreateInvoice,
   canDeleteInvoice as canDeleteInvoiceRole,
@@ -32,7 +36,7 @@ export const apiInvoicePayloadSchema = z.object({
 
 export type ApiInvoicePayload = z.infer<typeof apiInvoicePayloadSchema>;
 
-type DbTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
+export { calculateInvoiceTotals, createNextInvoiceNumber, getInvoiceDetail };
 
 export function getInvoiceValidationError(result: z.ZodSafeParseError<ApiInvoicePayload>) {
   return result.error.issues[0]?.message ?? "Invalid invoice payload";
@@ -59,22 +63,6 @@ export function normalizeInvoicePayload(payload: Record<string, unknown>) {
   };
 }
 
-export function calculateInvoiceTotals(
-  items: Array<{ quantity: number; unitPrice: number }>,
-  taxRate: number,
-) {
-  const subtotal = items.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0);
-  const taxAmount = subtotal * (taxRate / 100);
-  const total = subtotal + taxAmount;
-
-  return {
-    subtotal: subtotal.toFixed(2),
-    taxAmount: taxAmount.toFixed(2),
-    taxRate: taxRate.toFixed(2),
-    total: total.toFixed(2),
-  };
-}
-
 export async function getScopedClient(orgId: string, clientId: string) {
   const [client] = await db
     .select({
@@ -88,38 +76,6 @@ export async function getScopedClient(orgId: string, clientId: string) {
     .limit(1);
 
   return client ?? null;
-}
-
-export async function createNextInvoiceNumber(tx: DbTransaction, orgId: string) {
-  const [organization] = await tx
-    .select({
-      invoiceDigits: orgs.invoiceDigits,
-      invoicePrefix: orgs.invoicePrefix,
-      invoiceSeparator: orgs.invoiceSeparator,
-      nextInvoiceNumber: orgs.nextInvoiceNumber,
-    })
-    .from(orgs)
-    .where(eq(orgs.id, orgId))
-    .limit(1);
-
-  if (!organization) {
-    throw new Error("Organization not found");
-  }
-
-  const sequenceNumber = organization.nextInvoiceNumber;
-  const number = formatInvoiceNumber({
-    digits: organization.invoiceDigits,
-    number: sequenceNumber,
-    prefix: organization.invoicePrefix,
-    separator: organization.invoiceSeparator,
-  });
-
-  await tx
-    .update(orgs)
-    .set({ nextInvoiceNumber: sequenceNumber + 1 })
-    .where(eq(orgs.id, orgId));
-
-  return number;
 }
 
 export async function getInvoiceList(
@@ -205,55 +161,6 @@ function getInvoiceWhereClause(
   }
 
   return and(...clauses);
-}
-
-export async function getInvoiceDetail(orgId: string, invoiceId: string) {
-  const [invoice] = await db
-    .select()
-    .from(invoices)
-    .where(and(eq(invoices.id, invoiceId), eq(invoices.orgId, orgId)))
-    .limit(1);
-
-  if (!invoice) {
-    return null;
-  }
-
-  const [client, items, activities] = await Promise.all([
-    db
-      .select({
-        defaultCurrency: clients.defaultCurrency,
-        email: clients.email,
-        id: clients.id,
-        name: clients.name,
-      })
-      .from(clients)
-      .where(and(eq(clients.id, invoice.clientId), eq(clients.orgId, orgId)))
-      .limit(1)
-      .then((rows) => rows[0] ?? null),
-    db
-      .select()
-      .from(lineItems)
-      .where(eq(lineItems.invoiceId, invoiceId))
-      .orderBy(asc(lineItems.sortOrder)),
-    db
-      .select({
-        action: activityLog.action,
-        createdAt: activityLog.createdAt,
-        id: activityLog.id,
-        metadata: activityLog.metadata,
-      })
-      .from(activityLog)
-      .where(eq(activityLog.invoiceId, invoiceId))
-      .orderBy(desc(activityLog.createdAt)),
-  ]);
-
-  return {
-    ...invoice,
-    activityLog: activities,
-    client,
-    lineItems: items,
-    status: invoice.status ?? "draft",
-  };
 }
 
 export function canCreateInvoiceFromApi(role: AuthenticatedRole) {
