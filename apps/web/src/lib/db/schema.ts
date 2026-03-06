@@ -70,6 +70,7 @@ export const bankAccounts = pgTable("bank_accounts", {
   id: uuid().defaultRandom().primaryKey(),
   isDefault: boolean("is_default").notNull().default(false),
   name: text().notNull(),
+  orgId: uuid("org_id").references(() => orgs.id),
   sortOrder: integer("sort_order").notNull().default(0),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
   userId: uuid("user_id")
@@ -89,6 +90,7 @@ export const clients = pgTable("clients", {
   id: uuid().defaultRandom().primaryKey(),
   name: text().notNull(),
   notes: text(),
+  orgId: uuid("org_id").references(() => orgs.id),
   updatedAt: timestamp("updated_at").defaultNow(),
   userId: uuid("user_id")
     .notNull()
@@ -125,6 +127,7 @@ export const invoices = pgTable(
     issuedAt: date("issued_at").notNull(),
     notes: text(),
     number: text().notNull(),
+    orgId: uuid("org_id").references(() => orgs.id),
     paidAt: date("paid_at"),
     reverseCharge: text("reverse_charge").default("false"),
     sentAt: timestamp("sent_at"),
@@ -141,7 +144,7 @@ export const invoices = pgTable(
       .notNull()
       .references(() => users.id),
   },
-  (table) => [unique("invoices_user_id_number_unique").on(table.userId, table.number)],
+  (table) => [unique("invoices_org_id_number_unique").on(table.orgId, table.number)],
 );
 
 export const lineItems = pgTable("line_items", {
@@ -189,6 +192,9 @@ export const usersRelations = relations(users, ({ many }) => ({
 }));
 
 export const orgsRelations = relations(orgs, ({ many }) => ({
+  bankAccounts: many(bankAccounts),
+  clients: many(clients),
+  invoices: many(invoices),
   orgMembers: many(orgMembers),
 }));
 
@@ -198,6 +204,7 @@ export const orgMembersRelations = relations(orgMembers, ({ one }) => ({
 }));
 
 export const bankAccountsRelations = relations(bankAccounts, ({ one }) => ({
+  org: one(orgs, { fields: [bankAccounts.orgId], references: [orgs.id] }),
   user: one(users, { fields: [bankAccounts.userId], references: [users.id] }),
 }));
 
@@ -207,6 +214,7 @@ export const clientsRelations = relations(clients, ({ many, one }) => ({
     references: [bankAccounts.id],
   }),
   invoices: many(invoices),
+  org: one(orgs, { fields: [clients.orgId], references: [orgs.id] }),
   user: one(users, { fields: [clients.userId], references: [users.id] }),
 }));
 
@@ -218,6 +226,7 @@ export const invoicesRelations = relations(invoices, ({ many, one }) => ({
   }),
   jobs: many(jobs),
   lineItems: many(lineItems),
+  org: one(orgs, { fields: [invoices.orgId], references: [orgs.id] }),
   user: one(users, { fields: [invoices.userId], references: [users.id] }),
 }));
 
