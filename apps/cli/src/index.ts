@@ -1,10 +1,34 @@
-#!/usr/bin/env bun
+#!/usr/bin/env node
 
-const args = process.argv.slice(2);
+import chalk from "chalk";
+import { Command } from "commander";
 
-if (args.includes("--help")) {
-  console.log("nota CLI scaffold\n\nThis workspace is reserved for the future Nota command-line interface.");
-  process.exit(0);
+import { registerClientCommands } from "./commands/clients.js";
+import { registerConfigCommands } from "./commands/config.js";
+import { registerInvoiceCommands } from "./commands/invoices.js";
+import { registerWhoAmICommand } from "./commands/whoami.js";
+import { getCliErrorMessage } from "./helpers.js";
+
+const program = new Command();
+
+program.name("nota").description("CLI for Nota").showHelpAfterError().version("0.1.0");
+
+registerConfigCommands(program);
+registerWhoAmICommand(program);
+registerInvoiceCommands(program);
+registerClientCommands(program);
+
+async function main() {
+  try {
+    await program.parseAsync(process.argv);
+  } catch (error) {
+    console.error(chalk.red(getCliErrorMessage(error)));
+    process.exitCode = 1;
+  }
 }
 
-console.log("nota CLI scaffold");
+if (process.argv.length <= 2) {
+  program.outputHelp();
+} else {
+  await main();
+}
