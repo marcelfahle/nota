@@ -43,5 +43,8 @@ jobs:
       - name: MCP static checks
         run: bun run check:mcp
 
+      - name: MCP tests
+        run: bun run test:mcp
+
       - name: Web build
         run: bun run build:web

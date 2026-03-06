@@ -1,15 +1,43 @@
 {
-  "name": "@nota/mcp",
+  "name": "@nota-app/mcp",
   "version": "0.1.0",
-  "private": true,
+  "private": false,
+  "description": "Nota MCP server for Claude Desktop, Claude Code, Cursor, and other MCP clients.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/marcelfahle/nota.git",
+    "directory": "apps/mcp"
+  },
+  "homepage": "https://github.com/marcelfahle/nota/tree/main/apps/mcp",
+  "keywords": [
+    "nota",
+    "mcp",
+    "model-context-protocol",
+    "invoicing",
+    "claude"
+  ],
   "type": "module",
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "bin": {
+    "nota-mcp": "dist/index.js"
+  },
   "scripts": {
     "dev": "bun run src/index.ts",
-    "build": "rm -rf dist && tsc -p tsconfig.json",
-    "check": "tsc --noEmit"
+    "build": "rm -rf dist && tsc -p tsconfig.json && chmod +x dist/index.js",
+    "check": "tsc --noEmit",
+    "test": "bun run build && bun test tests",
+    "prepublishOnly": "bun run test"
   },
   "devDependencies": {
-    "@types/node": "^20",
-    "typescript": "^5"
+    "@types/node": "^25.3.5",
+    "typescript": "^5.9.3"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.27.1",
+    "zod": "^4.3.6"
   }
 }
