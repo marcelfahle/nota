@@ -20,7 +20,7 @@ async function hashPassword(password: string): Promise<string> {
 const sql = neon(getDbEnv().DATABASE_URL);
 const db = drizzle({ client: sql });
 
-const email = process.env.SEED_EMAIL || "admin@inv.app";
+const email = process.env.SEED_EMAIL || "admin@nota.app";
 const name = process.env.SEED_NAME || "Admin";
 const password = process.env.SEED_PASSWORD || "changeme";
 

@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 
 import { PasswordResetEmail } from "@/emails/password-reset";
+import { DEFAULT_FROM_EMAIL } from "@/lib/app-brand";
 import { clearSessionCookie, setSessionCookie } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { users } from "@/lib/db/schema";
@@ -122,12 +123,12 @@ export async function requestPasswordReset(_prevState: AuthFormState, formData: 
     resetUrl.searchParams.set("token", token);
 
     await resend.emails.send({
-      from: getEmailEnv().RESEND_FROM_EMAIL ?? "inv. <invoices@resend.dev>",
+      from: getEmailEnv().RESEND_FROM_EMAIL ?? DEFAULT_FROM_EMAIL,
       react: PasswordResetEmail({
         name: user.name,
         resetUrl: resetUrl.toString(),
       }),
-      subject: "Reset your inv. password",
+      subject: "Reset your nota password",
       to: [user.email],
     });
   }

@@ -12,6 +12,7 @@ import {
   type StripeDockItem,
 } from "@/components/stripe-dev-dock";
 import { Button } from "@/components/ui/button";
+import { APP_MONOGRAM } from "@/lib/app-brand";
 import { cn } from "@/lib/utils";
 
 const navItems = [
@@ -35,7 +36,7 @@ function BrandMark({ brandName, logoUrl }: { brandName: string; logoUrl: string 
 
   return (
     <div className="flex h-8 w-8 items-center justify-center rounded-md bg-zinc-900">
-      <span className="text-[10px] font-semibold text-white">inv</span>
+      <span className="text-[10px] font-semibold text-white">{APP_MONOGRAM}</span>
     </div>
   );
 }

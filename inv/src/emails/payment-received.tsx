@@ -10,6 +10,8 @@ import {
   Text,
 } from "@react-email/components";
 
+import { APP_NAME } from "@/lib/app-brand";
+
 type PaymentReceivedEmailProps = {
   clientName: string;
   currency: string;
@@ -49,7 +51,7 @@ export function PaymentReceivedEmail({
       <Body style={styles.body}>
         <Container style={styles.container}>
           <Section style={styles.logoSection}>
-            <Text style={styles.logo}>inv.</Text>
+            <Text style={styles.logo}>{APP_NAME}</Text>
           </Section>
 
           <Heading style={styles.heading}>Payment Received</Heading>
@@ -67,7 +69,7 @@ export function PaymentReceivedEmail({
 
           <Hr style={styles.hr} />
 
-          <Text style={styles.footer}>This is an automated notification from inv.</Text>
+          <Text style={styles.footer}>This is an automated notification from {APP_NAME}.</Text>
         </Container>
       </Body>
     </Html>

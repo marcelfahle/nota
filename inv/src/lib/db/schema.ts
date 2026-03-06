@@ -9,6 +9,7 @@ import {
   pgTable,
   text,
   timestamp,
+  unique,
   uuid,
 } from "drizzle-orm/pg-core";
 
@@ -76,34 +77,38 @@ export const jobTypeEnum = pgEnum("job_type", [
   "send_payment_received_email",
 ]);
 
-export const invoices = pgTable("invoices", {
-  clientId: uuid("client_id")
-    .notNull()
-    .references(() => clients.id),
-  createdAt: timestamp("created_at").defaultNow(),
-  currency: text().default("EUR"),
-  dueAt: date("due_at").notNull(),
-  id: uuid().defaultRandom().primaryKey(),
-  internalNotes: text("internal_notes"),
-  issuedAt: date("issued_at").notNull(),
-  notes: text(),
-  number: text().notNull().unique(),
-  paidAt: date("paid_at"),
-  reverseCharge: text("reverse_charge").default("false"),
-  sentAt: timestamp("sent_at"),
-  status: invoiceStatusEnum().default("draft"),
-  stripePaymentIntentId: text("stripe_payment_intent_id"),
-  stripePaymentLinkId: text("stripe_payment_link_id"),
-  stripePaymentLinkUrl: text("stripe_payment_link_url"),
-  subtotal: numeric({ precision: 12, scale: 2 }),
-  taxAmount: numeric("tax_amount", { precision: 12, scale: 2 }),
-  taxRate: numeric("tax_rate", { precision: 5, scale: 2 }),
-  total: numeric({ precision: 12, scale: 2 }),
-  updatedAt: timestamp("updated_at").defaultNow(),
-  userId: uuid("user_id")
-    .notNull()
-    .references(() => users.id),
-});
+export const invoices = pgTable(
+  "invoices",
+  {
+    clientId: uuid("client_id")
+      .notNull()
+      .references(() => clients.id),
+    createdAt: timestamp("created_at").defaultNow(),
+    currency: text().default("EUR"),
+    dueAt: date("due_at").notNull(),
+    id: uuid().defaultRandom().primaryKey(),
+    internalNotes: text("internal_notes"),
+    issuedAt: date("issued_at").notNull(),
+    notes: text(),
+    number: text().notNull(),
+    paidAt: date("paid_at"),
+    reverseCharge: text("reverse_charge").default("false"),
+    sentAt: timestamp("sent_at"),
+    status: invoiceStatusEnum().default("draft"),
+    stripePaymentIntentId: text("stripe_payment_intent_id"),
+    stripePaymentLinkId: text("stripe_payment_link_id"),
+    stripePaymentLinkUrl: text("stripe_payment_link_url"),
+    subtotal: numeric({ precision: 12, scale: 2 }),
+    taxAmount: numeric("tax_amount", { precision: 12, scale: 2 }),
+    taxRate: numeric("tax_rate", { precision: 5, scale: 2 }),
+    total: numeric({ precision: 12, scale: 2 }),
+    updatedAt: timestamp("updated_at").defaultNow(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id),
+  },
+  (table) => [unique("invoices_user_id_number_unique").on(table.userId, table.number)],
+);
 
 export const lineItems = pgTable("line_items", {
   amount: numeric({ precision: 12, scale: 2 }).notNull(),

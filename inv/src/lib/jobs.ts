@@ -4,6 +4,7 @@ import { and, asc, eq, isNull, lt, lte, or } from "drizzle-orm";
 import { InvoicePdf } from "@/components/invoice-pdf";
 import { InvoiceSentEmail } from "@/emails/invoice-sent";
 import { PaymentReceivedEmail } from "@/emails/payment-received";
+import { APP_NAME, DEFAULT_FROM_EMAIL } from "@/lib/app-brand";
 import { getPdfLogoSrc } from "@/lib/branding";
 import { db } from "@/lib/db";
 import {
@@ -133,8 +134,7 @@ async function sendInvoiceEmail(invoiceId: string) {
     }),
   );
 
-  const fromEmail =
-    getEmailEnv().RESEND_FROM_EMAIL ?? `${user.businessName ?? "inv."} <invoices@resend.dev>`;
+  const fromEmail = getEmailEnv().RESEND_FROM_EMAIL ?? DEFAULT_FROM_EMAIL;
 
   await resend.emails.send({
     attachments: [
@@ -145,7 +145,7 @@ async function sendInvoiceEmail(invoiceId: string) {
     ],
     from: fromEmail,
     react: InvoiceSentEmail({
-      businessName: user.businessName ?? "inv.",
+      businessName: user.businessName ?? APP_NAME,
       clientName: client.name,
       currency: invoice.currency ?? "EUR",
       dueAt: invoice.dueAt,
@@ -153,7 +153,7 @@ async function sendInvoiceEmail(invoiceId: string) {
       paymentLinkUrl: invoice.stripePaymentLinkUrl,
       total: invoice.total ?? "0",
     }),
-    subject: `Invoice ${invoice.number} from ${user.businessName ?? "inv."}`,
+    subject: `Invoice ${invoice.number} from ${user.businessName ?? APP_NAME}`,
     to: [client.email],
   });
 }
@@ -165,13 +165,12 @@ async function sendInvoiceReminderEmail(invoiceId: string) {
     throw new Error("Invoice has no Stripe payment link");
   }
 
-  const fromEmail =
-    getEmailEnv().RESEND_FROM_EMAIL ?? `${user.businessName ?? "inv."} <invoices@resend.dev>`;
+  const fromEmail = getEmailEnv().RESEND_FROM_EMAIL ?? DEFAULT_FROM_EMAIL;
 
   await resend.emails.send({
     from: fromEmail,
     react: InvoiceSentEmail({
-      businessName: user.businessName ?? "inv.",
+      businessName: user.businessName ?? APP_NAME,
       clientName: client.name,
       currency: invoice.currency ?? "EUR",
       dueAt: invoice.dueAt,
@@ -180,7 +179,7 @@ async function sendInvoiceReminderEmail(invoiceId: string) {
       reminder: true,
       total: invoice.total ?? "0",
     }),
-    subject: `Reminder: Invoice ${invoice.number} — ${user.businessName ?? "inv."}`,
+    subject: `Reminder: Invoice ${invoice.number} — ${user.businessName ?? APP_NAME}`,
     to: [client.email],
   });
 
@@ -224,8 +223,7 @@ async function sendPaymentReceivedEmail(invoiceId: string) {
     throw new Error("User not found");
   }
 
-  const fromEmail =
-    getEmailEnv().RESEND_FROM_EMAIL ?? `${user.businessName ?? "inv."} <invoices@resend.dev>`;
+  const fromEmail = getEmailEnv().RESEND_FROM_EMAIL ?? DEFAULT_FROM_EMAIL;
 
   await resend.emails.send({
     from: fromEmail,

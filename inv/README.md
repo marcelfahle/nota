@@ -1,6 +1,6 @@
-# inv
+# nota
 
-`inv` is a single-owner invoicing app built with Next.js, Drizzle, Neon, Stripe, and Resend.
+`nota` is a single-owner invoicing app built with Next.js, Drizzle, Neon, Stripe, and Resend.
 
 It is designed for the use case this repo actually has today:
 
@@ -62,7 +62,7 @@ bun run db:seed
 
 By default the seed command creates:
 
-- email: `admin@inv.app`
+- email: `admin@nota.app`
 - password: `changeme`
 
 Override those with `SEED_EMAIL`, `SEED_NAME`, and `SEED_PASSWORD`.
@@ -174,4 +174,4 @@ Before relying on the app in production:
 5. Export and restore a database backup at least once.
 6. Set a real `RESEND_FROM_EMAIL` on a verified domain.
 
-For a fuller post-deploy flow, use [docs/runbooks/inv-deploy-smoke-checklist.md](./docs/runbooks/inv-deploy-smoke-checklist.md) and [docs/runbooks/vercel-first-deploy.md](./docs/runbooks/vercel-first-deploy.md).
+For a fuller post-deploy flow, use [docs/runbooks/nota-deploy-smoke-checklist.md](./docs/runbooks/nota-deploy-smoke-checklist.md) and [docs/runbooks/vercel-first-deploy.md](./docs/runbooks/vercel-first-deploy.md).

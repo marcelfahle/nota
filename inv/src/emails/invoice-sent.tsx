@@ -11,6 +11,8 @@ import {
   Text,
 } from "@react-email/components";
 
+import { APP_NAME } from "@/lib/app-brand";
+
 type InvoiceSentEmailProps = {
   businessName: string;
   clientName: string;
@@ -58,7 +60,7 @@ export function InvoiceSentEmail({
       <Body style={styles.body}>
         <Container style={styles.container}>
           <Section style={styles.logoSection}>
-            <Text style={styles.logo}>inv.</Text>
+            <Text style={styles.logo}>{APP_NAME}</Text>
           </Section>
 
           <Heading style={styles.heading}>{reminder ? "Payment Reminder" : "New Invoice"}</Heading>

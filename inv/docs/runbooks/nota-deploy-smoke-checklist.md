@@ -1,18 +1,18 @@
 ---
-title: inv Deploy Smoke Checklist
+title: nota Deploy Smoke Checklist
 type: runbook
 status: active
 date: 2026-03-06
 ---
 
-# inv Deploy Smoke Checklist
+# nota Deploy Smoke Checklist
 
-Use this after a production deploy, after rotating Stripe/Resend credentials, or before trusting the app for real invoicing.
+Use this after a production deploy, after rotating Stripe or Resend credentials, or before trusting the app for real invoicing.
 
 ## Preflight
 
 - Confirm the deploy is on the expected commit.
-- Confirm `DATABASE_URL`, `SESSION_SECRET`, `RESEND_API_KEY`, `RESEND_FROM_EMAIL`, `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, and `CRON_SECRET` are set.
+- Confirm `DATABASE_URL`, `SESSION_SECRET`, `RESEND_API_KEY`, `RESEND_FROM_EMAIL`, `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `APP_URL`, and `CRON_SECRET` are set.
 - Confirm Drizzle migrations have been applied.
 - Confirm the owner account can sign in.
 
@@ -34,7 +34,7 @@ Use this after a production deploy, after rotating Stripe/Resend credentials, or
 
 - Send the draft invoice through the app.
 - Confirm invoice status becomes `sent`.
-- Confirm the Stripe dock shows a payment link ID and URL.
+- Confirm the bottom dock shows a payment link ID and URL.
 - Download the PDF and confirm the header branding looks correct.
 - Confirm the invoice email arrives with the PDF attached and a working payment link.
 
@@ -59,6 +59,7 @@ Use this after a production deploy, after rotating Stripe/Resend credentials, or
 - Trigger `/api/cron/jobs` with `Authorization: Bearer $CRON_SECRET`.
 - Confirm pending jobs move to `completed`, or to retry state with `last_error` if delivery fails.
 - Trigger the route again and confirm retried jobs continue to drain.
+- Confirm dead jobs appear in the bottom dock with their latest error.
 
 ## Lifecycle Safety
 
@@ -78,4 +79,4 @@ Use this after a production deploy, after rotating Stripe/Resend credentials, or
 - Check Vercel function logs for the failing route.
 - Check Stripe event delivery logs for webhook failures.
 - Check Resend activity for outbound email failures.
-- Confirm the Stripe dock matches the invoice state in the database.
+- Confirm the internal dock matches the invoice state in the database.

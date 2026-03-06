@@ -1,7 +1,8 @@
-export default function Home() {
-  return (
-    <div className="flex min-h-screen items-center justify-center">
-      <p className="text-lg">Hello inv.</p>
-    </div>
-  );
+import { redirect } from "next/navigation";
+
+import { getCurrentUserOrNull } from "@/lib/auth";
+
+export default async function Home() {
+  const user = await getCurrentUserOrNull();
+  redirect(user ? "/invoices" : "/login");
 }

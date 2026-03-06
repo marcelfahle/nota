@@ -1,5 +1,7 @@
 import { Document, Image, Page, StyleSheet, Text, View } from "@react-pdf/renderer";
 
+import { APP_MONOGRAM, APP_NAME } from "@/lib/app-brand";
+
 type LineItem = {
   amount: string;
   description: string;
@@ -288,10 +290,10 @@ export function InvoicePdf({ business, client, invoice }: InvoicePdfProps) {
                 <Image src={business.logoSrc} style={styles.logoImage} />
               ) : (
                 <View style={styles.logo}>
-                  <Text>inv</Text>
+                  <Text>{APP_MONOGRAM}</Text>
                 </View>
               )}
-              <Text style={styles.logoText}>inv.</Text>
+              <Text style={styles.logoText}>{APP_NAME}</Text>
             </View>
             {business.name && (
               <Text style={{ color: "#3f3f46", fontSize: 10, marginTop: 4 }}>{business.name}</Text>

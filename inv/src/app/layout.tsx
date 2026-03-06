@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import { DM_Sans, DM_Mono } from "next/font/google";
 
+import { APP_NAME } from "@/lib/app-brand";
+
 import "./globals.css";
 
 const sans = DM_Sans({
@@ -15,8 +17,8 @@ const mono = DM_Mono({
 });
 
 export const metadata: Metadata = {
-  description: "Personal invoicing app",
-  title: "inv.",
+  description: "Minimal invoicing for independent work.",
+  title: APP_NAME,
 };
 
 export default function RootLayout({

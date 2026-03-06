@@ -1,11 +1,11 @@
 ---
-title: inv Vercel First Deploy
+title: nota Vercel First Deploy
 type: runbook
 status: active
 date: 2026-03-06
 ---
 
-# inv Vercel First Deploy
+# nota Vercel First Deploy
 
 Use this when deploying the invoicing app from this repository to Vercel for the first time.
 
@@ -84,4 +84,4 @@ After the first successful deploy:
 3. Confirm the dock shows the created Stripe resources.
 4. Complete a Stripe test payment.
 5. Confirm the invoice becomes `paid`.
-6. Run the smoke checklist in [`inv-deploy-smoke-checklist.md`](./inv-deploy-smoke-checklist.md).
+6. Run the smoke checklist in [`nota-deploy-smoke-checklist.md`](./nota-deploy-smoke-checklist.md).

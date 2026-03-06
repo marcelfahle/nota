@@ -11,8 +11,10 @@ import {
   Text,
 } from "@react-email/components";
 
+import { APP_NAME } from "@/lib/app-brand";
+
 export function PasswordResetEmail({ name, resetUrl }: { name: string; resetUrl: string }) {
-  const preview = "Reset your inv. password";
+  const preview = `Reset your ${APP_NAME} password`;
 
   return (
     <Html>
@@ -21,7 +23,7 @@ export function PasswordResetEmail({ name, resetUrl }: { name: string; resetUrl:
       <Body style={styles.body}>
         <Container style={styles.container}>
           <Section style={styles.logoSection}>
-            <Text style={styles.logo}>inv.</Text>
+            <Text style={styles.logo}>{APP_NAME}</Text>
           </Section>
 
           <Heading style={styles.heading}>Reset your password</Heading>
@@ -29,8 +31,7 @@ export function PasswordResetEmail({ name, resetUrl }: { name: string; resetUrl:
           <Text style={styles.text}>Hi {name},</Text>
 
           <Text style={styles.text}>
-            Use the button below to set a new password for your inv. account. This link expires in
-            one hour.
+            {`Use the button below to set a new password for your ${APP_NAME} account. This link expires in one hour.`}
           </Text>
 
           <Section style={styles.buttonSection}>
@@ -43,7 +44,7 @@ export function PasswordResetEmail({ name, resetUrl }: { name: string; resetUrl:
 
           <Hr style={styles.hr} />
 
-          <Text style={styles.footer}>inv.</Text>
+          <Text style={styles.footer}>{APP_NAME}</Text>
         </Container>
       </Body>
     </Html>
