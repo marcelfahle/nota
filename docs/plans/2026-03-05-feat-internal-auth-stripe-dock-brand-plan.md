@@ -138,16 +138,16 @@ This phase is required before the app should fully replace a bookkeeping tool.
 ### Authorization Sweep
 
 Key files to harden first:
-- `nota/src/app/(dashboard)/invoices/page.tsx`
-- `nota/src/app/(dashboard)/invoices/new/page.tsx`
-- `nota/src/app/(dashboard)/invoices/[id]/page.tsx`
-- `nota/src/app/(dashboard)/invoices/[id]/edit/page.tsx`
-- `nota/src/app/(dashboard)/clients/page.tsx`
-- `nota/src/app/(dashboard)/clients/[id]/page.tsx`
-- `nota/src/actions/invoices.ts`
-- `nota/src/actions/clients.ts`
-- `nota/src/app/api/invoices/[id]/pdf/route.ts`
-- `nota/src/app/api/invoices/[id]/xrechnung/route.ts`
+- `apps/web/src/app/(dashboard)/invoices/page.tsx`
+- `apps/web/src/app/(dashboard)/invoices/new/page.tsx`
+- `apps/web/src/app/(dashboard)/invoices/[id]/page.tsx`
+- `apps/web/src/app/(dashboard)/invoices/[id]/edit/page.tsx`
+- `apps/web/src/app/(dashboard)/clients/page.tsx`
+- `apps/web/src/app/(dashboard)/clients/[id]/page.tsx`
+- `apps/web/src/actions/invoices.ts`
+- `apps/web/src/actions/clients.ts`
+- `apps/web/src/app/api/invoices/[id]/pdf/route.ts`
+- `apps/web/src/app/api/invoices/[id]/xrechnung/route.ts`
 
 Patterns:
 - list pages filter by `userId`
@@ -170,19 +170,19 @@ Use existing columns on `invoices`:
 And combine with `activity_log` to show timeline hints.
 
 Potential implementation files:
-- `nota/src/components/stripe-dev-dock.tsx` (new)
-- `nota/src/app/(dashboard)/layout.tsx`
-- `nota/src/lib/auth.ts`
+- `apps/web/src/components/stripe-dev-dock.tsx` (new)
+- `apps/web/src/app/(dashboard)/layout.tsx`
+- `apps/web/src/lib/auth.ts`
 - small server-side query helper if needed
 
 ### Brand Wiring
 
 Potential implementation files:
-- `nota/src/actions/settings.ts`
-- `nota/src/components/settings-form.tsx`
-- `nota/src/app/(dashboard)/settings/page.tsx`
-- `nota/src/app/(dashboard)/layout.tsx`
-- `nota/src/components/invoice-pdf.tsx` (follow-up)
+- `apps/web/src/actions/settings.ts`
+- `apps/web/src/components/settings-form.tsx`
+- `apps/web/src/app/(dashboard)/settings/page.tsx`
+- `apps/web/src/app/(dashboard)/layout.tsx`
+- `apps/web/src/components/invoice-pdf.tsx` (follow-up)
 
 ### Configuration & Deploy Hygiene
 
@@ -257,7 +257,7 @@ Follow-up operational additions:
 
 ## Risks & Notes
 
-- The repository root is `/Users/mf/code/payme`, not `nota/`, so plan/docs commits must be made carefully
+- The repository root is `/Users/mf/code/payme`, not `apps/web`, so plan/docs commits must be made carefully
 - There is an unrelated working-tree change in `ralph/ralph.sh` that must stay out of `nota` commits
 - A real auth-library migration is valuable, but authorization hardening should land first because it is the more urgent defect
 - The Stripe dock should stay explicitly internal-facing and not become customer UI

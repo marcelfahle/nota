@@ -5,21 +5,22 @@ on:
     paths:
       - ".github/**"
       - "docs/**"
-      - "nota/**"
+      - "apps/**"
+      - "package.json"
+      - "bun.lock"
   push:
     branches:
       - main
     paths:
       - ".github/**"
       - "docs/**"
-      - "nota/**"
+      - "apps/**"
+      - "package.json"
+      - "bun.lock"
 
 jobs:
-  nota:
+  monorepo:
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: nota
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -30,11 +31,17 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
-      - name: Unit tests
-        run: bun test
+      - name: Web unit tests
+        run: bun run test:web
 
-      - name: Static checks
-        run: bun run check
+      - name: Web static checks
+        run: bun run check:web
 
-      - name: Build
-        run: bun run build
+      - name: CLI static checks
+        run: bun run check:cli
+
+      - name: MCP static checks
+        run: bun run check:mcp
+
+      - name: Web build
+        run: bun run build:web

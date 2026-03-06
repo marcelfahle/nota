@@ -144,7 +144,7 @@ INSERT INTO bank_accounts (user_id, name, details, is_default)
 SELECT id, 'Primary', bank_details, true FROM users WHERE bank_details IS NOT NULL AND bank_details != '';
 ```
 
-**Drizzle schema additions** in `nota/src/lib/db/schema.ts`:
+**Drizzle schema additions** in `apps/web/src/lib/db/schema.ts`:
 
 ```typescript
 // On users table - add:
@@ -171,19 +171,19 @@ bankAccountId: uuid("bank_account_id").references(() => bankAccounts.id, { onDel
 
 | File | Changes |
 |------|---------|
-| `nota/src/lib/db/schema.ts` | Add `invoiceSeparator`, `invoiceDigits` to users; new `bankAccounts` table; add `bankAccountId` to clients |
-| `nota/src/actions/settings.ts` | Accept new invoice format fields; new CRUD actions for bank accounts |
-| `nota/src/actions/invoices.ts` | Extract `formatInvoiceNumber()` utility; use new format fields; resolve bank account for PDF |
-| `nota/src/actions/clients.ts` | Accept `bankAccountId` on create/update |
-| `nota/src/components/settings-form.tsx` | Invoice numbering section with live preview; bank accounts CRUD list |
-| `nota/src/components/client-form.tsx` | Bank account selector dropdown (conditional on 2+ accounts) |
-| `nota/src/components/client-detail.tsx` | Show assigned bank account; bank account selector in edit mode |
-| `nota/src/components/invoice-pdf.tsx` | Accept bank details from resolved bank account instead of `business.bankDetails` |
-| `nota/src/app/api/invoices/[id]/pdf/route.ts` | Resolve bank account when generating PDF |
+| `apps/web/src/lib/db/schema.ts` | Add `invoiceSeparator`, `invoiceDigits` to users; new `bankAccounts` table; add `bankAccountId` to clients |
+| `apps/web/src/actions/settings.ts` | Accept new invoice format fields; new CRUD actions for bank accounts |
+| `apps/web/src/actions/invoices.ts` | Extract `formatInvoiceNumber()` utility; use new format fields; resolve bank account for PDF |
+| `apps/web/src/actions/clients.ts` | Accept `bankAccountId` on create/update |
+| `apps/web/src/components/settings-form.tsx` | Invoice numbering section with live preview; bank accounts CRUD list |
+| `apps/web/src/components/client-form.tsx` | Bank account selector dropdown (conditional on 2+ accounts) |
+| `apps/web/src/components/client-detail.tsx` | Show assigned bank account; bank account selector in edit mode |
+| `apps/web/src/components/invoice-pdf.tsx` | Accept bank details from resolved bank account instead of `business.bankDetails` |
+| `apps/web/src/app/api/invoices/[id]/pdf/route.ts` | Resolve bank account when generating PDF |
 
 ### Invoice Number Generation (Extracted Utility)
 
-Create `nota/src/lib/invoice-number.ts`:
+Create `apps/web/src/lib/invoice-number.ts`:
 
 ```typescript
 export function formatInvoiceNumber(opts: {
@@ -198,7 +198,7 @@ export function formatInvoiceNumber(opts: {
 }
 ```
 
-Used in both `createInvoice` and `duplicateInvoice` (replacing the inline logic at lines ~87 and ~362 of `nota/src/actions/invoices.ts`).
+Used in both `createInvoice` and `duplicateInvoice` (replacing the inline logic at lines ~87 and ~362 of `apps/web/src/actions/invoices.ts`).
 
 ### Bank Account Resolution Order
 
@@ -321,12 +321,12 @@ erDiagram
 
 ## References
 
-- Current schema: `nota/src/lib/db/schema.ts`
-- Invoice number generation: `nota/src/actions/invoices.ts:87` and `:362`
-- Settings form: `nota/src/components/settings-form.tsx`
-- Settings action: `nota/src/actions/settings.ts`
-- Client form: `nota/src/components/client-form.tsx`
-- Client detail: `nota/src/components/client-detail.tsx`
-- Invoice PDF: `nota/src/components/invoice-pdf.tsx:393-403`
-- PDF download route: `nota/src/app/api/invoices/[id]/pdf/route.ts`
-- Send invoice: `nota/src/actions/invoices.ts:179-291`
+- Current schema: `apps/web/src/lib/db/schema.ts`
+- Invoice number generation: `apps/web/src/actions/invoices.ts:87` and `:362`
+- Settings form: `apps/web/src/components/settings-form.tsx`
+- Settings action: `apps/web/src/actions/settings.ts`
+- Client form: `apps/web/src/components/client-form.tsx`
+- Client detail: `apps/web/src/components/client-detail.tsx`
+- Invoice PDF: `apps/web/src/components/invoice-pdf.tsx:393-403`
+- PDF download route: `apps/web/src/app/api/invoices/[id]/pdf/route.ts`
+- Send invoice: `apps/web/src/actions/invoices.ts:179-291`

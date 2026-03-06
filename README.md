@@ -1,15 +1,17 @@
 # nota
 
-This repository currently centers on [`nota/`](./nota/), which contains `nota`, a single-owner invoicing app built with Next.js, Drizzle, Neon, Stripe, and Resend.
+`nota` is a lean monorepo for the Nota invoicing product.
 
-## Primary app
+## Apps
 
-- [`nota/`](./nota/): `nota`, a production-focused invoicing app with PDF and XRechnung export, Stripe payment links, and Vercel-ready cron/webhook routes
+- [`apps/web`](./apps/web): the deployed Next.js invoicing app
+- [`apps/cli`](./apps/cli): scaffold for the future Nota CLI
+- [`apps/mcp`](./apps/mcp): scaffold for the future Nota MCP server
 
 ## Start here
 
-- App overview and local setup: [`nota/README.md`](./nota/README.md)
-- Vercel first deploy runbook: [`nota/docs/runbooks/vercel-first-deploy.md`](./nota/docs/runbooks/vercel-first-deploy.md)
-- Post-deploy smoke checklist: [`nota/docs/runbooks/nota-deploy-smoke-checklist.md`](./nota/docs/runbooks/nota-deploy-smoke-checklist.md)
+- Web app setup: [`apps/web/README.md`](./apps/web/README.md)
+- Vercel first deploy runbook: [`apps/web/docs/runbooks/vercel-first-deploy.md`](./apps/web/docs/runbooks/vercel-first-deploy.md)
+- Post-deploy smoke checklist: [`apps/web/docs/runbooks/nota-deploy-smoke-checklist.md`](./apps/web/docs/runbooks/nota-deploy-smoke-checklist.md)
 
-The maintained app now lives in `nota/`.
+`packages/` is intentionally absent for now. Add shared packages only when code is actually shared across apps.

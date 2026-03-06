@@ -1,7 +1,17 @@
 version: 2
 updates:
   - package-ecosystem: "npm"
-    directory: "/nota"
+    directory: "/apps/web"
+    schedule:
+      interval: "weekly"
+
+  - package-ecosystem: "npm"
+    directory: "/apps/cli"
+    schedule:
+      interval: "weekly"
+
+  - package-ecosystem: "npm"
+    directory: "/apps/mcp"
     schedule:
       interval: "weekly"
 

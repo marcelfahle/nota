@@ -11,17 +11,17 @@ Use this when deploying the invoicing app from this repository to Vercel for the
 
 ## Project shape
 
-The app itself lives in `nota/`.
+The app itself lives in `apps/web`.
 
 In Vercel:
 
 1. Import the Git repository.
-2. Set the project root directory to `nota`.
+2. Set the project root directory to `apps/web`.
 3. Keep the framework preset as Next.js.
 
 ## Required environment variables
 
-Set every value from `nota/.env.example`:
+Set every value from `apps/web/.env.example`:
 
 - `DATABASE_URL`
 - `SESSION_SECRET`
@@ -40,7 +40,7 @@ Set `APP_URL` to the final production domain before testing password reset email
 2. Run database migrations against the production database:
 
 ```bash
-cd nota
+cd apps/web
 bun install
 bun run db:migrate
 ```
@@ -48,7 +48,7 @@ bun run db:migrate
 3. Seed the initial owner account once:
 
 ```bash
-cd nota
+cd apps/web
 SEED_EMAIL='you@example.com' SEED_NAME='Your Name' SEED_PASSWORD='strong-password' bun run db:seed
 ```
 
@@ -68,7 +68,7 @@ https://your-domain.com/api/webhooks/stripe
 
 ## Cron setup
 
-This app keeps cron schedules in `nota/vercel.json`, so Vercel will register:
+This app keeps cron schedules in `apps/web/vercel.json`, so Vercel will register:
 
 - `/api/cron/overdue`
 - `/api/cron/jobs`

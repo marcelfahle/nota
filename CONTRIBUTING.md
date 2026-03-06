@@ -4,18 +4,21 @@ Thanks for contributing.
 
 ## Scope
 
-The maintained application in this repository is [`nota/`](./nota/). Most contributions should target that directory.
+This repository is organized as a monorepo under `apps/`.
+
+- `apps/web` is the production app today.
+- `apps/cli` and `apps/mcp` are reserved for the CLI and MCP server.
 
 ## Local workflow
 
-1. Copy `nota/.env.example` to `nota/.env` and fill in safe development credentials.
-2. Install dependencies in `nota/`.
-3. Run migrations and seed a development owner account.
-4. Start the app and verify the affected flow locally.
+1. Copy `apps/web/.env.example` to `apps/web/.env` and fill in safe development credentials.
+2. Install dependencies from the repository root.
+3. Run migrations and seed a development owner account in `apps/web`.
+4. Start the web app and verify the affected flow locally.
 
 ```bash
-cd nota
 bun install
+cd apps/web
 bun run db:migrate
 bun run db:seed
 bun run dev
@@ -23,19 +26,20 @@ bun run dev
 
 ## Before opening a PR
 
-Run the checks from `nota/`:
+Run the shared checks from the repository root:
 
 ```bash
-bun test
-bun run check
-bun run build
+bun run test:web
+bun run check:web
+bun run check:cli
+bun run check:mcp
+bun run build:web
 ```
 
 If you touched browser flows, also run:
 
 ```bash
-bunx playwright install chromium
-bun run test:e2e
+bun run test:e2e:web
 ```
 
 ## Guidelines

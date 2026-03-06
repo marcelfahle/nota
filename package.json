@@ -1,0 +1,26 @@
+{
+  "name": "nota",
+  "private": true,
+  "packageManager": "bun@1.3.6",
+  "workspaces": [
+    "apps/*"
+  ],
+  "scripts": {
+    "dev": "bun run --cwd apps/web dev",
+    "build": "bun run build:web && bun run build:cli && bun run build:mcp",
+    "check": "bun run check:web && bun run check:cli && bun run check:mcp",
+    "test": "bun run --cwd apps/web test",
+    "test:e2e": "bun run --cwd apps/web test:e2e",
+    "dev:web": "bun run --cwd apps/web dev",
+    "build:web": "bun run --cwd apps/web build",
+    "check:web": "bun run --cwd apps/web check",
+    "test:web": "bun run --cwd apps/web test",
+    "test:e2e:web": "bun run --cwd apps/web test:e2e",
+    "dev:cli": "bun run --cwd apps/cli dev",
+    "build:cli": "bun run --cwd apps/cli build",
+    "check:cli": "bun run --cwd apps/cli check",
+    "dev:mcp": "bun run --cwd apps/mcp dev",
+    "build:mcp": "bun run --cwd apps/mcp build",
+    "check:mcp": "bun run --cwd apps/mcp check"
+  }
+}
