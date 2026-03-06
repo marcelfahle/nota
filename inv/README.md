@@ -146,3 +146,5 @@ Before relying on the app in production:
 3. Confirm the overdue cron marks a test invoice correctly.
 4. Export and restore a database backup at least once.
 5. Set a real `RESEND_FROM_EMAIL` on a verified domain.
+
+For a fuller post-deploy flow, use [inv-deploy-smoke-checklist.md](/Users/mf/code/payme/docs/runbooks/inv-deploy-smoke-checklist.md).

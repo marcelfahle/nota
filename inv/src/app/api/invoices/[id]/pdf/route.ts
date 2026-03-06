@@ -4,6 +4,7 @@ import { NextResponse } from "next/server";
 
 import { InvoicePdf } from "@/components/invoice-pdf";
 import { getCurrentUser } from "@/lib/auth";
+import { getPdfLogoSrc } from "@/lib/branding";
 import { db } from "@/lib/db";
 import { bankAccounts, clients, invoices, lineItems } from "@/lib/db/schema";
 
@@ -56,11 +57,14 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
     bankDetails = defaultBa?.details ?? null;
   }
 
+  const logoSrc = await getPdfLogoSrc(user.logoUrl);
+
   const buffer = await renderToBuffer(
     InvoicePdf({
       business: {
         address: user.businessAddress,
         bankDetails,
+        logoSrc,
         name: user.businessName,
         vatNumber: user.vatNumber,
       },

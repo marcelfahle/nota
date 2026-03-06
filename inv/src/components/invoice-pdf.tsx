@@ -1,4 +1,4 @@
-import { Document, Page, StyleSheet, Text, View } from "@react-pdf/renderer";
+import { Document, Image, Page, StyleSheet, Text, View } from "@react-pdf/renderer";
 
 type LineItem = {
   amount: string;
@@ -11,6 +11,7 @@ type InvoicePdfProps = {
   business: {
     address?: string | null;
     bankDetails?: string | null;
+    logoSrc?: string | null;
     name?: string | null;
     vatNumber?: string | null;
   };
@@ -151,6 +152,12 @@ const styles = StyleSheet.create({
     textAlign: "center" as const,
     width: 28,
   },
+  logoImage: {
+    borderRadius: 6,
+    height: 28,
+    objectFit: "contain" as const,
+    width: 28,
+  },
   logoRow: {
     alignItems: "center" as const,
     flexDirection: "row" as const,
@@ -277,9 +284,13 @@ export function InvoicePdf({ business, client, invoice }: InvoicePdfProps) {
         <View style={styles.header}>
           <View>
             <View style={styles.logoRow}>
-              <View style={styles.logo}>
-                <Text>inv</Text>
-              </View>
+              {business.logoSrc ? (
+                <Image src={business.logoSrc} style={styles.logoImage} />
+              ) : (
+                <View style={styles.logo}>
+                  <Text>inv</Text>
+                </View>
+              )}
               <Text style={styles.logoText}>inv.</Text>
             </View>
             {business.name && (

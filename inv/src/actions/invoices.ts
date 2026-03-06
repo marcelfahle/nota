@@ -8,6 +8,7 @@ import { z } from "zod";
 import { InvoicePdf } from "@/components/invoice-pdf";
 import { InvoiceSentEmail } from "@/emails/invoice-sent";
 import { getCurrentUser } from "@/lib/auth";
+import { getPdfLogoSrc } from "@/lib/branding";
 import { db } from "@/lib/db";
 import { activityLog, bankAccounts, clients, invoices, lineItems, users } from "@/lib/db/schema";
 import { resend } from "@/lib/email";
@@ -263,6 +264,15 @@ export async function sendInvoice(invoiceId: string) {
     return { error: "Invoice not found" };
   }
 
+  if (
+    (existingInvoice.status === "sent" || existingInvoice.status === "overdue") &&
+    existingInvoice.stripePaymentLinkId &&
+    existingInvoice.stripePaymentLinkUrl &&
+    (await hasSentActivity(invoiceId))
+  ) {
+    return { success: true };
+  }
+
   if (existingInvoice.status !== "draft") {
     return { error: "Only draft invoices can be sent" };
   }
@@ -332,12 +342,15 @@ export async function sendInvoice(invoiceId: string) {
   let paymentLinkId: string | null = null;
 
   try {
+    const logoSrc = await getPdfLogoSrc(user.logoUrl);
+
     // Step 3: Generate PDF buffer
     const pdfBuffer = await renderToBuffer(
       InvoicePdf({
         business: {
           address: user.businessAddress,
           bankDetails,
+          logoSrc,
           name: user.businessName,
           vatNumber: user.vatNumber,
         },
