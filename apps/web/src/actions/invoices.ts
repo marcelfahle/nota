@@ -278,7 +278,10 @@ export async function deleteInvoice(invoiceId: string) {
     return { error: "Only draft invoices can be deleted" };
   }
 
-  await db.delete(invoices).where(and(eq(invoices.id, invoiceId), eq(invoices.orgId, org.id)));
+  await db.transaction(async (tx) => {
+    await tx.delete(activityLog).where(eq(activityLog.invoiceId, invoiceId));
+    await tx.delete(invoices).where(and(eq(invoices.id, invoiceId), eq(invoices.orgId, org.id)));
+  });
   revalidatePath("/invoices");
 
   return { success: true };
