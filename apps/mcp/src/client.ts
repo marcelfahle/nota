@@ -446,7 +446,7 @@ export class NotaClient {
   }
 
   private async requestBinary(path: string, init?: RequestInit): Promise<BinaryDownload> {
-    const response = await this.fetchImpl(new URL(path, `${this.apiBaseUrl}/`), {
+    const response = await this.fetchImpl(this.buildUrl(path), {
       ...init,
       headers: this.buildHeaders(init?.headers),
     });
@@ -463,7 +463,7 @@ export class NotaClient {
   }
 
   private async requestJson<T>(path: string, init?: RequestInit): Promise<T> {
-    const response = await this.fetchImpl(new URL(path, `${this.apiBaseUrl}/`), {
+    const response = await this.fetchImpl(this.buildUrl(path), {
       ...init,
       headers: this.buildHeaders(init?.headers),
     });
@@ -480,6 +480,10 @@ export class NotaClient {
     }
 
     return parsed as T;
+  }
+
+  private buildUrl(path: string) {
+    return new URL(path.replace(/^\//, ""), `${this.apiBaseUrl}/`);
   }
 
   private buildHeaders(headers?: HeadersInit) {

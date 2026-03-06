@@ -1,3 +1,10 @@
-#!/usr/bin/env bun
+#!/usr/bin/env node
 
-console.log("nota MCP scaffold");
+import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+
+import { createNotaMcpServer } from "./server";
+
+const server = createNotaMcpServer();
+const transport = new StdioServerTransport();
+
+await server.connect(transport);
