@@ -31,28 +31,26 @@ export async function createBankAccount(
     return { error: result.error.issues[0].message };
   }
 
-  const user = await getCurrentUser();
+  const { org, user } = await getCurrentUser();
 
   await db.transaction(async (tx) => {
     // If this is the first account or marked as default, ensure only one default
     const existing = await tx
       .select({ id: bankAccounts.id })
       .from(bankAccounts)
-      .where(eq(bankAccounts.userId, user.id));
+      .where(eq(bankAccounts.orgId, org.id));
 
     const shouldBeDefault = result.data.isDefault || existing.length === 0;
 
     if (shouldBeDefault) {
-      await tx
-        .update(bankAccounts)
-        .set({ isDefault: false })
-        .where(eq(bankAccounts.userId, user.id));
+      await tx.update(bankAccounts).set({ isDefault: false }).where(eq(bankAccounts.orgId, org.id));
     }
 
     await tx.insert(bankAccounts).values({
       details: result.data.details,
       isDefault: shouldBeDefault,
       name: result.data.name,
+      orgId: org.id,
       userId: user.id,
     });
   });
@@ -71,14 +69,11 @@ export async function updateBankAccount(
     return { error: result.error.issues[0].message };
   }
 
-  const user = await getCurrentUser();
+  const { org } = await getCurrentUser();
 
   await db.transaction(async (tx) => {
     if (result.data.isDefault) {
-      await tx
-        .update(bankAccounts)
-        .set({ isDefault: false })
-        .where(eq(bankAccounts.userId, user.id));
+      await tx.update(bankAccounts).set({ isDefault: false }).where(eq(bankAccounts.orgId, org.id));
     }
 
     await tx
@@ -89,7 +84,7 @@ export async function updateBankAccount(
         name: result.data.name,
         updatedAt: new Date(),
       })
-      .where(and(eq(bankAccounts.id, accountId), eq(bankAccounts.userId, user.id)));
+      .where(and(eq(bankAccounts.id, accountId), eq(bankAccounts.orgId, org.id)));
   });
 
   revalidatePath("/settings");
@@ -97,13 +92,13 @@ export async function updateBankAccount(
 }
 
 export async function deleteBankAccount(accountId: string) {
-  const user = await getCurrentUser();
+  const { org } = await getCurrentUser();
 
   // Prevent deleting the default account
   const [account] = await db
     .select({ isDefault: bankAccounts.isDefault })
     .from(bankAccounts)
-    .where(and(eq(bankAccounts.id, accountId), eq(bankAccounts.userId, user.id)))
+    .where(and(eq(bankAccounts.id, accountId), eq(bankAccounts.orgId, org.id)))
     .limit(1);
 
   if (!account) {
@@ -114,9 +109,7 @@ export async function deleteBankAccount(accountId: string) {
     return { error: "Cannot delete the default account. Set another account as default first." };
   }
 
-  await db
-    .delete(bankAccounts)
-    .where(and(eq(bankAccounts.id, accountId), eq(bankAccounts.userId, user.id)));
+  await db.delete(bankAccounts).where(and(eq(bankAccounts.id, accountId), eq(bankAccounts.orgId, org.id)));
 
   revalidatePath("/settings");
   return { success: true };
