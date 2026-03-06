@@ -5,6 +5,7 @@ import {
   canCreateInvoice,
   canDeleteInvoice,
   canEditDraft,
+  canManageApiKeys,
   canManageBankAccounts,
   canManageMembers,
   canManageSettings,
@@ -20,6 +21,10 @@ test("role permissions follow the owner > admin > member hierarchy", () => {
 
   expect(canManageSettings("owner")).toBe(true);
   expect(canManageSettings("admin")).toBe(false);
+
+  expect(canManageApiKeys("owner")).toBe(true);
+  expect(canManageApiKeys("admin")).toBe(true);
+  expect(canManageApiKeys("member")).toBe(false);
 
   expect(canManageBankAccounts("owner")).toBe(true);
   expect(canManageBankAccounts("admin")).toBe(true);
