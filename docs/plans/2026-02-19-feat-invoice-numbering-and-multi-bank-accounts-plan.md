@@ -22,7 +22,7 @@ Design principles:
 
 ## Problem Statement
 
-**Invoice numbering**: The current system hardcodes a 4-digit zero-padded format with a dash separator (`inv-0001`). The user's existing numbering scheme uses 7 digits (`0000083`) and they need to continue from their current sequence. They cannot configure the digit count, separator, or starting number.
+**Invoice numbering**: The current system hardcodes a 4-digit zero-padded format with a dash separator (`nota-0001`). The user's existing numbering scheme uses 7 digits (`0000083`) and they need to continue from their current sequence. They cannot configure the digit count, separator, or starting number.
 
 **Bank accounts**: The current system stores bank details as a single freeform text field on the user profile. The user has multiple bank accounts (EUR and USD) used for different customers and needs to assign the correct one per client, with the right details automatically appearing on invoices.
 
@@ -37,18 +37,18 @@ Invoice Numbering
 ┌─────────────────────────────────────────────────────┐
 │                                                     │
 │  Prefix        Separator    Digits                  │
-│  [inv    ]     [ - ▾ ]     [ 7 ▾ ]                 │
+│  [nota   ]     [ - ▾ ]     [ 7 ▾ ]                 │
 │                                                     │
 │  Next Number                                        │
 │  [ 84       ]                                       │
 │                                                     │
 │  ┌─────────────────────────────────────────────┐    │
 │  │  Preview                                    │    │
-│  │  Your next invoice: inv-0000084             │    │
-│  │  Then: inv-0000085, inv-0000086             │    │
+│  │  Your next invoice: nota-0000084             │    │
+│  │  Then: nota-0000085, nota-0000086             │    │
 │  └─────────────────────────────────────────────┘    │
 │                                                     │
-│  Last issued: inv-0000083                           │
+│  Last issued: nota-0000083                           │
 │                                                     │
 └─────────────────────────────────────────────────────┘
 ```
@@ -144,7 +144,7 @@ INSERT INTO bank_accounts (user_id, name, details, is_default)
 SELECT id, 'Primary', bank_details, true FROM users WHERE bank_details IS NOT NULL AND bank_details != '';
 ```
 
-**Drizzle schema additions** in `inv/src/lib/db/schema.ts`:
+**Drizzle schema additions** in `nota/src/lib/db/schema.ts`:
 
 ```typescript
 // On users table - add:
@@ -171,19 +171,19 @@ bankAccountId: uuid("bank_account_id").references(() => bankAccounts.id, { onDel
 
 | File | Changes |
 |------|---------|
-| `inv/src/lib/db/schema.ts` | Add `invoiceSeparator`, `invoiceDigits` to users; new `bankAccounts` table; add `bankAccountId` to clients |
-| `inv/src/actions/settings.ts` | Accept new invoice format fields; new CRUD actions for bank accounts |
-| `inv/src/actions/invoices.ts` | Extract `formatInvoiceNumber()` utility; use new format fields; resolve bank account for PDF |
-| `inv/src/actions/clients.ts` | Accept `bankAccountId` on create/update |
-| `inv/src/components/settings-form.tsx` | Invoice numbering section with live preview; bank accounts CRUD list |
-| `inv/src/components/client-form.tsx` | Bank account selector dropdown (conditional on 2+ accounts) |
-| `inv/src/components/client-detail.tsx` | Show assigned bank account; bank account selector in edit mode |
-| `inv/src/components/invoice-pdf.tsx` | Accept bank details from resolved bank account instead of `business.bankDetails` |
-| `inv/src/app/api/invoices/[id]/pdf/route.ts` | Resolve bank account when generating PDF |
+| `nota/src/lib/db/schema.ts` | Add `invoiceSeparator`, `invoiceDigits` to users; new `bankAccounts` table; add `bankAccountId` to clients |
+| `nota/src/actions/settings.ts` | Accept new invoice format fields; new CRUD actions for bank accounts |
+| `nota/src/actions/invoices.ts` | Extract `formatInvoiceNumber()` utility; use new format fields; resolve bank account for PDF |
+| `nota/src/actions/clients.ts` | Accept `bankAccountId` on create/update |
+| `nota/src/components/settings-form.tsx` | Invoice numbering section with live preview; bank accounts CRUD list |
+| `nota/src/components/client-form.tsx` | Bank account selector dropdown (conditional on 2+ accounts) |
+| `nota/src/components/client-detail.tsx` | Show assigned bank account; bank account selector in edit mode |
+| `nota/src/components/invoice-pdf.tsx` | Accept bank details from resolved bank account instead of `business.bankDetails` |
+| `nota/src/app/api/invoices/[id]/pdf/route.ts` | Resolve bank account when generating PDF |
 
 ### Invoice Number Generation (Extracted Utility)
 
-Create `inv/src/lib/invoice-number.ts`:
+Create `nota/src/lib/invoice-number.ts`:
 
 ```typescript
 export function formatInvoiceNumber(opts: {
@@ -198,7 +198,7 @@ export function formatInvoiceNumber(opts: {
 }
 ```
 
-Used in both `createInvoice` and `duplicateInvoice` (replacing the inline logic at lines ~87 and ~362 of `inv/src/actions/invoices.ts`).
+Used in both `createInvoice` and `duplicateInvoice` (replacing the inline logic at lines ~87 and ~362 of `nota/src/actions/invoices.ts`).
 
 ### Bank Account Resolution Order
 
@@ -321,12 +321,12 @@ erDiagram
 
 ## References
 
-- Current schema: `inv/src/lib/db/schema.ts`
-- Invoice number generation: `inv/src/actions/invoices.ts:87` and `:362`
-- Settings form: `inv/src/components/settings-form.tsx`
-- Settings action: `inv/src/actions/settings.ts`
-- Client form: `inv/src/components/client-form.tsx`
-- Client detail: `inv/src/components/client-detail.tsx`
-- Invoice PDF: `inv/src/components/invoice-pdf.tsx:393-403`
-- PDF download route: `inv/src/app/api/invoices/[id]/pdf/route.ts`
-- Send invoice: `inv/src/actions/invoices.ts:179-291`
+- Current schema: `nota/src/lib/db/schema.ts`
+- Invoice number generation: `nota/src/actions/invoices.ts:87` and `:362`
+- Settings form: `nota/src/components/settings-form.tsx`
+- Settings action: `nota/src/actions/settings.ts`
+- Client form: `nota/src/components/client-form.tsx`
+- Client detail: `nota/src/components/client-detail.tsx`
+- Invoice PDF: `nota/src/components/invoice-pdf.tsx:393-403`
+- PDF download route: `nota/src/app/api/invoices/[id]/pdf/route.ts`
+- Send invoice: `nota/src/actions/invoices.ts:179-291`

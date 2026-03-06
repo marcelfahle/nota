@@ -9,7 +9,7 @@ date: 2026-03-05
 
 ## Overview
 
-Turn `inv` from a promising internal prototype into a deployable single-owner invoicing app.
+Turn `nota` from a promising internal prototype into a deployable single-owner invoicing app.
 
 This plan intentionally optimizes for the user's actual use case:
 - one owner
@@ -115,7 +115,7 @@ Wire the existing `users.logoUrl` field into the product.
 Initial brand scope:
 - add `Logo URL` to settings
 - render logo in the dashboard header when present
-- preserve a clean text fallback (`inv.`) when absent or broken
+- preserve a clean text fallback (`nota`) when absent or broken
 
 Optional follow-up:
 - add logo to invoice PDF header once the basic auth/authorization hardening is done
@@ -138,16 +138,16 @@ This phase is required before the app should fully replace a bookkeeping tool.
 ### Authorization Sweep
 
 Key files to harden first:
-- `inv/src/app/(dashboard)/invoices/page.tsx`
-- `inv/src/app/(dashboard)/invoices/new/page.tsx`
-- `inv/src/app/(dashboard)/invoices/[id]/page.tsx`
-- `inv/src/app/(dashboard)/invoices/[id]/edit/page.tsx`
-- `inv/src/app/(dashboard)/clients/page.tsx`
-- `inv/src/app/(dashboard)/clients/[id]/page.tsx`
-- `inv/src/actions/invoices.ts`
-- `inv/src/actions/clients.ts`
-- `inv/src/app/api/invoices/[id]/pdf/route.ts`
-- `inv/src/app/api/invoices/[id]/xrechnung/route.ts`
+- `nota/src/app/(dashboard)/invoices/page.tsx`
+- `nota/src/app/(dashboard)/invoices/new/page.tsx`
+- `nota/src/app/(dashboard)/invoices/[id]/page.tsx`
+- `nota/src/app/(dashboard)/invoices/[id]/edit/page.tsx`
+- `nota/src/app/(dashboard)/clients/page.tsx`
+- `nota/src/app/(dashboard)/clients/[id]/page.tsx`
+- `nota/src/actions/invoices.ts`
+- `nota/src/actions/clients.ts`
+- `nota/src/app/api/invoices/[id]/pdf/route.ts`
+- `nota/src/app/api/invoices/[id]/xrechnung/route.ts`
 
 Patterns:
 - list pages filter by `userId`
@@ -170,19 +170,19 @@ Use existing columns on `invoices`:
 And combine with `activity_log` to show timeline hints.
 
 Potential implementation files:
-- `inv/src/components/stripe-dev-dock.tsx` (new)
-- `inv/src/app/(dashboard)/layout.tsx`
-- `inv/src/lib/auth.ts`
+- `nota/src/components/stripe-dev-dock.tsx` (new)
+- `nota/src/app/(dashboard)/layout.tsx`
+- `nota/src/lib/auth.ts`
 - small server-side query helper if needed
 
 ### Brand Wiring
 
 Potential implementation files:
-- `inv/src/actions/settings.ts`
-- `inv/src/components/settings-form.tsx`
-- `inv/src/app/(dashboard)/settings/page.tsx`
-- `inv/src/app/(dashboard)/layout.tsx`
-- `inv/src/components/invoice-pdf.tsx` (follow-up)
+- `nota/src/actions/settings.ts`
+- `nota/src/components/settings-form.tsx`
+- `nota/src/app/(dashboard)/settings/page.tsx`
+- `nota/src/app/(dashboard)/layout.tsx`
+- `nota/src/components/invoice-pdf.tsx` (follow-up)
 
 ### Configuration & Deploy Hygiene
 
@@ -257,8 +257,8 @@ Follow-up operational additions:
 
 ## Risks & Notes
 
-- The repository root is `/Users/mf/code/payme`, not `inv/`, so plan/docs commits must be made carefully
-- There is an unrelated working-tree change in `ralph/ralph.sh` that must stay out of `inv` commits
+- The repository root is `/Users/mf/code/payme`, not `nota/`, so plan/docs commits must be made carefully
+- There is an unrelated working-tree change in `ralph/ralph.sh` that must stay out of `nota` commits
 - A real auth-library migration is valuable, but authorization hardening should land first because it is the more urgent defect
 - The Stripe dock should stay explicitly internal-facing and not become customer UI
 
