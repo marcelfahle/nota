@@ -1,11 +1,9 @@
 import { and, eq, isNull, ne, or } from "drizzle-orm";
 import { NextResponse } from "next/server";
 
-import { PaymentReceivedEmail } from "@/emails/payment-received";
 import { db } from "@/lib/db";
-import { activityLog, clients, invoices, users } from "@/lib/db/schema";
-import { resend } from "@/lib/email";
-import { getEmailEnv, getStripeWebhookEnv } from "@/lib/env";
+import { activityLog, invoices, jobs } from "@/lib/db/schema";
+import { getStripeWebhookEnv } from "@/lib/env";
 import { stripe } from "@/lib/stripe";
 
 export async function POST(request: Request) {
@@ -39,16 +37,10 @@ export async function POST(request: Request) {
 
     const today = new Date().toISOString().split("T")[0];
 
-    // Send payment received notification to business owner
     const [invoice] = await db
       .select({
-        clientId: invoices.clientId,
-        currency: invoices.currency,
-        number: invoices.number,
         status: invoices.status,
         stripePaymentIntentId: invoices.stripePaymentIntentId,
-        total: invoices.total,
-        userId: invoices.userId,
       })
       .from(invoices)
       .where(eq(invoices.id, invoiceId))
@@ -106,35 +98,11 @@ export async function POST(request: Request) {
       },
     });
 
-    const [client] = await db
-      .select({ name: clients.name })
-      .from(clients)
-      .where(eq(clients.id, updatedInvoice.clientId))
-      .limit(1);
-
-    const [user] = await db
-      .select({ businessName: users.businessName, email: users.email })
-      .from(users)
-      .where(eq(users.id, updatedInvoice.userId))
-      .limit(1);
-
-    if (user) {
-      const fromEmail =
-        getEmailEnv().RESEND_FROM_EMAIL ?? `${user.businessName ?? "inv."} <invoices@resend.dev>`;
-
-      await resend.emails.send({
-        from: fromEmail,
-        react: PaymentReceivedEmail({
-          clientName: client?.name ?? "Client",
-          currency: updatedInvoice.currency ?? "EUR",
-          invoiceNumber: updatedInvoice.number,
-          paidAt: today,
-          total: updatedInvoice.total ?? "0",
-        }),
-        subject: `Payment received: ${updatedInvoice.number}`,
-        to: [user.email],
-      });
-    }
+    await db.insert(jobs).values({
+      invoiceId,
+      payload: { invoiceId },
+      type: "send_payment_received_email",
+    });
   }
 
   return NextResponse.json({ received: true });

@@ -15,6 +15,13 @@
       "when": 1771499096345,
       "tag": "0001_invoice-numbering-and-bank-accounts",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1772830800000,
+      "tag": "0002_background-jobs",
+      "breakpoints": true
     }
   ]
 }

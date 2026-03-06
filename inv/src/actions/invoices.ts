@@ -1,19 +1,32 @@
 "use server";
 
-import { renderToBuffer } from "@react-pdf/renderer";
-import { and, asc, eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
-import { InvoicePdf } from "@/components/invoice-pdf";
-import { InvoiceSentEmail } from "@/emails/invoice-sent";
 import { getCurrentUser } from "@/lib/auth";
-import { getPdfLogoSrc } from "@/lib/branding";
 import { db } from "@/lib/db";
-import { activityLog, bankAccounts, clients, invoices, lineItems, users } from "@/lib/db/schema";
-import { resend } from "@/lib/email";
-import { getEmailEnv } from "@/lib/env";
+import {
+  activityLog,
+  bankAccounts,
+  clients,
+  invoices,
+  jobs,
+  lineItems,
+  users,
+} from "@/lib/db/schema";
+import {
+  canCancelInvoice,
+  canDeleteInvoice,
+  canEditInvoice,
+  canMarkInvoicePaid,
+  canSendInvoice,
+  canSendInvoiceReminder,
+  isInvoiceSendFinalized,
+  normalizeInvoiceStatus,
+} from "@/lib/invoice-lifecycle";
 import { formatInvoiceNumber } from "@/lib/invoice-number";
+import { processPendingEmailJobs } from "@/lib/jobs";
 import { createPaymentLink, deactivatePaymentLink } from "@/lib/stripe";
 
 const lineItemSchema = z.object({
@@ -33,8 +46,6 @@ const invoiceSchema = z.object({
   reverseCharge: z.string().default("false"),
   taxRate: z.coerce.number().min(0).max(100).default(0),
 });
-
-const REMINDABLE_STATUSES = new Set(["sent", "overdue"]);
 
 function calculateTotals(items: Array<{ quantity: number; unitPrice: number }>, taxRate: number) {
   const subtotal = items.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0);
@@ -194,7 +205,7 @@ export async function updateInvoice(
     return { error: "Invoice not found" };
   }
 
-  if (invoice.status !== "draft") {
+  if (!canEditInvoice(invoice.status)) {
     return { error: "Only draft invoices can be edited" };
   }
 
@@ -245,7 +256,7 @@ export async function deleteInvoice(invoiceId: string) {
     return { error: "Invoice not found" };
   }
 
-  if (invoice.status !== "draft") {
+  if (!canDeleteInvoice(invoice.status)) {
     return { error: "Only draft invoices can be deleted" };
   }
 
@@ -265,15 +276,16 @@ export async function sendInvoice(invoiceId: string) {
   }
 
   if (
-    (existingInvoice.status === "sent" || existingInvoice.status === "overdue") &&
-    existingInvoice.stripePaymentLinkId &&
-    existingInvoice.stripePaymentLinkUrl &&
-    (await hasSentActivity(invoiceId))
+    isInvoiceSendFinalized(
+      existingInvoice.status,
+      await hasSentActivity(invoiceId),
+      Boolean(existingInvoice.stripePaymentLinkId && existingInvoice.stripePaymentLinkUrl),
+    )
   ) {
     return { success: true };
   }
 
-  if (existingInvoice.status !== "draft") {
+  if (!canSendInvoice(existingInvoice.status)) {
     return { error: "Only draft invoices can be sent" };
   }
 
@@ -314,75 +326,38 @@ export async function sendInvoice(invoiceId: string) {
     return { error: "Client not found" };
   }
 
-  const items = await db
-    .select()
-    .from(lineItems)
-    .where(eq(lineItems.invoiceId, invoiceId))
-    .orderBy(asc(lineItems.sortOrder));
-
   // Step 2: Resolve bank account for this invoice
-  let bankDetails: string | null = null;
   if (client.bankAccountId) {
-    const [ba] = await db
-      .select({ details: bankAccounts.details })
+    const [bankAccount] = await db
+      .select({ id: bankAccounts.id })
       .from(bankAccounts)
       .where(and(eq(bankAccounts.id, client.bankAccountId), eq(bankAccounts.userId, user.id)))
       .limit(1);
-    bankDetails = ba?.details ?? null;
-  }
-  if (!bankDetails) {
-    const [defaultBa] = await db
-      .select({ details: bankAccounts.details })
-      .from(bankAccounts)
-      .where(and(eq(bankAccounts.userId, user.id), eq(bankAccounts.isDefault, true)))
-      .limit(1);
-    bankDetails = defaultBa?.details ?? null;
+
+    if (!bankAccount) {
+      await db
+        .update(invoices)
+        .set({
+          sentAt: null,
+          status: "draft",
+          updatedAt: new Date(),
+        })
+        .where(
+          and(
+            eq(invoices.id, invoiceId),
+            eq(invoices.userId, user.id),
+            eq(invoices.status, "sent"),
+            eq(invoices.sentAt, sentAt),
+          ),
+        );
+      return { error: "Assigned bank account not found" };
+    }
   }
 
   let paymentLinkId: string | null = null;
 
   try {
-    const logoSrc = await getPdfLogoSrc(user.logoUrl);
-
-    // Step 3: Generate PDF buffer
-    const pdfBuffer = await renderToBuffer(
-      InvoicePdf({
-        business: {
-          address: user.businessAddress,
-          bankDetails,
-          logoSrc,
-          name: user.businessName,
-          vatNumber: user.vatNumber,
-        },
-        client: {
-          address: client.address,
-          company: client.company,
-          email: client.email,
-          name: client.name,
-          vatNumber: client.vatNumber,
-        },
-        invoice: {
-          currency: invoice.currency ?? "EUR",
-          dueAt: invoice.dueAt,
-          issuedAt: invoice.issuedAt,
-          lineItems: items.map((item) => ({
-            amount: item.amount,
-            description: item.description,
-            quantity: item.quantity,
-            unitPrice: item.unitPrice,
-          })),
-          notes: invoice.notes,
-          number: invoice.number,
-          reverseCharge: invoice.reverseCharge,
-          subtotal: invoice.subtotal ?? "0",
-          taxAmount: invoice.taxAmount ?? "0",
-          taxRate: invoice.taxRate ?? "0",
-          total: invoice.total ?? "0",
-        },
-      }),
-    );
-
-    // Step 4: Create Stripe payment link
+    // Step 3: Create Stripe payment link
     const paymentLink = await createPaymentLink({
       currency: invoice.currency,
       id: invoice.id,
@@ -391,39 +366,28 @@ export async function sendInvoice(invoiceId: string) {
     });
     paymentLinkId = paymentLink.id;
 
-    // Step 5: Send email via Resend with PDF attachment and payment link
-    const fromEmail =
-      getEmailEnv().RESEND_FROM_EMAIL ?? `${user.businessName ?? "inv."} <invoices@resend.dev>`;
-    await resend.emails.send({
-      attachments: [
-        {
-          content: pdfBuffer.toString("base64"),
-          filename: `${invoice.number.replaceAll("/", "-")}.pdf`,
-        },
-      ],
-      from: fromEmail,
-      react: InvoiceSentEmail({
-        businessName: user.businessName ?? "inv.",
-        clientName: client.name,
-        currency: invoice.currency ?? "EUR",
-        dueAt: invoice.dueAt,
-        invoiceNumber: invoice.number,
-        paymentLinkUrl: paymentLink.url,
-        total: invoice.total ?? "0",
-      }),
-      subject: `Invoice ${invoice.number} from ${user.businessName ?? "inv."}`,
-      to: [client.email],
-    });
+    // Step 4: Persist Stripe link data and enqueue the outbound email job.
+    await db.transaction(async (tx) => {
+      await tx
+        .update(invoices)
+        .set({
+          stripePaymentLinkId: paymentLink.id,
+          stripePaymentLinkUrl: paymentLink.url,
+          updatedAt: new Date(),
+        })
+        .where(and(eq(invoices.id, invoiceId), eq(invoices.userId, user.id)));
 
-    // Step 6: Persist Stripe link data without overwriting later state transitions.
-    await db
-      .update(invoices)
-      .set({
-        stripePaymentLinkId: paymentLink.id,
-        stripePaymentLinkUrl: paymentLink.url,
-        updatedAt: new Date(),
-      })
-      .where(and(eq(invoices.id, invoiceId), eq(invoices.userId, user.id)));
+      await tx.insert(activityLog).values({
+        action: "sent",
+        invoiceId,
+      });
+
+      await tx.insert(jobs).values({
+        invoiceId,
+        payload: { invoiceId },
+        type: "send_invoice_email",
+      });
+    });
   } catch {
     if (paymentLinkId) {
       await deactivatePaymentLink(paymentLinkId).catch(() => null);
@@ -448,15 +412,10 @@ export async function sendInvoice(invoiceId: string) {
     return { error: "Invoice could not be sent. Please try again." };
   }
 
-  // Step 7: Log activity
-  await db.insert(activityLog).values({
-    action: "sent",
-    invoiceId,
-  });
-
   // Step 8: Revalidate paths
   revalidatePath("/invoices");
   revalidatePath(`/invoices/${invoiceId}`);
+  await processPendingEmailJobs(1);
 
   return { success: true };
 }
@@ -468,45 +427,19 @@ export async function sendReminder(invoiceId: string) {
     return { error: "Invoice not found" };
   }
 
-  if (!invoice.status || !REMINDABLE_STATUSES.has(invoice.status)) {
+  if (!canSendInvoiceReminder(invoice.status, Boolean(invoice.stripePaymentLinkUrl))) {
     return { error: "Only sent or overdue invoices can receive reminders" };
   }
 
-  if (!invoice.stripePaymentLinkUrl) {
-    return { error: "This invoice has no Stripe payment link to include in a reminder" };
-  }
-
-  const client = await getOwnedClient(user.id, invoice.clientId);
-  if (!client) {
-    return { error: "Client not found" };
-  }
-
-  const fromEmail =
-    getEmailEnv().RESEND_FROM_EMAIL ?? `${user.businessName ?? "inv."} <invoices@resend.dev>`;
-
-  await resend.emails.send({
-    from: fromEmail,
-    react: InvoiceSentEmail({
-      businessName: user.businessName ?? "inv.",
-      clientName: client.name,
-      currency: invoice.currency ?? "EUR",
-      dueAt: invoice.dueAt,
-      invoiceNumber: invoice.number,
-      paymentLinkUrl: invoice.stripePaymentLinkUrl,
-      reminder: true,
-      total: invoice.total ?? "0",
-    }),
-    subject: `Reminder: Invoice ${invoice.number} — ${user.businessName ?? "inv."}`,
-    to: [client.email],
-  });
-
-  await db.insert(activityLog).values({
-    action: "reminder_sent",
+  await db.insert(jobs).values({
     invoiceId,
+    payload: { invoiceId },
+    type: "send_invoice_reminder_email",
   });
 
   revalidatePath("/invoices");
   revalidatePath(`/invoices/${invoiceId}`);
+  await processPendingEmailJobs(1);
 
   return { success: true };
 }
@@ -602,7 +535,7 @@ export async function markInvoiceSent(invoiceId: string) {
     return { error: "Invoice not found" };
   }
 
-  if (invoice.status !== "draft") {
+  if (!canSendInvoice(invoice.status)) {
     return { error: "Only draft invoices can be marked as sent" };
   }
 
@@ -636,18 +569,18 @@ export async function markInvoicePaid(invoiceId: string) {
     return { error: "Invoice not found" };
   }
 
-  if (invoice.status === "cancelled") {
+  const normalizedStatus = normalizeInvoiceStatus(invoice.status);
+
+  if (normalizedStatus === "cancelled") {
     return { error: "Cancelled invoices cannot be marked as paid" };
   }
 
-  if (invoice.status === "paid") {
+  if (!canMarkInvoicePaid(normalizedStatus)) {
     return { success: true };
   }
 
-  const currentStatus = invoice.status ?? "draft";
-
   if (
-    currentStatus === "sent" &&
+    normalizedStatus === "sent" &&
     !invoice.stripePaymentLinkId &&
     !(await hasSentActivity(invoiceId))
   ) {
@@ -668,7 +601,7 @@ export async function markInvoicePaid(invoiceId: string) {
       and(
         eq(invoices.id, invoiceId),
         eq(invoices.userId, user.id),
-        eq(invoices.status, currentStatus),
+        eq(invoices.status, normalizedStatus),
       ),
     )
     .returning({ id: invoices.id });
@@ -697,22 +630,22 @@ export async function cancelInvoice(invoiceId: string) {
     return { error: "Invoice not found" };
   }
 
-  if (invoice.status === "paid") {
+  const normalizedStatus = normalizeInvoiceStatus(invoice.status);
+
+  if (normalizedStatus === "paid") {
     return { error: "Paid invoices cannot be cancelled" };
   }
 
-  if (invoice.status === "cancelled") {
+  if (normalizedStatus === "cancelled") {
     return { success: true };
   }
 
-  const currentStatus = invoice.status ?? "draft";
-
-  if (!REMINDABLE_STATUSES.has(currentStatus)) {
+  if (!canCancelInvoice(normalizedStatus)) {
     return { error: "Only sent or overdue invoices can be cancelled" };
   }
 
   if (
-    currentStatus === "sent" &&
+    normalizedStatus === "sent" &&
     !invoice.stripePaymentLinkId &&
     !(await hasSentActivity(invoiceId))
   ) {
@@ -731,7 +664,7 @@ export async function cancelInvoice(invoiceId: string) {
       and(
         eq(invoices.id, invoiceId),
         eq(invoices.userId, user.id),
-        eq(invoices.status, currentStatus),
+        eq(invoices.status, normalizedStatus),
       ),
     )
     .returning({ id: invoices.id });

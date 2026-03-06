@@ -221,6 +221,11 @@ Follow-up operational additions:
 - [x] Env requirements are explicit and validated
 - [x] The app still builds successfully after the changes
 
+### Follow-up Hardening
+- [x] Registration and password-reset flows exist
+- [x] A basic `bun test` suite covers password, reset-token, and invoice lifecycle logic
+- [x] Outbound invoice emails are moved onto a retryable DB-backed job flow
+
 ## Implementation Phases
 
 ### Phase 1: Owner Scoping Sweep
@@ -258,6 +263,6 @@ Follow-up operational additions:
 ## Immediate Next Step
 
 Implement the next trust-and-operations pass:
-- add a few integration tests around login, scoped invoice access, and invoice lifecycle transitions
-- add a small deploy smoke checklist for webhook, cron, and payment-link verification
-- optionally add logo support to generated invoice PDFs
+- add deeper integration or browser tests around login, scoped invoice access, and webhook payment completion
+- add visibility into queued/dead email jobs inside the Stripe dock or settings
+- consider moving password reset and registration behind invite-only or feature-flagged access if the app stays private

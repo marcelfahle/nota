@@ -1,6 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 
-const PUBLIC_PATHS = ["/login", "/api/webhooks"];
+const PUBLIC_PATHS = [
+  "/api/cron",
+  "/api/webhooks",
+  "/forgot-password",
+  "/login",
+  "/register",
+  "/reset-password",
+];
 
 export function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;

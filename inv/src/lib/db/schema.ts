@@ -69,6 +69,13 @@ export const invoiceStatusEnum = pgEnum("invoice_status", [
   "cancelled",
 ]);
 
+export const jobStatusEnum = pgEnum("job_status", ["pending", "processing", "completed", "dead"]);
+export const jobTypeEnum = pgEnum("job_type", [
+  "send_invoice_email",
+  "send_invoice_reminder_email",
+  "send_payment_received_email",
+]);
+
 export const invoices = pgTable("invoices", {
   clientId: uuid("client_id")
     .notNull()
@@ -118,6 +125,21 @@ export const activityLog = pgTable("activity_log", {
   metadata: jsonb(),
 });
 
+export const jobs = pgTable("jobs", {
+  attempts: integer().notNull().default(0),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  id: uuid().defaultRandom().primaryKey(),
+  invoiceId: uuid("invoice_id").references(() => invoices.id, { onDelete: "cascade" }),
+  lastError: text("last_error"),
+  lockedAt: timestamp("locked_at"),
+  maxAttempts: integer("max_attempts").notNull().default(5),
+  payload: jsonb().$type<Record<string, unknown>>().notNull(),
+  runAt: timestamp("run_at").defaultNow().notNull(),
+  status: jobStatusEnum().notNull().default("pending"),
+  type: jobTypeEnum().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
 // Relations
 
 export const usersRelations = relations(users, ({ many }) => ({
@@ -145,6 +167,7 @@ export const invoicesRelations = relations(invoices, ({ many, one }) => ({
     fields: [invoices.clientId],
     references: [clients.id],
   }),
+  jobs: many(jobs),
   lineItems: many(lineItems),
   user: one(users, { fields: [invoices.userId], references: [users.id] }),
 }));
@@ -159,6 +182,13 @@ export const lineItemsRelations = relations(lineItems, ({ one }) => ({
 export const activityLogRelations = relations(activityLog, ({ one }) => ({
   invoice: one(invoices, {
     fields: [activityLog.invoiceId],
+    references: [invoices.id],
+  }),
+}));
+
+export const jobsRelations = relations(jobs, ({ one }) => ({
+  invoice: one(invoices, {
+    fields: [jobs.invoiceId],
     references: [invoices.id],
   }),
 }));

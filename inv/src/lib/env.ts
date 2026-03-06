@@ -35,6 +35,12 @@ export const getEmailEnv = createEnvGetter(
   }),
 );
 
+export const getAppEnv = createEnvGetter(
+  z.object({
+    APP_URL: z.url("APP_URL must be a valid absolute URL"),
+  }),
+);
+
 export const getStripeEnv = createEnvGetter(
   z.object({
     STRIPE_SECRET_KEY: z.string().min(1, "STRIPE_SECRET_KEY is required"),

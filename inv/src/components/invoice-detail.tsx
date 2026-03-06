@@ -36,6 +36,12 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { formatCurrency } from "@/lib/utils";
+import {
+  canCancelInvoice,
+  canMarkInvoicePaid,
+  canSendInvoiceReminder,
+  normalizeInvoiceStatus,
+} from "@/lib/invoice-lifecycle";
 
 type LineItem = {
   amount: string;
@@ -101,12 +107,11 @@ export function InvoiceDetailView({ activities, invoice }: InvoiceDetailProps) {
   const router = useRouter();
 
   const currency = invoice.currency ?? "EUR";
-  const status = invoice.status ?? "draft";
+  const status = normalizeInvoiceStatus(invoice.status);
   const isDraft = status === "draft";
-  const canSendReminder =
-    (status === "sent" || status === "overdue") && Boolean(invoice.stripePaymentLinkUrl);
-  const canCancel = status === "sent" || status === "overdue";
-  const canMarkPaid = status !== "paid" && status !== "cancelled";
+  const canSendReminder = canSendInvoiceReminder(status, Boolean(invoice.stripePaymentLinkUrl));
+  const canCancel = canCancelInvoice(status);
+  const canMarkPaid = canMarkInvoicePaid(status);
 
   async function handleDeleteOrCancel() {
     if (!confirmAction) {

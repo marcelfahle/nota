@@ -53,6 +53,13 @@ Use this after a production deploy, after rotating Stripe/Resend credentials, or
 - Confirm the invoice changes to `overdue`.
 - Confirm an overdue activity entry is added.
 
+## Email Job Worker
+
+- Send an invoice and confirm a `send_invoice_email` job is created and completed.
+- Trigger `/api/cron/jobs` with `Authorization: Bearer $CRON_SECRET`.
+- Confirm pending jobs move to `completed`, or to retry state with `last_error` if delivery fails.
+- Trigger the route again and confirm retried jobs continue to drain.
+
 ## Lifecycle Safety
 
 - Confirm draft invoices can be edited and deleted.

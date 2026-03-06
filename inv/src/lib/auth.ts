@@ -16,7 +16,7 @@ export function createSessionValue(userId: string): string {
   return `${userId}.${signUserId(userId)}`;
 }
 
-function getSessionUserId(sessionValue?: string): string | null {
+export function getSessionUserId(sessionValue?: string): string | null {
   if (!sessionValue) {
     return null;
   }
@@ -39,6 +39,22 @@ function getSessionUserId(sessionValue?: string): string | null {
   }
 
   return userId;
+}
+
+export async function setSessionCookie(userId: string) {
+  const cookieStore = await cookies();
+  cookieStore.set("session", createSessionValue(userId), {
+    httpOnly: true,
+    maxAge: 60 * 60 * 24 * 30,
+    path: "/",
+    sameSite: "lax",
+    secure: getAuthEnv().NODE_ENV === "production",
+  });
+}
+
+export async function clearSessionCookie() {
+  const cookieStore = await cookies();
+  cookieStore.delete("session");
 }
 
 export async function getCurrentUserOrNull() {
