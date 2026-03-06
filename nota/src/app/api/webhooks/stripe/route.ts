@@ -4,6 +4,7 @@ import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { activityLog, invoices, jobs } from "@/lib/db/schema";
 import { getStripeWebhookEnv } from "@/lib/env";
+import { processPendingEmailJobs } from "@/lib/jobs";
 import { stripe } from "@/lib/stripe";
 
 export async function POST(request: Request) {
@@ -103,6 +104,8 @@ export async function POST(request: Request) {
       payload: { invoiceId },
       type: "send_payment_received_email",
     });
+
+    await processPendingEmailJobs(1);
   }
 
   return NextResponse.json({ received: true });
