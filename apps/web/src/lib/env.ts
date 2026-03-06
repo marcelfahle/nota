@@ -58,3 +58,10 @@ export const getCronEnv = createEnvGetter(
     CRON_SECRET: z.string().min(1, "CRON_SECRET is required"),
   }),
 );
+
+export const getAiEnv = createEnvGetter(
+  z.object({
+    ANTHROPIC_API_KEY: z.string().min(1, "ANTHROPIC_API_KEY is required"),
+    NOTA_CHAT_MODEL: z.string().min(1).default("claude-sonnet-4-5"),
+  }),
+);
