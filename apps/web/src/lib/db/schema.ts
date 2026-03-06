@@ -82,6 +82,21 @@ export const invites = pgTable(
   (table) => [unique("invites_org_id_email_unique").on(table.orgId, table.email)],
 );
 
+export const apiKeys = pgTable("api_keys", {
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  id: uuid().defaultRandom().primaryKey(),
+  keyHash: text("key_hash").notNull().unique(),
+  keyPrefix: text("key_prefix").notNull(),
+  lastUsedAt: timestamp("last_used_at"),
+  name: text().notNull(),
+  orgId: uuid("org_id")
+    .notNull()
+    .references(() => orgs.id, { onDelete: "cascade" }),
+  userId: uuid("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+});
+
 export const bankAccounts = pgTable("bank_accounts", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
   details: text().notNull(),
@@ -203,6 +218,7 @@ export const jobs = pgTable("jobs", {
 // Relations
 
 export const usersRelations = relations(users, ({ many }) => ({
+  apiKeys: many(apiKeys),
   bankAccounts: many(bankAccounts),
   clients: many(clients),
   invites: many(invites),
@@ -211,6 +227,7 @@ export const usersRelations = relations(users, ({ many }) => ({
 }));
 
 export const orgsRelations = relations(orgs, ({ many }) => ({
+  apiKeys: many(apiKeys),
   bankAccounts: many(bankAccounts),
   clients: many(clients),
   invites: many(invites),
@@ -226,6 +243,11 @@ export const orgMembersRelations = relations(orgMembers, ({ one }) => ({
 export const invitesRelations = relations(invites, ({ one }) => ({
   invitedByUser: one(users, { fields: [invites.invitedBy], references: [users.id] }),
   org: one(orgs, { fields: [invites.orgId], references: [orgs.id] }),
+}));
+
+export const apiKeysRelations = relations(apiKeys, ({ one }) => ({
+  org: one(orgs, { fields: [apiKeys.orgId], references: [orgs.id] }),
+  user: one(users, { fields: [apiKeys.userId], references: [users.id] }),
 }));
 
 export const bankAccountsRelations = relations(bankAccounts, ({ one }) => ({
