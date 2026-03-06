@@ -8,7 +8,7 @@ import { PasswordResetEmail } from "@/emails/password-reset";
 import { DEFAULT_FROM_EMAIL } from "@/lib/app-brand";
 import { clearSessionCookie, setSessionCookie } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { users } from "@/lib/db/schema";
+import { orgMembers, orgs, users } from "@/lib/db/schema";
 import { resend } from "@/lib/email";
 import { getAppEnv, getEmailEnv } from "@/lib/env";
 import { hashPassword, verifyPassword } from "@/lib/password";
@@ -38,6 +38,10 @@ type AuthFormState = {
   error?: string;
   success?: string;
 } | null;
+
+function getWorkspaceName(name: string) {
+  return `${name}'s Workspace`;
+}
 
 export async function login(_prevState: AuthFormState, formData: FormData) {
   const email = (formData.get("email") as string | null)?.trim().toLowerCase();
@@ -84,16 +88,33 @@ export async function register(_prevState: AuthFormState, formData: FormData) {
   }
 
   const passwordHash = await hashPassword(result.data.password);
-  const [user] = await db
-    .insert(users)
-    .values({
-      email: result.data.email,
-      name: result.data.name,
-      passwordHash,
-    })
-    .returning({ id: users.id });
+  const [created] = await db.transaction(async (tx) => {
+    const [user] = await tx
+      .insert(users)
+      .values({
+        email: result.data.email,
+        name: result.data.name,
+        passwordHash,
+      })
+      .returning({ id: users.id });
 
-  await setSessionCookie(user.id);
+    const [org] = await tx
+      .insert(orgs)
+      .values({
+        name: getWorkspaceName(result.data.name),
+      })
+      .returning({ id: orgs.id });
+
+    await tx.insert(orgMembers).values({
+      orgId: org.id,
+      role: "owner",
+      userId: user.id,
+    });
+
+    return [{ id: user.id }];
+  });
+
+  await setSessionCookie(created.id);
   redirect("/invoices");
 }
 

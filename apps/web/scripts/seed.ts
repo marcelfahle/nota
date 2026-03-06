@@ -2,12 +2,12 @@
 import { randomBytes, scrypt } from "node:crypto";
 import { promisify } from "node:util";
 
-import { neon } from "@neondatabase/serverless";
+import { Pool } from "@neondatabase/serverless";
 import { eq } from "drizzle-orm";
-import { drizzle } from "drizzle-orm/neon-http";
+import { drizzle } from "drizzle-orm/neon-serverless";
 
-import { users } from "../src/lib/db/schema";
 import { getDbEnv } from "../src/lib/env";
+import { orgMembers, orgs, users } from "../src/lib/db/schema";
 
 const scryptAsync = promisify(scrypt);
 
@@ -17,8 +17,12 @@ async function hashPassword(password: string): Promise<string> {
   return `${salt}:${key.toString("hex")}`;
 }
 
-const sql = neon(getDbEnv().DATABASE_URL);
-const db = drizzle({ client: sql });
+function getWorkspaceName(name: string) {
+  return `${name}'s Workspace`;
+}
+
+const pool = new Pool({ connectionString: getDbEnv().DATABASE_URL });
+const db = drizzle({ client: pool });
 
 const email = process.env.SEED_EMAIL || "admin@nota.app";
 const name = process.env.SEED_NAME || "Admin";
@@ -26,23 +30,54 @@ const password = process.env.SEED_PASSWORD || "changeme";
 
 const passwordHash = await hashPassword(password);
 
-const [existing] = await db
-  .select({ id: users.id })
-  .from(users)
-  .where(eq(users.email, email))
-  .limit(1);
+const [user] = await db.transaction(async (tx) => {
+  const [existingUser] = await tx
+    .select({ id: users.id })
+    .from(users)
+    .where(eq(users.email, email))
+    .limit(1);
 
-if (existing) {
-  await db.update(users).set({ name, passwordHash }).where(eq(users.id, existing.id));
-  console.log(`Updated user: ${email}`);
-} else {
-  await db.insert(users).values({
-    email,
-    name,
-    passwordHash,
-  });
-  console.log(`Created user: ${email}`);
-}
+  const [savedUser] = existingUser
+    ? await tx
+        .update(users)
+        .set({ name, passwordHash })
+        .where(eq(users.id, existingUser.id))
+        .returning({ id: users.id })
+    : await tx
+        .insert(users)
+        .values({
+          email,
+          name,
+          passwordHash,
+        })
+        .returning({ id: users.id });
+
+  const [existingMembership] = await tx
+    .select({ id: orgMembers.id })
+    .from(orgMembers)
+    .where(eq(orgMembers.userId, savedUser.id))
+    .limit(1);
+
+  if (!existingMembership) {
+    const [org] = await tx
+      .insert(orgs)
+      .values({
+        name: getWorkspaceName(name),
+      })
+      .returning({ id: orgs.id });
+
+    await tx.insert(orgMembers).values({
+      orgId: org.id,
+      role: "owner",
+      userId: savedUser.id,
+    });
+  }
+
+  return [savedUser];
+});
+
+await pool.end();
 
 console.log(`Seeded login email: ${email}`);
+console.log(`Seeded user id: ${user.id}`);
 console.log("Seeded password from SEED_PASSWORD or default value.");
