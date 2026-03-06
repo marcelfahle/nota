@@ -10,12 +10,12 @@ import { bankAccounts, clients, invoices, lineItems } from "@/lib/db/schema";
 
 export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const user = await getCurrentUser();
+  const { org } = await getCurrentUser();
 
   const [invoice] = await db
     .select()
     .from(invoices)
-    .where(and(eq(invoices.id, id), eq(invoices.userId, user.id)))
+    .where(and(eq(invoices.id, id), eq(invoices.orgId, org.id)))
     .limit(1);
 
   if (!invoice) {
@@ -25,7 +25,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
   const [client] = await db
     .select()
     .from(clients)
-    .where(and(eq(clients.id, invoice.clientId), eq(clients.userId, user.id)))
+    .where(and(eq(clients.id, invoice.clientId), eq(clients.orgId, org.id)))
     .limit(1);
 
   if (!client) {
@@ -38,13 +38,12 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
     .where(eq(lineItems.invoiceId, id))
     .orderBy(asc(lineItems.sortOrder));
 
-  // Resolve bank account: client assignment -> default
   let bankDetails: string | null = null;
   if (client.bankAccountId) {
     const [ba] = await db
       .select({ details: bankAccounts.details })
       .from(bankAccounts)
-      .where(and(eq(bankAccounts.id, client.bankAccountId), eq(bankAccounts.userId, user.id)))
+      .where(and(eq(bankAccounts.id, client.bankAccountId), eq(bankAccounts.orgId, org.id)))
       .limit(1);
     bankDetails = ba?.details ?? null;
   }
@@ -52,21 +51,21 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
     const [defaultBa] = await db
       .select({ details: bankAccounts.details })
       .from(bankAccounts)
-      .where(and(eq(bankAccounts.userId, user.id), eq(bankAccounts.isDefault, true)))
+      .where(and(eq(bankAccounts.orgId, org.id), eq(bankAccounts.isDefault, true)))
       .limit(1);
     bankDetails = defaultBa?.details ?? null;
   }
 
-  const logoSrc = await getPdfLogoSrc(user.logoUrl);
+  const logoSrc = await getPdfLogoSrc(org.logoUrl);
 
   const buffer = await renderToBuffer(
     InvoicePdf({
       business: {
-        address: user.businessAddress,
+        address: org.businessAddress,
         bankDetails,
         logoSrc,
-        name: user.businessName,
-        vatNumber: user.vatNumber,
+        name: org.businessName ?? org.name,
+        vatNumber: org.vatNumber,
       },
       client: {
         address: client.address,

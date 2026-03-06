@@ -11,12 +11,12 @@ import { clients, invoices, lineItems } from "@/lib/db/schema";
 
 export default async function EditInvoicePage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const user = await getCurrentUser();
+  const { org } = await getCurrentUser();
 
   const [invoice] = await db
     .select()
     .from(invoices)
-    .where(and(eq(invoices.id, id), eq(invoices.userId, user.id)))
+    .where(and(eq(invoices.id, id), eq(invoices.orgId, org.id)))
     .limit(1);
 
   if (!invoice) {
@@ -35,7 +35,7 @@ export default async function EditInvoicePage({ params }: { params: Promise<{ id
       name: clients.name,
     })
     .from(clients)
-    .where(eq(clients.userId, user.id))
+    .where(eq(clients.orgId, org.id))
     .orderBy(asc(clients.name));
 
   const items = await db

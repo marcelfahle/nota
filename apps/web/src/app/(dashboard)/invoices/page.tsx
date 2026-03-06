@@ -18,7 +18,7 @@ export default async function InvoicesPage({
   searchParams: Promise<{ status?: string }>;
 }) {
   const { status: filterStatus } = await searchParams;
-  const user = await getCurrentUser();
+  const { org } = await getCurrentUser();
 
   const invoiceList = await db
     .select({
@@ -33,11 +33,10 @@ export default async function InvoicesPage({
       total: invoices.total,
     })
     .from(invoices)
-    .leftJoin(clients, and(eq(invoices.clientId, clients.id), eq(clients.userId, user.id)))
-    .where(eq(invoices.userId, user.id))
+    .leftJoin(clients, and(eq(invoices.clientId, clients.id), eq(clients.orgId, org.id)))
+    .where(eq(invoices.orgId, org.id))
     .orderBy(desc(invoices.issuedAt));
 
-  // Compute stats from all invoices (unfiltered)
   let outstanding = 0;
   let totalPaid = 0;
   let overdueAmount = 0;
@@ -57,7 +56,6 @@ export default async function InvoicesPage({
     }
   }
 
-  // Filter invoices by status tab
   const activeFilter =
     filterStatus && FILTER_STATUSES.includes(filterStatus as (typeof FILTER_STATUSES)[number])
       ? filterStatus
@@ -72,7 +70,6 @@ export default async function InvoicesPage({
         <h1 className="text-lg font-semibold">Invoices</h1>
       </div>
 
-      {/* Stats */}
       <div className="mb-8 grid grid-cols-1 gap-4 sm:grid-cols-3 sm:gap-8">
         <StatCard label="Outstanding" value={formatCurrency(outstanding)} />
         <StatCard label="Total Paid" value={formatCurrency(totalPaid)} />
@@ -85,7 +82,6 @@ export default async function InvoicesPage({
         />
       </div>
 
-      {/* Filter Tabs */}
       <div className="mb-6 flex gap-1 overflow-x-auto">
         {FILTER_STATUSES.map((s) => (
           <Link
@@ -100,7 +96,6 @@ export default async function InvoicesPage({
         ))}
       </div>
 
-      {/* Invoice Table */}
       {filtered.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-16">
           <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-zinc-100">

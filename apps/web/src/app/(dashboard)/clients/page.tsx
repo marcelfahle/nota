@@ -18,7 +18,7 @@ function getInitials(name: string): string {
 }
 
 export default async function ClientsPage() {
-  const user = await getCurrentUser();
+  const { org } = await getCurrentUser();
 
   const clientList = await db
     .select({
@@ -30,8 +30,8 @@ export default async function ClientsPage() {
       totalInvoiced: sql<string>`coalesce(sum(${invoices.total}::numeric), 0)`,
     })
     .from(clients)
-    .leftJoin(invoices, and(eq(clients.id, invoices.clientId), eq(invoices.userId, user.id)))
-    .where(eq(clients.userId, user.id))
+    .leftJoin(invoices, and(eq(clients.id, invoices.clientId), eq(invoices.orgId, org.id)))
+    .where(eq(clients.orgId, org.id))
     .groupBy(clients.id)
     .orderBy(asc(clients.name));
 

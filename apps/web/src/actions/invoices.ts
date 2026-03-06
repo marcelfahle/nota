@@ -13,7 +13,7 @@ import {
   invoices,
   jobs,
   lineItems,
-  users,
+  orgs,
 } from "@/lib/db/schema";
 import {
   canCancelInvoice,
@@ -73,21 +73,21 @@ function parseInvoiceFormData(formData: FormData) {
   };
 }
 
-async function getOwnedInvoice(userId: string, invoiceId: string) {
+async function getOwnedInvoice(orgId: string, invoiceId: string) {
   const [invoice] = await db
     .select()
     .from(invoices)
-    .where(and(eq(invoices.id, invoiceId), eq(invoices.userId, userId)))
+    .where(and(eq(invoices.id, invoiceId), eq(invoices.orgId, orgId)))
     .limit(1);
 
   return invoice ?? null;
 }
 
-async function getOwnedClient(userId: string, clientId: string) {
+async function getOwnedClient(orgId: string, clientId: string) {
   const [client] = await db
     .select()
     .from(clients)
-    .where(and(eq(clients.id, clientId), eq(clients.userId, userId)))
+    .where(and(eq(clients.id, clientId), eq(clients.orgId, orgId)))
     .limit(1);
 
   return client ?? null;
@@ -112,58 +112,55 @@ export async function createInvoice(
     return { error: result.error.issues[0].message };
   }
 
-  const user = await getCurrentUser();
-  const userId = user.id;
+  const { org, user } = await getCurrentUser();
   const { lineItems: items, taxRate, ...invoiceData } = result.data;
   const totals = calculateTotals(items, taxRate);
-  const [client] = await db
-    .select({ id: clients.id })
-    .from(clients)
-    .where(and(eq(clients.id, invoiceData.clientId), eq(clients.userId, userId)))
-    .limit(1);
+  const client = await getOwnedClient(org.id, invoiceData.clientId);
 
   if (!client) {
     return { error: "Client not found" };
   }
 
   const inserted = await db.transaction(async (tx) => {
-    // Generate invoice number atomically
-    const [user] = await tx
+    const [organization] = await tx
       .select({
-        invoiceDigits: users.invoiceDigits,
-        invoicePrefix: users.invoicePrefix,
-        invoiceSeparator: users.invoiceSeparator,
-        nextInvoiceNumber: users.nextInvoiceNumber,
+        invoiceDigits: orgs.invoiceDigits,
+        invoicePrefix: orgs.invoicePrefix,
+        invoiceSeparator: orgs.invoiceSeparator,
+        nextInvoiceNumber: orgs.nextInvoiceNumber,
       })
-      .from(users)
-      .where(eq(users.id, userId))
+      .from(orgs)
+      .where(eq(orgs.id, org.id))
       .limit(1);
 
-    const num = user.nextInvoiceNumber || 1;
+    if (!organization) {
+      throw new Error("Organization not found");
+    }
+
+    const num = organization.nextInvoiceNumber;
     const number = formatInvoiceNumber({
-      digits: user.invoiceDigits,
+      digits: organization.invoiceDigits,
       number: num,
-      prefix: user.invoicePrefix || "",
-      separator: user.invoiceSeparator,
+      prefix: organization.invoicePrefix,
+      separator: organization.invoiceSeparator,
     });
 
     await tx
-      .update(users)
+      .update(orgs)
       .set({ nextInvoiceNumber: num + 1 })
-      .where(eq(users.id, userId));
+      .where(eq(orgs.id, org.id));
 
-    // Insert invoice
     const [inv] = await tx
       .insert(invoices)
       .values({
-        userId,
+        orgId: org.id,
+        userId: user.id,
         ...invoiceData,
         number,
         ...totals,
       })
       .returning({ id: invoices.id });
 
-    // Insert line items
     await tx.insert(lineItems).values(
       items.map((item, index) => ({
         amount: (item.quantity * item.unitPrice).toFixed(2),
@@ -175,7 +172,6 @@ export async function createInvoice(
       })),
     );
 
-    // Log activity
     await tx.insert(activityLog).values({
       action: "created",
       invoiceId: inv.id,
@@ -198,8 +194,8 @@ export async function updateInvoice(
     return { error: result.error.issues[0].message };
   }
 
-  const user = await getCurrentUser();
-  const invoice = await getOwnedInvoice(user.id, invoiceId);
+  const { org } = await getCurrentUser();
+  const invoice = await getOwnedInvoice(org.id, invoiceId);
 
   if (!invoice) {
     return { error: "Invoice not found" };
@@ -211,14 +207,13 @@ export async function updateInvoice(
 
   const { lineItems: items, taxRate, ...invoiceData } = result.data;
   const totals = calculateTotals(items, taxRate);
-  const client = await getOwnedClient(user.id, invoiceData.clientId);
+  const client = await getOwnedClient(org.id, invoiceData.clientId);
 
   if (!client) {
     return { error: "Client not found" };
   }
 
   await db.transaction(async (tx) => {
-    // Update invoice
     await tx
       .update(invoices)
       .set({
@@ -226,9 +221,8 @@ export async function updateInvoice(
         ...totals,
         updatedAt: new Date(),
       })
-      .where(and(eq(invoices.id, invoiceId), eq(invoices.userId, user.id)));
+      .where(and(eq(invoices.id, invoiceId), eq(invoices.orgId, org.id)));
 
-    // Replace line items: delete old, insert new
     await tx.delete(lineItems).where(eq(lineItems.invoiceId, invoiceId));
 
     await tx.insert(lineItems).values(
@@ -249,8 +243,8 @@ export async function updateInvoice(
 }
 
 export async function deleteInvoice(invoiceId: string) {
-  const user = await getCurrentUser();
-  const invoice = await getOwnedInvoice(user.id, invoiceId);
+  const { org } = await getCurrentUser();
+  const invoice = await getOwnedInvoice(org.id, invoiceId);
 
   if (!invoice) {
     return { error: "Invoice not found" };
@@ -260,17 +254,16 @@ export async function deleteInvoice(invoiceId: string) {
     return { error: "Only draft invoices can be deleted" };
   }
 
-  await db.delete(invoices).where(and(eq(invoices.id, invoiceId), eq(invoices.userId, user.id)));
+  await db.delete(invoices).where(and(eq(invoices.id, invoiceId), eq(invoices.orgId, org.id)));
   revalidatePath("/invoices");
 
   return { success: true };
 }
 
 export async function sendInvoice(invoiceId: string) {
-  const user = await getCurrentUser();
+  const { org } = await getCurrentUser();
 
-  // Step 1: Query invoice with client and line items
-  const existingInvoice = await getOwnedInvoice(user.id, invoiceId);
+  const existingInvoice = await getOwnedInvoice(org.id, invoiceId);
   if (!existingInvoice) {
     return { error: "Invoice not found" };
   }
@@ -298,7 +291,7 @@ export async function sendInvoice(invoiceId: string) {
       updatedAt: sentAt,
     })
     .where(
-      and(eq(invoices.id, invoiceId), eq(invoices.userId, user.id), eq(invoices.status, "draft")),
+      and(eq(invoices.id, invoiceId), eq(invoices.orgId, org.id), eq(invoices.status, "draft")),
     )
     .returning();
 
@@ -306,7 +299,7 @@ export async function sendInvoice(invoiceId: string) {
     return { error: "Invoice status changed. Refresh and try again." };
   }
 
-  const client = await getOwnedClient(user.id, invoice.clientId);
+  const client = await getOwnedClient(org.id, invoice.clientId);
   if (!client) {
     await db
       .update(invoices)
@@ -318,7 +311,7 @@ export async function sendInvoice(invoiceId: string) {
       .where(
         and(
           eq(invoices.id, invoiceId),
-          eq(invoices.userId, user.id),
+          eq(invoices.orgId, org.id),
           eq(invoices.status, "sent"),
           eq(invoices.sentAt, sentAt),
         ),
@@ -326,12 +319,11 @@ export async function sendInvoice(invoiceId: string) {
     return { error: "Client not found" };
   }
 
-  // Step 2: Resolve bank account for this invoice
   if (client.bankAccountId) {
     const [bankAccount] = await db
       .select({ id: bankAccounts.id })
       .from(bankAccounts)
-      .where(and(eq(bankAccounts.id, client.bankAccountId), eq(bankAccounts.userId, user.id)))
+      .where(and(eq(bankAccounts.id, client.bankAccountId), eq(bankAccounts.orgId, org.id)))
       .limit(1);
 
     if (!bankAccount) {
@@ -345,7 +337,7 @@ export async function sendInvoice(invoiceId: string) {
         .where(
           and(
             eq(invoices.id, invoiceId),
-            eq(invoices.userId, user.id),
+            eq(invoices.orgId, org.id),
             eq(invoices.status, "sent"),
             eq(invoices.sentAt, sentAt),
           ),
@@ -357,7 +349,6 @@ export async function sendInvoice(invoiceId: string) {
   let paymentLinkId: string | null = null;
 
   try {
-    // Step 3: Create Stripe payment link
     const paymentLink = await createPaymentLink({
       currency: invoice.currency,
       id: invoice.id,
@@ -366,7 +357,6 @@ export async function sendInvoice(invoiceId: string) {
     });
     paymentLinkId = paymentLink.id;
 
-    // Step 4: Persist Stripe link data and enqueue the outbound email job.
     await db.transaction(async (tx) => {
       await tx
         .update(invoices)
@@ -375,7 +365,7 @@ export async function sendInvoice(invoiceId: string) {
           stripePaymentLinkUrl: paymentLink.url,
           updatedAt: new Date(),
         })
-        .where(and(eq(invoices.id, invoiceId), eq(invoices.userId, user.id)));
+        .where(and(eq(invoices.id, invoiceId), eq(invoices.orgId, org.id)));
 
       await tx.insert(activityLog).values({
         action: "sent",
@@ -403,7 +393,7 @@ export async function sendInvoice(invoiceId: string) {
       .where(
         and(
           eq(invoices.id, invoiceId),
-          eq(invoices.userId, user.id),
+          eq(invoices.orgId, org.id),
           eq(invoices.status, "sent"),
           eq(invoices.sentAt, sentAt),
         ),
@@ -412,7 +402,6 @@ export async function sendInvoice(invoiceId: string) {
     return { error: "Invoice could not be sent. Please try again." };
   }
 
-  // Step 8: Revalidate paths
   revalidatePath("/invoices");
   revalidatePath(`/invoices/${invoiceId}`);
   await processPendingEmailJobs(1);
@@ -421,8 +410,8 @@ export async function sendInvoice(invoiceId: string) {
 }
 
 export async function sendReminder(invoiceId: string) {
-  const user = await getCurrentUser();
-  const invoice = await getOwnedInvoice(user.id, invoiceId);
+  const { org } = await getCurrentUser();
+  const invoice = await getOwnedInvoice(org.id, invoiceId);
   if (!invoice) {
     return { error: "Invoice not found" };
   }
@@ -445,8 +434,8 @@ export async function sendReminder(invoiceId: string) {
 }
 
 export async function duplicateInvoice(invoiceId: string) {
-  const user = await getCurrentUser();
-  const original = await getOwnedInvoice(user.id, invoiceId);
+  const { org, user } = await getCurrentUser();
+  const original = await getOwnedInvoice(org.id, invoiceId);
 
   if (!original) {
     throw new Error("Invoice not found");
@@ -458,29 +447,33 @@ export async function duplicateInvoice(invoiceId: string) {
   const dueDate = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
 
   const inserted = await db.transaction(async (tx) => {
-    const [user] = await tx
+    const [organization] = await tx
       .select({
-        invoiceDigits: users.invoiceDigits,
-        invoicePrefix: users.invoicePrefix,
-        invoiceSeparator: users.invoiceSeparator,
-        nextInvoiceNumber: users.nextInvoiceNumber,
+        invoiceDigits: orgs.invoiceDigits,
+        invoicePrefix: orgs.invoicePrefix,
+        invoiceSeparator: orgs.invoiceSeparator,
+        nextInvoiceNumber: orgs.nextInvoiceNumber,
       })
-      .from(users)
-      .where(eq(users.id, original.userId))
+      .from(orgs)
+      .where(eq(orgs.id, org.id))
       .limit(1);
 
-    const num = user.nextInvoiceNumber || 1;
+    if (!organization) {
+      throw new Error("Organization not found");
+    }
+
+    const num = organization.nextInvoiceNumber;
     const number = formatInvoiceNumber({
-      digits: user.invoiceDigits,
+      digits: organization.invoiceDigits,
       number: num,
-      prefix: user.invoicePrefix || "",
-      separator: user.invoiceSeparator,
+      prefix: organization.invoicePrefix,
+      separator: organization.invoiceSeparator,
     });
 
     await tx
-      .update(users)
+      .update(orgs)
       .set({ nextInvoiceNumber: num + 1 })
-      .where(eq(users.id, original.userId));
+      .where(eq(orgs.id, org.id));
 
     const [inv] = await tx
       .insert(invoices)
@@ -492,12 +485,13 @@ export async function duplicateInvoice(invoiceId: string) {
         issuedAt: today,
         notes: original.notes,
         number,
+        orgId: org.id,
         reverseCharge: original.reverseCharge,
         subtotal: original.subtotal,
         taxAmount: original.taxAmount,
         taxRate: original.taxRate,
         total: original.total,
-        userId: original.userId,
+        userId: user.id,
       })
       .returning({ id: invoices.id });
 
@@ -528,8 +522,8 @@ export async function duplicateInvoice(invoiceId: string) {
 }
 
 export async function markInvoiceSent(invoiceId: string) {
-  const user = await getCurrentUser();
-  const invoice = await getOwnedInvoice(user.id, invoiceId);
+  const { org } = await getCurrentUser();
+  const invoice = await getOwnedInvoice(org.id, invoiceId);
 
   if (!invoice) {
     return { error: "Invoice not found" };
@@ -547,7 +541,7 @@ export async function markInvoiceSent(invoiceId: string) {
       status: "sent",
       updatedAt: sentAt,
     })
-    .where(and(eq(invoices.id, invoiceId), eq(invoices.userId, user.id)));
+    .where(and(eq(invoices.id, invoiceId), eq(invoices.orgId, org.id)));
 
   await db.insert(activityLog).values({
     action: "sent",
@@ -562,8 +556,8 @@ export async function markInvoiceSent(invoiceId: string) {
 }
 
 export async function markInvoicePaid(invoiceId: string) {
-  const user = await getCurrentUser();
-  const invoice = await getOwnedInvoice(user.id, invoiceId);
+  const { org } = await getCurrentUser();
+  const invoice = await getOwnedInvoice(org.id, invoiceId);
 
   if (!invoice) {
     return { error: "Invoice not found" };
@@ -600,7 +594,7 @@ export async function markInvoicePaid(invoiceId: string) {
     .where(
       and(
         eq(invoices.id, invoiceId),
-        eq(invoices.userId, user.id),
+        eq(invoices.orgId, org.id),
         eq(invoices.status, normalizedStatus),
       ),
     )
@@ -623,8 +617,8 @@ export async function markInvoicePaid(invoiceId: string) {
 }
 
 export async function cancelInvoice(invoiceId: string) {
-  const user = await getCurrentUser();
-  const invoice = await getOwnedInvoice(user.id, invoiceId);
+  const { org } = await getCurrentUser();
+  const invoice = await getOwnedInvoice(org.id, invoiceId);
 
   if (!invoice) {
     return { error: "Invoice not found" };
@@ -663,7 +657,7 @@ export async function cancelInvoice(invoiceId: string) {
     .where(
       and(
         eq(invoices.id, invoiceId),
-        eq(invoices.userId, user.id),
+        eq(invoices.orgId, org.id),
         eq(invoices.status, normalizedStatus),
       ),
     )

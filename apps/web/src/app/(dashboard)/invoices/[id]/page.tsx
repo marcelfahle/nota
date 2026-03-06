@@ -8,12 +8,12 @@ import { activityLog, clients, invoices, lineItems } from "@/lib/db/schema";
 
 export default async function InvoiceDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const user = await getCurrentUser();
+  const { org } = await getCurrentUser();
 
   const [invoice] = await db
     .select()
     .from(invoices)
-    .where(and(eq(invoices.id, id), eq(invoices.userId, user.id)))
+    .where(and(eq(invoices.id, id), eq(invoices.orgId, org.id)))
     .limit(1);
 
   if (!invoice) {
@@ -23,7 +23,7 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
   const [client] = await db
     .select({ email: clients.email, name: clients.name })
     .from(clients)
-    .where(and(eq(clients.id, invoice.clientId), eq(clients.userId, user.id)))
+    .where(and(eq(clients.id, invoice.clientId), eq(clients.orgId, org.id)))
     .limit(1);
 
   const items = await db

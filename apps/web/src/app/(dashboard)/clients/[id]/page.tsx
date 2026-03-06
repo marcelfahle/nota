@@ -8,19 +8,19 @@ import { bankAccounts, clients, invoices } from "@/lib/db/schema";
 
 export default async function ClientDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const user = await getCurrentUser();
+  const { org } = await getCurrentUser();
 
   const [client] = await db
     .select()
     .from(clients)
-    .where(and(eq(clients.id, id), eq(clients.userId, user.id)))
+    .where(and(eq(clients.id, id), eq(clients.orgId, org.id)))
     .limit(1);
 
   if (!client) {
     notFound();
   }
 
-  const [clientInvoices, userBankAccounts] = await Promise.all([
+  const [clientInvoices, organizationBankAccounts] = await Promise.all([
     db
       .select({
         currency: invoices.currency,
@@ -32,7 +32,7 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
         total: invoices.total,
       })
       .from(invoices)
-      .where(and(eq(invoices.clientId, id), eq(invoices.userId, user.id)))
+      .where(and(eq(invoices.clientId, id), eq(invoices.orgId, org.id)))
       .orderBy(desc(invoices.createdAt)),
     db
       .select({
@@ -41,11 +41,15 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
         name: bankAccounts.name,
       })
       .from(bankAccounts)
-      .where(eq(bankAccounts.userId, user.id))
+      .where(eq(bankAccounts.orgId, org.id))
       .orderBy(asc(bankAccounts.sortOrder), asc(bankAccounts.createdAt)),
   ]);
 
   return (
-    <ClientDetailView bankAccounts={userBankAccounts} client={client} invoices={clientInvoices} />
+    <ClientDetailView
+      bankAccounts={organizationBankAccounts}
+      client={client}
+      invoices={clientInvoices}
+    />
   );
 }

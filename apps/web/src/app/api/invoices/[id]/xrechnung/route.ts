@@ -8,12 +8,12 @@ import { generateXRechnung } from "@/lib/xrechnung";
 
 export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const user = await getCurrentUser();
+  const { org, user } = await getCurrentUser();
 
   const [invoice] = await db
     .select()
     .from(invoices)
-    .where(and(eq(invoices.id, id), eq(invoices.userId, user.id)))
+    .where(and(eq(invoices.id, id), eq(invoices.orgId, org.id)))
     .limit(1);
 
   if (!invoice) {
@@ -23,7 +23,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
   const [client] = await db
     .select()
     .from(clients)
-    .where(and(eq(clients.id, invoice.clientId), eq(clients.userId, user.id)))
+    .where(and(eq(clients.id, invoice.clientId), eq(clients.orgId, org.id)))
     .limit(1);
 
   if (!client) {
@@ -38,10 +38,10 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
 
   const xml = generateXRechnung({
     business: {
-      address: user.businessAddress,
+      address: org.businessAddress,
       email: user.email,
-      name: user.businessName,
-      vatNumber: user.vatNumber,
+      name: org.businessName ?? org.name,
+      vatNumber: org.vatNumber,
     },
     client: {
       address: client.address,

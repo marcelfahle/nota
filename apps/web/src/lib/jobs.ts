@@ -14,6 +14,7 @@ import {
   invoices,
   jobs,
   lineItems,
+  orgs,
   users,
 } from "@/lib/db/schema";
 import { resend } from "@/lib/email";
@@ -49,9 +50,13 @@ async function getInvoiceEmailContext(invoiceId: string) {
     throw new Error("Client not found");
   }
 
-  const [user] = await db.select().from(users).where(eq(users.id, invoice.userId)).limit(1);
-  if (!user) {
-    throw new Error("User not found");
+  if (!invoice.orgId) {
+    throw new Error("Invoice has no organization");
+  }
+
+  const [organization] = await db.select().from(orgs).where(eq(orgs.id, invoice.orgId)).limit(1);
+  if (!organization) {
+    throw new Error("Organization not found");
   }
 
   const items = await db
@@ -65,7 +70,9 @@ async function getInvoiceEmailContext(invoiceId: string) {
     const [assignedBankAccount] = await db
       .select({ details: bankAccounts.details })
       .from(bankAccounts)
-      .where(and(eq(bankAccounts.id, client.bankAccountId), eq(bankAccounts.userId, user.id)))
+      .where(
+        and(eq(bankAccounts.id, client.bankAccountId), eq(bankAccounts.orgId, organization.id)),
+      )
       .limit(1);
     bankDetails = assignedBankAccount?.details ?? null;
   }
@@ -74,7 +81,7 @@ async function getInvoiceEmailContext(invoiceId: string) {
     const [defaultBankAccount] = await db
       .select({ details: bankAccounts.details })
       .from(bankAccounts)
-      .where(and(eq(bankAccounts.userId, user.id), eq(bankAccounts.isDefault, true)))
+      .where(and(eq(bankAccounts.orgId, organization.id), eq(bankAccounts.isDefault, true)))
       .limit(1);
     bankDetails = defaultBankAccount?.details ?? null;
   }
@@ -84,13 +91,13 @@ async function getInvoiceEmailContext(invoiceId: string) {
     client,
     invoice,
     items,
-    logoSrc: await getPdfLogoSrc(user.logoUrl),
-    user,
+    logoSrc: await getPdfLogoSrc(organization.logoUrl),
+    org: organization,
   };
 }
 
 async function sendInvoiceEmail(invoiceId: string) {
-  const { bankDetails, client, invoice, items, logoSrc, user } =
+  const { bankDetails, client, invoice, items, logoSrc, org } =
     await getInvoiceEmailContext(invoiceId);
 
   if (!invoice.stripePaymentLinkUrl) {
@@ -100,11 +107,11 @@ async function sendInvoiceEmail(invoiceId: string) {
   const pdfBuffer = await renderToBuffer(
     InvoicePdf({
       business: {
-        address: user.businessAddress,
+        address: org.businessAddress,
         bankDetails,
         logoSrc,
-        name: user.businessName,
-        vatNumber: user.vatNumber,
+        name: org.businessName ?? org.name,
+        vatNumber: org.vatNumber,
       },
       client: {
         address: client.address,
@@ -135,6 +142,7 @@ async function sendInvoiceEmail(invoiceId: string) {
   );
 
   const fromEmail = getEmailEnv().RESEND_FROM_EMAIL ?? DEFAULT_FROM_EMAIL;
+  const businessName = org.businessName ?? org.name ?? APP_NAME;
 
   await resend.emails.send({
     attachments: [
@@ -145,7 +153,7 @@ async function sendInvoiceEmail(invoiceId: string) {
     ],
     from: fromEmail,
     react: InvoiceSentEmail({
-      businessName: user.businessName ?? APP_NAME,
+      businessName,
       clientName: client.name,
       currency: invoice.currency ?? "EUR",
       dueAt: invoice.dueAt,
@@ -153,24 +161,25 @@ async function sendInvoiceEmail(invoiceId: string) {
       paymentLinkUrl: invoice.stripePaymentLinkUrl,
       total: invoice.total ?? "0",
     }),
-    subject: `Invoice ${invoice.number} from ${user.businessName ?? APP_NAME}`,
+    subject: `Invoice ${invoice.number} from ${businessName}`,
     to: [client.email],
   });
 }
 
 async function sendInvoiceReminderEmail(invoiceId: string) {
-  const { client, invoice, user } = await getInvoiceEmailContext(invoiceId);
+  const { client, invoice, org } = await getInvoiceEmailContext(invoiceId);
 
   if (!invoice.stripePaymentLinkUrl) {
     throw new Error("Invoice has no Stripe payment link");
   }
 
   const fromEmail = getEmailEnv().RESEND_FROM_EMAIL ?? DEFAULT_FROM_EMAIL;
+  const businessName = org.businessName ?? org.name ?? APP_NAME;
 
   await resend.emails.send({
     from: fromEmail,
     react: InvoiceSentEmail({
-      businessName: user.businessName ?? APP_NAME,
+      businessName,
       clientName: client.name,
       currency: invoice.currency ?? "EUR",
       dueAt: invoice.dueAt,
@@ -179,7 +188,7 @@ async function sendInvoiceReminderEmail(invoiceId: string) {
       reminder: true,
       total: invoice.total ?? "0",
     }),
-    subject: `Reminder: Invoice ${invoice.number} — ${user.businessName ?? APP_NAME}`,
+    subject: `Reminder: Invoice ${invoice.number} — ${businessName}`,
     to: [client.email],
   });
 

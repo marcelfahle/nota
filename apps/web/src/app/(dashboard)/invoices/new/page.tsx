@@ -9,7 +9,7 @@ import { db } from "@/lib/db";
 import { clients } from "@/lib/db/schema";
 
 export default async function NewInvoicePage() {
-  const user = await getCurrentUser();
+  const { org } = await getCurrentUser();
 
   const clientList = await db
     .select({
@@ -19,7 +19,7 @@ export default async function NewInvoicePage() {
       name: clients.name,
     })
     .from(clients)
-    .where(eq(clients.userId, user.id))
+    .where(eq(clients.orgId, org.id))
     .orderBy(asc(clients.name));
 
   return (

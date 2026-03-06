@@ -9,16 +9,16 @@ import { db } from "@/lib/db";
 import { bankAccounts } from "@/lib/db/schema";
 
 export default async function NewClientPage() {
-  const user = await getCurrentUser();
+  const { org } = await getCurrentUser();
 
-  const userBankAccounts = await db
+  const organizationBankAccounts = await db
     .select({
       id: bankAccounts.id,
       isDefault: bankAccounts.isDefault,
       name: bankAccounts.name,
     })
     .from(bankAccounts)
-    .where(eq(bankAccounts.userId, user.id))
+    .where(eq(bankAccounts.orgId, org.id))
     .orderBy(asc(bankAccounts.sortOrder), asc(bankAccounts.createdAt));
 
   return (
@@ -36,7 +36,7 @@ export default async function NewClientPage() {
       <div className="max-w-2xl">
         <ClientForm
           action={createClient}
-          bankAccounts={userBankAccounts}
+          bankAccounts={organizationBankAccounts}
           redirectTo="/clients"
           submitLabel="Create Client"
         />
