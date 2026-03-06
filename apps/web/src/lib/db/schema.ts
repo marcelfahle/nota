@@ -13,6 +13,8 @@ import {
   uuid,
 } from "drizzle-orm/pg-core";
 
+export const orgRoleEnum = pgEnum("org_role", ["owner", "admin", "member"]);
+
 export const users = pgTable("users", {
   businessAddress: text("business_address"),
   businessName: text("business_name"),
@@ -29,6 +31,38 @@ export const users = pgTable("users", {
   passwordHash: text("password_hash").notNull(),
   vatNumber: text("vat_number"),
 });
+
+export const orgs = pgTable("orgs", {
+  businessAddress: text("business_address"),
+  businessName: text("business_name"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  defaultCurrency: text("default_currency").notNull().default("EUR"),
+  id: uuid().defaultRandom().primaryKey(),
+  invoiceDigits: integer("invoice_digits").notNull().default(4),
+  invoicePrefix: text("invoice_prefix").notNull().default("INV"),
+  invoiceSeparator: text("invoice_separator").notNull().default("-"),
+  logoUrl: text("logo_url"),
+  name: text().notNull(),
+  nextInvoiceNumber: integer("next_invoice_number").notNull().default(1),
+  stripeCustomerId: text("stripe_customer_id"),
+  vatNumber: text("vat_number"),
+});
+
+export const orgMembers = pgTable(
+  "org_members",
+  {
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    id: uuid().defaultRandom().primaryKey(),
+    orgId: uuid("org_id")
+      .notNull()
+      .references(() => orgs.id, { onDelete: "cascade" }),
+    role: orgRoleEnum().notNull().default("member"),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+  },
+  (table) => [unique("org_members_org_id_user_id_unique").on(table.orgId, table.userId)],
+);
 
 export const bankAccounts = pgTable("bank_accounts", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
@@ -151,6 +185,16 @@ export const usersRelations = relations(users, ({ many }) => ({
   bankAccounts: many(bankAccounts),
   clients: many(clients),
   invoices: many(invoices),
+  orgMembers: many(orgMembers),
+}));
+
+export const orgsRelations = relations(orgs, ({ many }) => ({
+  orgMembers: many(orgMembers),
+}));
+
+export const orgMembersRelations = relations(orgMembers, ({ one }) => ({
+  org: one(orgs, { fields: [orgMembers.orgId], references: [orgs.id] }),
+  user: one(users, { fields: [orgMembers.userId], references: [users.id] }),
 }));
 
 export const bankAccountsRelations = relations(bankAccounts, ({ one }) => ({
