@@ -29,6 +29,13 @@
       "when": 1772859600000,
       "tag": "0003_invoice-number-scope",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1772782041791,
+      "tag": "0004_glorious_miracleman",
+      "breakpoints": true
     }
   ]
 }
