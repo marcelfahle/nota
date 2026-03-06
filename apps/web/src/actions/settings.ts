@@ -6,7 +6,7 @@ import { z } from "zod";
 
 import { getCurrentUser } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { users } from "@/lib/db/schema";
+import { orgs } from "@/lib/db/schema";
 
 const settingsSchema = z.object({
   businessAddress: z.string().optional(),
@@ -48,10 +48,11 @@ export async function updateSettings(
     return { error: result.error.issues[0].message };
   }
 
-  const user = await getCurrentUser();
+  const { org } = await getCurrentUser();
 
-  await db.update(users).set(result.data).where(eq(users.id, user.id));
+  await db.update(orgs).set(result.data).where(eq(orgs.id, org.id));
 
   revalidatePath("/settings");
+  revalidatePath("/");
   return { success: true };
 }

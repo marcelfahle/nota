@@ -7,7 +7,7 @@ import { db } from "@/lib/db";
 import { clients, invoices, jobs } from "@/lib/db/schema";
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
-  const user = await getCurrentUser();
+  const { org } = await getCurrentUser();
 
   const [stripeDockItems, emailJobItems, [emailJobSummary]] = await Promise.all([
     db
@@ -24,10 +24,10 @@ export default async function DashboardLayout({ children }: { children: React.Re
         updatedAt: invoices.updatedAt,
       })
       .from(invoices)
-      .leftJoin(clients, and(eq(clients.id, invoices.clientId), eq(clients.userId, user.id)))
+      .leftJoin(clients, and(eq(clients.id, invoices.clientId), eq(clients.orgId, org.id)))
       .where(
         and(
-          eq(invoices.userId, user.id),
+          eq(invoices.orgId, org.id),
           or(
             isNotNull(invoices.stripePaymentIntentId),
             isNotNull(invoices.stripePaymentLinkId),
@@ -52,9 +52,9 @@ export default async function DashboardLayout({ children }: { children: React.Re
         updatedAt: jobs.updatedAt,
       })
       .from(jobs)
-      .innerJoin(invoices, and(eq(jobs.invoiceId, invoices.id), eq(invoices.userId, user.id)))
-      .leftJoin(clients, and(eq(clients.id, invoices.clientId), eq(clients.userId, user.id)))
-      .where(eq(invoices.userId, user.id))
+      .innerJoin(invoices, and(eq(jobs.invoiceId, invoices.id), eq(invoices.orgId, org.id)))
+      .leftJoin(clients, and(eq(clients.id, invoices.clientId), eq(clients.orgId, org.id)))
+      .where(eq(invoices.orgId, org.id))
       .orderBy(desc(jobs.updatedAt), desc(jobs.createdAt))
       .limit(8),
     db
@@ -64,13 +64,13 @@ export default async function DashboardLayout({ children }: { children: React.Re
         processing: sql<number>`coalesce(sum(case when ${jobs.status} = 'processing' then 1 else 0 end), 0)::int`,
       })
       .from(jobs)
-      .innerJoin(invoices, and(eq(jobs.invoiceId, invoices.id), eq(invoices.userId, user.id)))
-      .where(eq(invoices.userId, user.id)),
+      .innerJoin(invoices, and(eq(jobs.invoiceId, invoices.id), eq(invoices.orgId, org.id)))
+      .where(eq(invoices.orgId, org.id)),
   ]);
 
   return (
     <DashboardShell
-      brandName={user.businessName || APP_NAME}
+      brandName={org.businessName || org.name || APP_NAME}
       emailJobItems={emailJobItems.map((item) => ({
         ...item,
         runAt: item.runAt?.toISOString() ?? null,
@@ -81,7 +81,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
         pending: emailJobSummary?.pending ?? 0,
         processing: emailJobSummary?.processing ?? 0,
       }}
-      logoUrl={user.logoUrl}
+      logoUrl={org.logoUrl}
       stripeDockItems={stripeDockItems.map((item) => ({
         ...item,
         paidAt: item.paidAt ?? null,

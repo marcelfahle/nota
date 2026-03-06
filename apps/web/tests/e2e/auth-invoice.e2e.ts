@@ -53,6 +53,19 @@ test("registers, signs out, and signs back in", async ({ page }) => {
   await expect(page.getByRole("heading", { name: "Invoices" })).toBeVisible();
 });
 
+test("updates organization settings and reflects branding", async ({ page }) => {
+  const suffix = uniqueSuffix();
+  await registerAccount(page);
+  const businessName = `Nota Studio ${suffix}`;
+
+  await page.goto("/settings");
+  await page.getByLabel("Business Name").fill(businessName);
+  await page.getByRole("button", { name: "Save Settings" }).click();
+
+  await expect(page.getByText("Settings saved")).toBeVisible();
+  await expect(page.locator("header").getByText(businessName)).toBeVisible();
+});
+
 test("creates a client and moves an invoice through the manual lifecycle", async ({ page }) => {
   const suffix = uniqueSuffix();
   await registerAccount(page);

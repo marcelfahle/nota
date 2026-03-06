@@ -8,33 +8,31 @@ import { db } from "@/lib/db";
 import { bankAccounts, invoices } from "@/lib/db/schema";
 
 export default async function SettingsPage() {
-  const user = await getCurrentUser();
+  const { org } = await getCurrentUser();
 
-  // Get last issued invoice number
   const [lastInvoice] = await db
     .select({ number: invoices.number })
     .from(invoices)
-    .where(eq(invoices.userId, user.id))
+    .where(eq(invoices.orgId, org.id))
     .orderBy(desc(invoices.createdAt))
     .limit(1);
 
-  // Get bank accounts
-  const userBankAccounts = await db
+  const organizationBankAccounts = await db
     .select()
     .from(bankAccounts)
-    .where(eq(bankAccounts.userId, user.id))
+    .where(eq(bankAccounts.orgId, org.id))
     .orderBy(asc(bankAccounts.sortOrder), asc(bankAccounts.createdAt));
 
   const settings = {
-    businessAddress: user.businessAddress,
-    businessName: user.businessName,
-    defaultCurrency: user.defaultCurrency,
-    invoiceDigits: user.invoiceDigits,
-    invoicePrefix: user.invoicePrefix,
-    invoiceSeparator: user.invoiceSeparator,
-    logoUrl: user.logoUrl,
-    nextInvoiceNumber: user.nextInvoiceNumber,
-    vatNumber: user.vatNumber,
+    businessAddress: org.businessAddress,
+    businessName: org.businessName,
+    defaultCurrency: org.defaultCurrency,
+    invoiceDigits: org.invoiceDigits,
+    invoicePrefix: org.invoicePrefix,
+    invoiceSeparator: org.invoiceSeparator,
+    logoUrl: org.logoUrl,
+    nextInvoiceNumber: org.nextInvoiceNumber,
+    vatNumber: org.vatNumber,
   };
 
   return (
@@ -49,7 +47,7 @@ export default async function SettingsPage() {
       </div>
       <div className="max-w-2xl">
         <SettingsForm
-          bankAccounts={userBankAccounts}
+          bankAccounts={organizationBankAccounts}
           lastIssuedNumber={lastInvoice?.number ?? null}
           settings={settings}
         />
