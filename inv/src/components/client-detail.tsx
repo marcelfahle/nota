@@ -53,7 +53,7 @@ export function ClientDetailView({
   client,
   invoices,
 }: {
-  bankAccounts: BankAccountOption[];
+  bankAccounts: Array<BankAccountOption>;
   client: Client;
   invoices: Array<Invoice>;
 }) {
@@ -137,7 +137,7 @@ export function ClientDetailView({
               label="Bank Account"
               value={
                 client.bankAccountId
-                  ? bankAccounts.find((ba) => ba.id === client.bankAccountId)?.name ?? null
+                  ? (bankAccounts.find((ba) => ba.id === client.bankAccountId)?.name ?? null)
                   : (bankAccounts.find((ba) => ba.isDefault)?.name ?? "") + " (default)"
               }
             />

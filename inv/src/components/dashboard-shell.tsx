@@ -5,7 +5,12 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
 
-import { StripeDevDock, type StripeDockItem } from "@/components/stripe-dev-dock";
+import {
+  StripeDevDock,
+  type EmailJobDockItem,
+  type EmailJobDockSummary,
+  type StripeDockItem,
+} from "@/components/stripe-dev-dock";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
@@ -38,11 +43,15 @@ function BrandMark({ brandName, logoUrl }: { brandName: string; logoUrl: string 
 export function DashboardShell({
   brandName,
   children,
+  emailJobItems,
+  emailJobSummary,
   logoUrl,
   stripeDockItems,
 }: {
   brandName: string;
   children: React.ReactNode;
+  emailJobItems: Array<EmailJobDockItem>;
+  emailJobSummary: EmailJobDockSummary;
   logoUrl: string | null;
   stripeDockItems: Array<StripeDockItem>;
 }) {
@@ -100,7 +109,7 @@ export function DashboardShell({
       </header>
 
       <main className="mx-auto max-w-6xl px-4 py-6 pb-28 sm:px-6 sm:py-8 sm:pb-32">{children}</main>
-      <StripeDevDock items={stripeDockItems} />
+      <StripeDevDock items={stripeDockItems} jobs={emailJobItems} jobSummary={emailJobSummary} />
     </div>
   );
 }

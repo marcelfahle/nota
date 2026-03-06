@@ -89,9 +89,7 @@ export async function updateBankAccount(
         name: result.data.name,
         updatedAt: new Date(),
       })
-      .where(
-        and(eq(bankAccounts.id, accountId), eq(bankAccounts.userId, user.id)),
-      );
+      .where(and(eq(bankAccounts.id, accountId), eq(bankAccounts.userId, user.id)));
   });
 
   revalidatePath("/settings");
@@ -105,9 +103,7 @@ export async function deleteBankAccount(accountId: string) {
   const [account] = await db
     .select({ isDefault: bankAccounts.isDefault })
     .from(bankAccounts)
-    .where(
-      and(eq(bankAccounts.id, accountId), eq(bankAccounts.userId, user.id)),
-    )
+    .where(and(eq(bankAccounts.id, accountId), eq(bankAccounts.userId, user.id)))
     .limit(1);
 
   if (!account) {
@@ -120,9 +116,7 @@ export async function deleteBankAccount(accountId: string) {
 
   await db
     .delete(bankAccounts)
-    .where(
-      and(eq(bankAccounts.id, accountId), eq(bankAccounts.userId, user.id)),
-    );
+    .where(and(eq(bankAccounts.id, accountId), eq(bankAccounts.userId, user.id)));
 
   revalidatePath("/settings");
   return { success: true };

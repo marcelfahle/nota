@@ -35,13 +35,13 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { formatCurrency } from "@/lib/utils";
 import {
   canCancelInvoice,
   canMarkInvoicePaid,
   canSendInvoiceReminder,
   normalizeInvoiceStatus,
 } from "@/lib/invoice-lifecycle";
+import { formatCurrency } from "@/lib/utils";
 
 type LineItem = {
   amount: string;
@@ -238,7 +238,9 @@ export function InvoiceDetailView({ activities, invoice }: InvoiceDetailProps) {
         <div className="mb-4">
           <div className="mb-1 flex items-center gap-3">
             <h1 className="font-mono text-lg font-semibold">{invoice.number}</h1>
-            <StatusBadge status={status} />
+            <div data-testid="invoice-status">
+              <StatusBadge status={status} />
+            </div>
           </div>
           <p className="text-sm text-zinc-500">
             {invoice.client.name} &middot; {invoice.client.email}
@@ -252,6 +254,7 @@ export function InvoiceDetailView({ activities, invoice }: InvoiceDetailProps) {
           {isDraft && (
             <>
               <Button
+                data-testid="invoice-send"
                 disabled={pendingAction !== null}
                 onClick={handleSend}
                 size="sm"
@@ -261,6 +264,7 @@ export function InvoiceDetailView({ activities, invoice }: InvoiceDetailProps) {
                 {pendingAction === "send" ? "Sending..." : "Send Invoice"}
               </Button>
               <Button
+                data-testid="invoice-mark-sent"
                 disabled={pendingAction !== null}
                 onClick={handleMarkSent}
                 size="sm"
@@ -270,6 +274,7 @@ export function InvoiceDetailView({ activities, invoice }: InvoiceDetailProps) {
                 {pendingAction === "mark-sent" ? "Marking..." : "Mark Sent"}
               </Button>
               <Button
+                data-testid="invoice-mark-paid"
                 disabled={pendingAction !== null}
                 onClick={handleMarkPaid}
                 size="sm"
@@ -288,6 +293,7 @@ export function InvoiceDetailView({ activities, invoice }: InvoiceDetailProps) {
           )}
           {canSendReminder && (
             <Button
+              data-testid="invoice-send-reminder"
               disabled={pendingAction !== null}
               onClick={handleReminder}
               size="sm"
@@ -303,6 +309,7 @@ export function InvoiceDetailView({ activities, invoice }: InvoiceDetailProps) {
           )}
           {canMarkPaid && !isDraft && (
             <Button
+              data-testid="invoice-mark-paid"
               disabled={pendingAction !== null}
               onClick={handleMarkPaid}
               size="sm"
@@ -340,6 +347,7 @@ export function InvoiceDetailView({ activities, invoice }: InvoiceDetailProps) {
           {canCancel && (
             <Button
               className="text-red-600 hover:bg-red-50 hover:text-red-700"
+              data-testid="invoice-cancel"
               disabled={pendingAction !== null}
               onClick={() => setConfirmAction("cancel")}
               size="sm"
@@ -352,6 +360,7 @@ export function InvoiceDetailView({ activities, invoice }: InvoiceDetailProps) {
           {isDraft && (
             <Button
               className="text-red-600 hover:bg-red-50 hover:text-red-700"
+              data-testid="invoice-delete-draft"
               disabled={pendingAction !== null}
               onClick={() => setConfirmAction("delete")}
               size="sm"
@@ -516,6 +525,7 @@ export function InvoiceDetailView({ activities, invoice }: InvoiceDetailProps) {
           </DialogHeader>
           <DialogFooter>
             <Button
+              data-testid="invoice-confirm-dismiss"
               disabled={pendingAction === "delete" || pendingAction === "cancel"}
               onClick={() => setConfirmAction(null)}
               variant="outline"
@@ -523,6 +533,7 @@ export function InvoiceDetailView({ activities, invoice }: InvoiceDetailProps) {
               Cancel
             </Button>
             <Button
+              data-testid="invoice-confirm-action"
               disabled={pendingAction === "delete" || pendingAction === "cancel"}
               onClick={handleDeleteOrCancel}
               variant="destructive"

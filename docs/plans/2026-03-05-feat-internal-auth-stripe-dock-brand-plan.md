@@ -210,6 +210,7 @@ Follow-up operational additions:
 - [x] The dock can be toggled open/closed
 - [x] The dock shows recent Stripe-related invoice data from the app
 - [x] The dock provides copy/open affordances for relevant Stripe values
+- [x] The dock surfaces recent email jobs and dead-letter visibility
 
 ### Branding
 - [x] Settings include a `Logo URL` input
@@ -225,6 +226,7 @@ Follow-up operational additions:
 - [x] Registration and password-reset flows exist
 - [x] A basic `bun test` suite covers password, reset-token, and invoice lifecycle logic
 - [x] Outbound invoice emails are moved onto a retryable DB-backed job flow
+- [x] Browser-level auth and invoice flow coverage exists
 
 ## Implementation Phases
 

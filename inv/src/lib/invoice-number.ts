@@ -5,6 +5,9 @@ export function formatInvoiceNumber(opts: {
   separator: string;
 }): string {
   const paddedNumber = String(opts.number).padStart(opts.digits, "0");
-  if (!opts.prefix) return paddedNumber;
+  if (!opts.prefix) {
+    return paddedNumber;
+  }
+
   return `${opts.prefix}${opts.separator}${paddedNumber}`;
 }

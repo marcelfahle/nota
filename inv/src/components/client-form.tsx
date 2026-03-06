@@ -24,7 +24,7 @@ type BankAccountOption = {
 
 type ClientFormProps = {
   action: (state: ActionState, formData: FormData) => Promise<ActionState>;
-  bankAccounts?: BankAccountOption[];
+  bankAccounts?: Array<BankAccountOption>;
   defaultValues?: {
     address?: string | null;
     bankAccountId?: string | null;
@@ -63,15 +63,22 @@ export function ClientForm({
   }, [state]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
-    <form action={formAction} className="space-y-4">
+    <form action={formAction} className="space-y-4" data-testid="client-form">
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="space-y-2">
           <Label htmlFor="name">Name *</Label>
-          <Input defaultValue={defaultValues?.name ?? ""} id="name" name="name" required />
+          <Input
+            data-testid="client-name"
+            defaultValue={defaultValues?.name ?? ""}
+            id="name"
+            name="name"
+            required
+          />
         </div>
         <div className="space-y-2">
           <Label htmlFor="email">Email *</Label>
           <Input
+            data-testid="client-email"
             defaultValue={defaultValues?.email ?? ""}
             id="email"
             name="email"
@@ -84,7 +91,12 @@ export function ClientForm({
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="space-y-2">
           <Label htmlFor="company">Company</Label>
-          <Input defaultValue={defaultValues?.company ?? ""} id="company" name="company" />
+          <Input
+            data-testid="client-company"
+            defaultValue={defaultValues?.company ?? ""}
+            id="company"
+            name="company"
+          />
         </div>
         <div className="space-y-2">
           <Label htmlFor="vatNumber">VAT Number</Label>
@@ -105,7 +117,7 @@ export function ClientForm({
       <div className="space-y-2">
         <Label>Currency</Label>
         <Select defaultValue={defaultValues?.defaultCurrency ?? "EUR"} name="defaultCurrency">
-          <SelectTrigger className="w-full">
+          <SelectTrigger className="w-full" data-testid="client-currency-select">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -119,10 +131,7 @@ export function ClientForm({
       {bankAccounts && bankAccounts.length >= 2 && (
         <div className="space-y-2">
           <Label>Bank Account</Label>
-          <Select
-            defaultValue={defaultValues?.bankAccountId ?? ""}
-            name="bankAccountId"
-          >
+          <Select defaultValue={defaultValues?.bankAccountId ?? ""} name="bankAccountId">
             <SelectTrigger className="w-full">
               <SelectValue placeholder="Use default account" />
             </SelectTrigger>

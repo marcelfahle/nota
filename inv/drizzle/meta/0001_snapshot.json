@@ -46,13 +46,9 @@
         "activity_log_invoice_id_invoices_id_fk": {
           "name": "activity_log_invoice_id_invoices_id_fk",
           "tableFrom": "activity_log",
-          "columnsFrom": [
-            "invoice_id"
-          ],
+          "columnsFrom": ["invoice_id"],
           "tableTo": "invoices",
-          "columnsTo": [
-            "id"
-          ],
+          "columnsTo": ["id"],
           "onUpdate": "no action",
           "onDelete": "no action"
         }
@@ -143,13 +139,9 @@
         "clients_user_id_users_id_fk": {
           "name": "clients_user_id_users_id_fk",
           "tableFrom": "clients",
-          "columnsFrom": [
-            "user_id"
-          ],
+          "columnsFrom": ["user_id"],
           "tableTo": "users",
-          "columnsTo": [
-            "id"
-          ],
+          "columnsTo": ["id"],
           "onUpdate": "no action",
           "onDelete": "no action"
         }
@@ -309,26 +301,18 @@
         "invoices_user_id_users_id_fk": {
           "name": "invoices_user_id_users_id_fk",
           "tableFrom": "invoices",
-          "columnsFrom": [
-            "user_id"
-          ],
+          "columnsFrom": ["user_id"],
           "tableTo": "users",
-          "columnsTo": [
-            "id"
-          ],
+          "columnsTo": ["id"],
           "onUpdate": "no action",
           "onDelete": "no action"
         },
         "invoices_client_id_clients_id_fk": {
           "name": "invoices_client_id_clients_id_fk",
           "tableFrom": "invoices",
-          "columnsFrom": [
-            "client_id"
-          ],
+          "columnsFrom": ["client_id"],
           "tableTo": "clients",
-          "columnsTo": [
-            "id"
-          ],
+          "columnsTo": ["id"],
           "onUpdate": "no action",
           "onDelete": "no action"
         }
@@ -337,9 +321,7 @@
       "uniqueConstraints": {
         "invoices_number_unique": {
           "name": "invoices_number_unique",
-          "columns": [
-            "number"
-          ],
+          "columns": ["number"],
           "nullsNotDistinct": false
         }
       },
@@ -401,13 +383,9 @@
         "line_items_invoice_id_invoices_id_fk": {
           "name": "line_items_invoice_id_invoices_id_fk",
           "tableFrom": "line_items",
-          "columnsFrom": [
-            "invoice_id"
-          ],
+          "columnsFrom": ["invoice_id"],
           "tableTo": "invoices",
-          "columnsTo": [
-            "id"
-          ],
+          "columnsTo": ["id"],
           "onUpdate": "no action",
           "onDelete": "cascade"
         }
@@ -512,9 +490,7 @@
       "uniqueConstraints": {
         "users_email_unique": {
           "name": "users_email_unique",
-          "columns": [
-            "email"
-          ],
+          "columns": ["email"],
           "nullsNotDistinct": false
         }
       },
@@ -527,13 +503,7 @@
     "public.invoice_status": {
       "name": "invoice_status",
       "schema": "public",
-      "values": [
-        "draft",
-        "sent",
-        "paid",
-        "overdue",
-        "cancelled"
-      ]
+      "values": ["draft", "sent", "paid", "overdue", "cancelled"]
     }
   },
   "schemas": {},

@@ -134,13 +134,14 @@ export function InvoiceForm({
         formAction(formData);
       }}
       className="space-y-8"
+      data-testid="invoice-form"
     >
       {/* Invoice Details */}
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="space-y-2">
           <Label htmlFor="clientId">Client *</Label>
           <Select defaultValue={defaultValues?.clientId} name="clientId" required>
-            <SelectTrigger className="w-full">
+            <SelectTrigger className="w-full" data-testid="invoice-client-select">
               <SelectValue placeholder="Select a client" />
             </SelectTrigger>
             <SelectContent>
@@ -156,7 +157,7 @@ export function InvoiceForm({
         <div className="space-y-2">
           <Label>Currency</Label>
           <Select name="currency_display" onValueChange={setCurrency} value={currency}>
-            <SelectTrigger className="w-full">
+            <SelectTrigger className="w-full" data-testid="invoice-currency-select">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -212,6 +213,7 @@ export function InvoiceForm({
             >
               <Input
                 className="h-8 text-sm"
+                data-testid={`invoice-line-item-description-${index}`}
                 onChange={(e) => updateItem(index, "description", e.target.value)}
                 placeholder="Description"
                 required
@@ -220,6 +222,7 @@ export function InvoiceForm({
               <div className="grid grid-cols-[1fr_1fr_auto] items-center gap-2 sm:contents">
                 <Input
                   className="h-8 text-sm"
+                  data-testid={`invoice-line-item-quantity-${index}`}
                   min="0"
                   onChange={(e) => updateItem(index, "quantity", e.target.value)}
                   placeholder="Qty"
@@ -230,6 +233,7 @@ export function InvoiceForm({
                 />
                 <Input
                   className="h-8 text-sm"
+                  data-testid={`invoice-line-item-unit-price-${index}`}
                   min="0"
                   onChange={(e) => updateItem(index, "unitPrice", e.target.value)}
                   placeholder="Rate"
@@ -257,6 +261,7 @@ export function InvoiceForm({
           <div className="px-3 py-2">
             <button
               className="inline-flex items-center gap-1 text-sm text-zinc-500 hover:text-zinc-900"
+              data-testid="invoice-add-line-item"
               onClick={addItem}
               type="button"
             >
@@ -343,7 +348,7 @@ export function InvoiceForm({
         <Button onClick={() => router.push("/invoices")} type="button" variant="outline">
           Cancel
         </Button>
-        <Button disabled={pending} type="submit">
+        <Button data-testid="invoice-submit" disabled={pending} type="submit">
           {pending ? "Saving..." : submitLabel}
         </Button>
       </div>

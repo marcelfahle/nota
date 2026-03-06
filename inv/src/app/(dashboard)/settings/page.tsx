@@ -1,6 +1,8 @@
 import { asc, desc, eq } from "drizzle-orm";
 
+import { logout } from "@/actions/auth";
 import { SettingsForm } from "@/components/settings-form";
+import { Button } from "@/components/ui/button";
 import { getCurrentUser } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { bankAccounts, invoices } from "@/lib/db/schema";
@@ -37,7 +39,14 @@ export default async function SettingsPage() {
 
   return (
     <div>
-      <h1 className="mb-6 text-2xl font-semibold tracking-tight">Settings</h1>
+      <div className="mb-6 flex items-center justify-between gap-3">
+        <h1 className="text-2xl font-semibold tracking-tight">Settings</h1>
+        <form action={logout}>
+          <Button data-testid="logout-button" type="submit" variant="outline">
+            Sign out
+          </Button>
+        </form>
+      </div>
       <div className="max-w-2xl">
         <SettingsForm
           bankAccounts={userBankAccounts}

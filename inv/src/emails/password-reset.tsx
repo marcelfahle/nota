@@ -39,9 +39,7 @@ export function PasswordResetEmail({ name, resetUrl }: { name: string; resetUrl:
             </Button>
           </Section>
 
-          <Text style={styles.text}>
-            If you did not request this, you can ignore this email.
-          </Text>
+          <Text style={styles.text}>If you did not request this, you can ignore this email.</Text>
 
           <Hr style={styles.hr} />
 

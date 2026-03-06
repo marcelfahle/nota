@@ -24,16 +24,25 @@ export default function LoginPage() {
       }
       title="Sign in"
     >
-      <form action={action} className="space-y-4">
+      <form action={action} className="space-y-4" data-testid="login-form">
         <div className="space-y-2">
           <Label htmlFor="email">Email</Label>
-          <Input autoComplete="email" autoFocus id="email" name="email" required type="email" />
+          <Input
+            autoComplete="email"
+            autoFocus
+            data-testid="login-email"
+            id="email"
+            name="email"
+            required
+            type="email"
+          />
         </div>
 
         <div className="space-y-2">
           <Label htmlFor="password">Password</Label>
           <Input
             autoComplete="current-password"
+            data-testid="login-password"
             id="password"
             name="password"
             required
@@ -43,7 +52,7 @@ export default function LoginPage() {
 
         {state?.error && <p className="text-sm text-red-500">{state.error}</p>}
 
-        <Button className="w-full" disabled={pending} type="submit">
+        <Button className="w-full" data-testid="login-submit" disabled={pending} type="submit">
           {pending ? "Signing in..." : "Sign in"}
         </Button>
 

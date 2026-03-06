@@ -6,7 +6,8 @@
     "dev": "next dev --turbopack",
     "build": "next build",
     "start": "next start",
-    "test": "bun test",
+    "test": "bun test ./src",
+    "test:e2e": "playwright test",
     "tsc": "tsgo",
     "lint": "oxlint",
     "format": "oxfmt --write .",
@@ -36,6 +37,7 @@
   },
   "devDependencies": {
     "@nkzw/oxlint-config": "^1.0.1",
+    "@playwright/test": "^1.56.1",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
     "@types/react": "^19",
