@@ -1,7 +1,7 @@
 "use client";
 
 import { Pencil, Plus, Star, Trash2 } from "lucide-react";
-import { useActionState, useMemo, useState } from "react";
+import { useActionState, useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
 
 import { createBankAccount, deleteBankAccount, updateBankAccount } from "@/actions/bank-accounts";
 import { updateSettings } from "@/actions/settings";
@@ -48,6 +48,113 @@ type SettingsData = {
   vatNumber: string | null;
 };
 
+function LogoUploadField({
+  canManageSettings,
+  currentLogoUrl,
+}: {
+  canManageSettings: boolean;
+  currentLogoUrl: string | null;
+}) {
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const objectUrlRef = useRef<string | null>(null);
+  const [selectedPreviewUrl, setSelectedPreviewUrl] = useState<string | null>(null);
+  const [removeLogo, setRemoveLogo] = useState(false);
+
+  useEffect(() => {
+    return () => {
+      if (objectUrlRef.current) {
+        URL.revokeObjectURL(objectUrlRef.current);
+      }
+    };
+  }, []);
+
+  function updateSelectedPreview(nextPreviewUrl: string | null) {
+    if (objectUrlRef.current) {
+      URL.revokeObjectURL(objectUrlRef.current);
+      objectUrlRef.current = null;
+    }
+
+    setSelectedPreviewUrl(nextPreviewUrl);
+  }
+
+  function handleFileChange(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0] ?? null;
+    setRemoveLogo(false);
+
+    if (!file) {
+      updateSelectedPreview(null);
+      return;
+    }
+
+    const objectUrl = URL.createObjectURL(file);
+    updateSelectedPreview(objectUrl);
+    objectUrlRef.current = objectUrl;
+  }
+
+  function handleRemoveLogo() {
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
+
+    setRemoveLogo(true);
+    updateSelectedPreview(null);
+  }
+
+  const previewUrl = removeLogo ? null : (selectedPreviewUrl ?? currentLogoUrl);
+  const hasPreview = Boolean(previewUrl);
+  const removeButtonLabel =
+    currentLogoUrl && !removeLogo && !selectedPreviewUrl
+      ? "Remove current logo"
+      : "Clear selection";
+
+  return (
+    <div className="space-y-3">
+      <div className="flex flex-col gap-4 sm:flex-row">
+        <div className="flex h-20 w-20 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-zinc-200 bg-zinc-50">
+          {previewUrl ? (
+            <img
+              alt="Organization logo preview"
+              className="h-full w-full object-contain"
+              src={previewUrl}
+            />
+          ) : (
+            <span className="px-3 text-center text-[11px] font-medium tracking-[0.2em] text-zinc-400 uppercase">
+              No logo
+            </span>
+          )}
+        </div>
+
+        <div className="min-w-0 flex-1 space-y-2">
+          <Label htmlFor="logoFile">Logo</Label>
+          <Input
+            accept="image/png,image/jpeg,image/webp"
+            data-testid="settings-logo-file"
+            disabled={!canManageSettings}
+            id="logoFile"
+            name="logoFile"
+            onChange={handleFileChange}
+            ref={fileInputRef}
+            type="file"
+          />
+          <input name="removeLogo" type="hidden" value={removeLogo ? "true" : "false"} />
+          <p className="text-xs text-zinc-500">
+            PNG, JPG, or WebP up to 2 MB. Used in the app header and invoice PDFs.
+          </p>
+          {removeLogo ? (
+            <p className="text-xs text-amber-700">Logo will be removed when you save.</p>
+          ) : null}
+          {hasPreview && canManageSettings ? (
+            <Button onClick={handleRemoveLogo} size="sm" type="button" variant="outline">
+              <Trash2 className="size-4" />
+              {removeButtonLabel}
+            </Button>
+          ) : null}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function SettingsForm({
   bankAccounts,
   canManageBankAccounts,
@@ -86,7 +193,7 @@ export function SettingsForm({
 
   return (
     <div className="space-y-10">
-      <form action={formAction} className="space-y-6">
+      <form action={formAction} className="space-y-6" encType="multipart/form-data">
         {readOnlySettings && (
           <div className="rounded-lg border border-zinc-200 bg-zinc-50 px-4 py-3 text-sm text-zinc-600">
             Only organization owners can update these settings.
@@ -114,19 +221,11 @@ export function SettingsForm({
             </div>
           </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="logoUrl">Logo URL</Label>
-            <Input
-              defaultValue={settings.logoUrl ?? ""}
-              id="logoUrl"
-              name="logoUrl"
-              placeholder="https://example.com/logo.png"
-              type="url"
-            />
-            <p className="text-xs text-zinc-500">
-              Used in the app header. Leave blank to keep the text mark.
-            </p>
-          </div>
+          <LogoUploadField
+            canManageSettings={canManageSettings}
+            currentLogoUrl={settings.logoUrl}
+            key={settings.logoUrl ?? "no-logo"}
+          />
 
           <div className="space-y-2">
             <Label htmlFor="businessAddress">Business Address</Label>
@@ -151,308 +250,389 @@ export function SettingsForm({
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="EUR">EUR</SelectItem>
-                <SelectItem value="USD">USD</SelectItem>
-                <SelectItem value="GBP">GBP</SelectItem>
+                <SelectItem value="EUR">EUR (€)</SelectItem>
+                <SelectItem value="USD">USD ($)</SelectItem>
+                <SelectItem value="GBP">GBP (£)</SelectItem>
               </SelectContent>
             </Select>
           </div>
 
-          {/* Invoice Numbering Section */}
-          <div className="space-y-4">
-            <h2 className="text-sm font-semibold">Invoice Numbering</h2>
-            <div className="grid gap-4 sm:grid-cols-3">
-              <div className="space-y-2">
-                <Label htmlFor="invoicePrefix">Prefix</Label>
-                <Input
-                  id="invoicePrefix"
-                  name="invoicePrefix"
-                  onChange={(e) => setPrefix(e.target.value)}
-                  placeholder="e.g. INV"
-                  value={prefix}
-                />
-              </div>
-              <input name="invoiceSeparator" type="hidden" value={effectiveSeparator} />
-              <div className={prefix ? "space-y-2" : "hidden"}>
-                <Label>Separator</Label>
-                <Select disabled={readOnlySettings} onValueChange={setSeparator} value={separator}>
-                  <SelectTrigger className="w-full">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="-">Dash (-)</SelectItem>
-                    <SelectItem value="/">Slash (/)</SelectItem>
-                    <SelectItem value=".">Dot (.)</SelectItem>
-                    <SelectItem value="none">None</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label>Digits</Label>
-                <Select
-                  disabled={readOnlySettings}
-                  name="invoiceDigits"
-                  onValueChange={setDigits}
-                  value={digits}
-                >
-                  <SelectTrigger className="w-full">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {[3, 4, 5, 6, 7, 8, 9, 10].map((n) => (
-                      <SelectItem key={n} value={String(n)}>
-                        {n} digits
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
+          <div className="space-y-2">
+            <Label htmlFor="invoicePrefix">Invoice Prefix</Label>
+            <Input
+              disabled={readOnlySettings}
+              id="invoicePrefix"
+              name="invoicePrefix"
+              onChange={(event) => setPrefix(event.target.value.toUpperCase())}
+              value={prefix}
+            />
+          </div>
+
+          <div className="grid gap-4 sm:grid-cols-3">
             <div className="space-y-2">
-              <Label htmlFor="nextInvoiceNumber">Next Number</Label>
+              <Label htmlFor="invoiceSeparator">Separator</Label>
+              <Select
+                disabled={readOnlySettings}
+                name="invoiceSeparator"
+                onValueChange={(value) => setSeparator(value)}
+                value={separator}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="-">Dash (-)</SelectItem>
+                  <SelectItem value="/">Slash (/)</SelectItem>
+                  <SelectItem value=".">Dot (.)</SelectItem>
+                  <SelectItem value="none">None</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="invoiceDigits">Number of Digits</Label>
               <Input
-                className="w-full sm:w-48"
+                disabled={readOnlySettings}
+                id="invoiceDigits"
+                max={10}
+                min={3}
+                name="invoiceDigits"
+                onChange={(event) => setDigits(event.target.value)}
+                type="number"
+                value={digits}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="nextInvoiceNumber">Next Invoice Number</Label>
+              <Input
+                disabled={readOnlySettings}
                 id="nextInvoiceNumber"
-                min="1"
+                min={1}
                 name="nextInvoiceNumber"
-                onChange={(e) => setNextNumber(e.target.value)}
+                onChange={(event) => setNextNumber(event.target.value)}
                 type="number"
                 value={nextNumber}
               />
             </div>
-            <div className="rounded-lg border border-zinc-200 bg-zinc-50 p-4">
-              <p className="mb-1 text-xs font-medium text-zinc-500">Preview</p>
-              <p className="font-mono text-sm">
-                Your next invoice: <span className="font-semibold">{preview[0]}</span>
-              </p>
-              <p className="font-mono text-xs text-zinc-500">
-                Then: {preview[1]}, {preview[2]}
-              </p>
-              {lastIssuedNumber && (
-                <p className="mt-2 text-xs text-zinc-400">Last issued: {lastIssuedNumber}</p>
-              )}
+          </div>
+
+          <div className="rounded-xl border border-zinc-200 bg-zinc-50 p-4">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="text-sm font-medium text-zinc-900">Invoice number preview</p>
+                <p className="text-xs text-zinc-500">
+                  Last issued: {lastIssuedNumber ?? "None yet"}
+                </p>
+              </div>
+            </div>
+            <div className="mt-3 flex flex-wrap gap-2">
+              {preview.map((value) => (
+                <span
+                  className="rounded-full border border-zinc-200 bg-white px-3 py-1 text-xs font-medium text-zinc-700"
+                  key={value}
+                >
+                  {value}
+                </span>
+              ))}
             </div>
           </div>
 
-          {state?.error && <p className="text-sm text-red-500">{state.error}</p>}
-        </fieldset>
-
-        <div className="flex items-center gap-3">
-          {canManageSettings ? (
-            <Button disabled={pending} type="submit">
-              {pending ? "Saving..." : "Save Settings"}
+          <div className="flex items-center gap-3">
+            <Button disabled={pending || readOnlySettings} type="submit">
+              Save Settings
             </Button>
-          ) : (
-            <span className="text-sm text-zinc-500">Read-only for your role</span>
-          )}
-          {state?.success && <span className="text-sm text-emerald-600">Settings saved</span>}
-        </div>
+            {state?.error ? <p className="text-sm text-red-600">{state.error}</p> : null}
+            {state?.success ? <p className="text-sm text-green-600">Settings updated.</p> : null}
+          </div>
+        </fieldset>
       </form>
 
-      {/* Bank Accounts Section */}
-      <BankAccountsSection
-        bankAccounts={bankAccounts}
-        canManageBankAccounts={canManageBankAccounts}
-      />
+      <BankAccountsSection accounts={bankAccounts} canManageBankAccounts={canManageBankAccounts} />
     </div>
   );
 }
 
+type BankAccountFormState = {
+  details: string;
+  isDefault: boolean;
+  name: string;
+};
+
 function BankAccountsSection({
-  bankAccounts,
+  accounts,
   canManageBankAccounts,
 }: {
-  bankAccounts: Array<BankAccount>;
+  accounts: Array<BankAccount>;
   canManageBankAccounts: boolean;
 }) {
-  const [dialogOpen, setDialogOpen] = useState(false);
+  const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [editingAccount, setEditingAccount] = useState<BankAccount | null>(null);
-  const [deleteConfirm, setDeleteConfirm] = useState<BankAccount | null>(null);
-  const [deleting, setDeleting] = useState(false);
+  const [formState, setFormState] = useState<BankAccountFormState>({
+    details: "",
+    isDefault: false,
+    name: "",
+  });
+  const [error, setError] = useState<string | null>(null);
+  const [isPending, setIsPending] = useState(false);
 
-  function openCreate() {
-    setEditingAccount(null);
-    setDialogOpen(true);
-  }
+  const openCreateDialog = () => {
+    setFormState({ details: "", isDefault: false, name: "" });
+    setError(null);
+    setIsCreateOpen(true);
+  };
 
-  function openEdit(account: BankAccount) {
+  const openEditDialog = (account: BankAccount) => {
     setEditingAccount(account);
-    setDialogOpen(true);
-  }
+    setFormState({ details: account.details, isDefault: account.isDefault, name: account.name });
+    setError(null);
+  };
 
-  async function handleDelete() {
-    if (!deleteConfirm) {
+  const closeDialogs = () => {
+    setIsCreateOpen(false);
+    setEditingAccount(null);
+    setError(null);
+    setIsPending(false);
+  };
+
+  const handleCreate = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setIsPending(true);
+    const payload = new FormData(event.currentTarget);
+    const result = await createBankAccount(null, payload);
+
+    if (result?.error) {
+      setError(result.error);
+      setIsPending(false);
       return;
     }
-    setDeleting(true);
-    await deleteBankAccount(deleteConfirm.id);
-    setDeleting(false);
-    setDeleteConfirm(null);
-  }
+
+    closeDialogs();
+  };
+
+  const handleUpdate = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!editingAccount) {
+      return;
+    }
+
+    setIsPending(true);
+    const payload = new FormData(event.currentTarget);
+    payload.set("id", editingAccount.id);
+    const result = await updateBankAccount(editingAccount.id, null, payload);
+
+    if (result?.error) {
+      setError(result.error);
+      setIsPending(false);
+      return;
+    }
+
+    closeDialogs();
+  };
+
+  const handleDelete = async (accountId: string) => {
+    const result = await deleteBankAccount(accountId);
+    if (result?.error) {
+      setError(result.error);
+    }
+  };
 
   return (
     <div className="space-y-4">
-      <h2 className="text-sm font-semibold">Bank Accounts</h2>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h2 className="text-lg font-medium text-zinc-900">Bank Accounts</h2>
+          <p className="text-sm text-zinc-500">
+            Manage the payout instructions shown on your invoices.
+          </p>
+        </div>
+        <Button disabled={!canManageBankAccounts} onClick={openCreateDialog} type="button">
+          <Plus className="size-4" />
+          New Account
+        </Button>
+      </div>
 
-      {bankAccounts.length === 0 ? (
-        <p className="text-sm text-zinc-400">
-          {canManageBankAccounts
-            ? "No bank accounts yet. Add one to include payment details on invoices."
-            : "No bank accounts configured yet."}
-        </p>
-      ) : (
-        <div className="space-y-3">
-          {bankAccounts.map((account) => (
+      {!canManageBankAccounts ? (
+        <div className="rounded-lg border border-zinc-200 bg-zinc-50 px-4 py-3 text-sm text-zinc-600">
+          Only owners and admins can manage bank accounts.
+        </div>
+      ) : null}
+
+      {error ? <div className="text-sm text-red-600">{error}</div> : null}
+
+      <div className="grid gap-4">
+        {accounts.length === 0 ? (
+          <div className="rounded-2xl border border-dashed border-zinc-300 px-6 py-12 text-center text-sm text-zinc-500">
+            No bank accounts yet.
+          </div>
+        ) : (
+          accounts.map((account) => (
             <div
-              className="flex items-start justify-between rounded-lg border border-zinc-200 p-4"
+              className="rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm"
               key={account.id}
             >
-              <div className="min-w-0 flex-1">
+              <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-sm font-medium text-zinc-900">{account.name}</h3>
+                    {account.isDefault ? (
+                      <span className="inline-flex items-center gap-1 rounded-full bg-zinc-100 px-2 py-1 text-xs font-medium text-zinc-700">
+                        <Star className="size-3" />
+                        Default
+                      </span>
+                    ) : null}
+                  </div>
+                  <pre className="font-sans text-sm leading-6 whitespace-pre-wrap text-zinc-600">
+                    {account.details}
+                  </pre>
+                </div>
                 <div className="flex items-center gap-2">
-                  <span className="text-sm font-medium">{account.name}</span>
-                  {account.isDefault && (
-                    <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-700">
-                      <Star className="size-3" />
-                      Default
-                    </span>
-                  )}
-                </div>
-                <p className="mt-1 line-clamp-2 text-xs whitespace-pre-line text-zinc-500">
-                  {account.details}
-                </p>
-              </div>
-              {canManageBankAccounts && (
-                <div className="ml-4 flex shrink-0 items-center gap-1">
-                  <Button onClick={() => openEdit(account)} size="sm" variant="ghost">
-                    <Pencil className="size-3.5" />
+                  <Button
+                    onClick={() => openEditDialog(account)}
+                    size="sm"
+                    type="button"
+                    variant="outline"
+                  >
+                    <Pencil className="size-4" />
+                    Edit
                   </Button>
-                  {!account.isDefault && (
-                    <Button
-                      className="text-red-500 hover:text-red-700"
-                      onClick={() => setDeleteConfirm(account)}
-                      size="sm"
-                      variant="ghost"
-                    >
-                      <Trash2 className="size-3.5" />
-                    </Button>
-                  )}
+                  <Button
+                    onClick={() => handleDelete(account.id)}
+                    size="sm"
+                    type="button"
+                    variant="outline"
+                  >
+                    <Trash2 className="size-4" />
+                    Delete
+                  </Button>
                 </div>
-              )}
+              </div>
             </div>
-          ))}
-        </div>
-      )}
+          ))
+        )}
+      </div>
 
-      {canManageBankAccounts && (
-        <Button onClick={openCreate} size="sm" variant="outline">
-          <Plus className="size-4" />
-          Add Bank Account
-        </Button>
-      )}
-
-      {/* Create / Edit Dialog */}
-      <BankAccountDialog
-        account={editingAccount}
-        onClose={() => setDialogOpen(false)}
-        open={canManageBankAccounts && dialogOpen}
-      />
-
-      {/* Delete Confirmation */}
-      <Dialog
-        onOpenChange={(open) => !open && setDeleteConfirm(null)}
-        open={canManageBankAccounts && !!deleteConfirm}
-      >
+      <Dialog onOpenChange={setIsCreateOpen} open={isCreateOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Delete bank account</DialogTitle>
+            <DialogTitle>New bank account</DialogTitle>
             <DialogDescription>
-              Are you sure you want to delete &ldquo;{deleteConfirm?.name}
-              &rdquo;? Clients assigned to this account will lose their assignment.
+              Add payout instructions to show on future invoices.
             </DialogDescription>
           </DialogHeader>
-          <DialogFooter>
-            <Button disabled={deleting} onClick={() => setDeleteConfirm(null)} variant="outline">
-              Cancel
-            </Button>
-            <Button disabled={deleting} onClick={handleDelete} variant="destructive">
-              {deleting ? "Deleting..." : "Delete"}
-            </Button>
-          </DialogFooter>
+          <form className="space-y-4" onSubmit={handleCreate}>
+            <div className="space-y-2">
+              <Label htmlFor="create-bank-account-name">Name</Label>
+              <Input
+                id="create-bank-account-name"
+                name="name"
+                onChange={(event) =>
+                  setFormState((current) => ({ ...current, name: event.target.value }))
+                }
+                placeholder="Business account"
+                required
+                value={formState.name}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="create-bank-account-details">Details</Label>
+              <textarea
+                className="min-h-[140px] w-full rounded-md border border-input bg-transparent px-3 py-2 text-base shadow-xs transition-[color,box-shadow] outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50 md:text-sm"
+                id="create-bank-account-details"
+                name="details"
+                onChange={(event) =>
+                  setFormState((current) => ({ ...current, details: event.target.value }))
+                }
+                placeholder="IBAN\nBIC\nBank name"
+                required
+                rows={6}
+                value={formState.details}
+              />
+            </div>
+            <label className="flex items-center gap-2 text-sm text-zinc-700">
+              <input
+                checked={formState.isDefault}
+                name="isDefault"
+                onChange={(event) =>
+                  setFormState((current) => ({ ...current, isDefault: event.target.checked }))
+                }
+                type="checkbox"
+                value="true"
+              />
+              Set as default account
+            </label>
+            {error ? <p className="text-sm text-red-600">{error}</p> : null}
+            <DialogFooter>
+              <Button onClick={closeDialogs} type="button" variant="ghost">
+                Cancel
+              </Button>
+              <Button disabled={isPending} type="submit">
+                Save account
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog onOpenChange={(open) => !open && closeDialogs()} open={Boolean(editingAccount)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Edit bank account</DialogTitle>
+            <DialogDescription>
+              Update the payout instructions shown on your invoices.
+            </DialogDescription>
+          </DialogHeader>
+          <form className="space-y-4" onSubmit={handleUpdate}>
+            <div className="space-y-2">
+              <Label htmlFor="edit-bank-account-name">Name</Label>
+              <Input
+                id="edit-bank-account-name"
+                name="name"
+                onChange={(event) =>
+                  setFormState((current) => ({ ...current, name: event.target.value }))
+                }
+                required
+                value={formState.name}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit-bank-account-details">Details</Label>
+              <textarea
+                className="min-h-[140px] w-full rounded-md border border-input bg-transparent px-3 py-2 text-base shadow-xs transition-[color,box-shadow] outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50 md:text-sm"
+                id="edit-bank-account-details"
+                name="details"
+                onChange={(event) =>
+                  setFormState((current) => ({ ...current, details: event.target.value }))
+                }
+                required
+                rows={6}
+                value={formState.details}
+              />
+            </div>
+            <label className="flex items-center gap-2 text-sm text-zinc-700">
+              <input
+                checked={formState.isDefault}
+                name="isDefault"
+                onChange={(event) =>
+                  setFormState((current) => ({ ...current, isDefault: event.target.checked }))
+                }
+                type="checkbox"
+                value="true"
+              />
+              Set as default account
+            </label>
+            {error ? <p className="text-sm text-red-600">{error}</p> : null}
+            <DialogFooter>
+              <Button onClick={closeDialogs} type="button" variant="ghost">
+                Cancel
+              </Button>
+              <Button disabled={isPending} type="submit">
+                Update account
+              </Button>
+            </DialogFooter>
+          </form>
         </DialogContent>
       </Dialog>
     </div>
-  );
-}
-
-function BankAccountDialog({
-  account,
-  onClose,
-  open,
-}: {
-  account: BankAccount | null;
-  onClose: () => void;
-  open: boolean;
-}) {
-  const isEditing = !!account;
-  const action = isEditing ? updateBankAccount.bind(null, account.id) : createBankAccount;
-  const [state, formAction, pending] = useActionState(
-    async (prev: { error?: string; success?: boolean } | null, formData: FormData) => {
-      const result = await action(prev, formData);
-      if (result?.success) {
-        onClose();
-      }
-      return result;
-    },
-    null,
-  );
-
-  return (
-    <Dialog onOpenChange={(o) => !o && onClose()} open={open}>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>{isEditing ? "Edit Bank Account" : "Add Bank Account"}</DialogTitle>
-        </DialogHeader>
-        <form action={formAction} className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="bankAccountName">Account Name</Label>
-            <Input
-              defaultValue={account?.name ?? ""}
-              id="bankAccountName"
-              name="name"
-              placeholder='e.g. "Wise EUR", "Mercury USD"'
-              required
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="bankAccountDetails">Bank Details</Label>
-            <textarea
-              className="w-full min-w-0 rounded-md border border-input bg-transparent px-3 py-2 text-base shadow-xs transition-[color,box-shadow] outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50 md:text-sm"
-              defaultValue={account?.details ?? ""}
-              id="bankAccountDetails"
-              name="details"
-              placeholder={"IBAN: DE89 3704 0044 0532 0130 00\nBIC: COBADEFFXXX"}
-              required
-              rows={4}
-            />
-          </div>
-          <div className="flex items-center gap-2">
-            <input
-              defaultChecked={account?.isDefault ?? false}
-              id="bankAccountDefault"
-              name="isDefault"
-              type="checkbox"
-              value="true"
-            />
-            <Label htmlFor="bankAccountDefault">Set as default account</Label>
-          </div>
-          {state?.error && <p className="text-sm text-red-500">{state.error}</p>}
-          <DialogFooter>
-            <Button disabled={pending} type="submit">
-              {pending ? "Saving..." : isEditing ? "Update" : "Add"}
-            </Button>
-          </DialogFooter>
-        </form>
-      </DialogContent>
-    </Dialog>
   );
 }

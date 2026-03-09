@@ -65,6 +65,8 @@ export async function createDraftInvoice(
   await page.getByTestId("invoice-submit").click();
 
   await expect(page).toHaveURL(/\/invoices$/);
+  await page.goto("/invoices?status=draft");
+  await expect(page).toHaveURL(/\/invoices\?status=draft$/);
 
   const invoiceLink = page.locator('tbody a[href^="/invoices/"]').first();
   await expect(invoiceLink).toBeVisible();

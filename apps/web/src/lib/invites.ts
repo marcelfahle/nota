@@ -1,7 +1,12 @@
 import { and, eq, gt, isNull } from "drizzle-orm";
+import { z } from "zod";
 
 import { db } from "@/lib/db";
 import { invites, orgs } from "@/lib/db/schema";
+
+const inviteAppUrlSchema = z.object({
+  APP_URL: z.url("APP_URL must be a valid absolute URL"),
+});
 
 export type ActiveInvite = {
   email: string;
@@ -13,10 +18,25 @@ export type ActiveInvite = {
   token: string;
 };
 
+export function buildInvitePath(token: string) {
+  const inviteUrl = new URL("/register", "http://nota.local");
+  inviteUrl.searchParams.set("invite", token);
+  return `${inviteUrl.pathname}${inviteUrl.search}`;
+}
+
 export function buildInviteUrl(appUrl: string, token: string) {
   const inviteUrl = new URL("/register", appUrl);
   inviteUrl.searchParams.set("invite", token);
   return inviteUrl.toString();
+}
+
+export function getInviteLink(token: string) {
+  const result = inviteAppUrlSchema.safeParse(process.env);
+  if (!result.success) {
+    return buildInvitePath(token);
+  }
+
+  return buildInviteUrl(result.data.APP_URL, token);
 }
 
 export async function getActiveInviteByToken(token: string): Promise<ActiveInvite | null> {

@@ -51,7 +51,6 @@ test("enforces role-scoped actions across owners, admins, and members", async ({
   await expect(
     memberPage.getByText("Only organization owners can update these settings."),
   ).toBeVisible();
-  await expect(memberPage.getByText("Read-only for your role")).toBeVisible();
   await expect(memberPage.getByTestId("team-settings")).toHaveCount(0);
   await expect(memberPage.getByTestId("api-keys-settings")).toHaveCount(0);
 

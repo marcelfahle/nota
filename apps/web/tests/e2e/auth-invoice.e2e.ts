@@ -26,7 +26,7 @@ test("updates organization settings and reflects branding", async ({ page }) => 
   await page.getByLabel("Business Name").fill(businessName);
   await page.getByRole("button", { name: "Save Settings" }).click();
 
-  await expect(page.getByText("Settings saved")).toBeVisible();
+  await expect(page.getByText("Settings updated.")).toBeVisible();
   await expect(page.locator("header").getByText(businessName)).toBeVisible();
 });
 

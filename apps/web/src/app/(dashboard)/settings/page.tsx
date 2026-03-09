@@ -9,8 +9,7 @@ import { Button } from "@/components/ui/button";
 import { getCurrentUser } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { apiKeys, bankAccounts, invoices } from "@/lib/db/schema";
-import { getAppEnv } from "@/lib/env";
-import { buildInviteUrl } from "@/lib/invites";
+import { getInviteLink } from "@/lib/invites";
 import {
   canManageApiKeys,
   canManageBankAccounts,
@@ -94,7 +93,7 @@ export default async function SettingsPage() {
               email: invite.email,
               expiresAt: invite.expiresAt,
               id: invite.id,
-              inviteUrl: buildInviteUrl(getAppEnv().APP_URL, invite.token),
+              inviteUrl: getInviteLink(invite.token),
               role: invite.role,
             }))}
           />

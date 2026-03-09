@@ -79,11 +79,18 @@ Open `http://localhost:3000/login`.
 - `STRIPE_WEBHOOK_SECRET`: webhook signing secret for `/api/webhooks/stripe`
 - `CRON_SECRET`: bearer token expected by `/api/cron/overdue` and `/api/cron/jobs`
 - `ANTHROPIC_API_KEY`: provider key for the in-app AI assistant
+- `BLOB_READ_WRITE_TOKEN`: required for owner logo uploads
 
 ### Recommended
 
 - `RESEND_FROM_EMAIL`: branded sender, for example `Your Business <billing@example.com>`
 - `NOTA_CHAT_MODEL`: override the default Anthropic model used by `/api/chat`
+
+## Branding assets
+
+- owner logo uploads use Vercel Blob server uploads
+- uploaded logos are stored as public blob URLs in `orgs.logoUrl`
+- the same logo URL is reused in the app header and fetched into invoice PDFs at render time
 
 ### Optional seed values
 
