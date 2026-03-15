@@ -132,6 +132,7 @@ async function sendInvoiceEmail(invoiceId: string) {
         })),
         notes: invoice.notes,
         number: invoice.number,
+        paymentLinkUrl: invoice.stripePaymentLinkUrl,
         reverseCharge: invoice.reverseCharge,
         subtotal: invoice.subtotal ?? "0.00",
         taxAmount: invoice.taxAmount ?? "0.00",

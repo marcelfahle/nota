@@ -1,4 +1,4 @@
-import { Document, Font, Image, Page, StyleSheet, Text, View } from "@react-pdf/renderer";
+import { Document, Font, Image, Link, Page, StyleSheet, Text, View } from "@react-pdf/renderer";
 
 // ---------------------------------------------------------------------------
 // Register Inter font family
@@ -56,6 +56,7 @@ type InvoicePdfProps = {
     lineItems: Array<LineItem>;
     notes?: string | null;
     number: string;
+    paymentLinkUrl?: string | null;
     reverseCharge?: string | null;
     subtotal: string;
     taxAmount: string;
@@ -78,7 +79,7 @@ const c = {
 };
 
 // ---------------------------------------------------------------------------
-// Styles
+// Styles (alphabetically sorted for linter)
 // ---------------------------------------------------------------------------
 const styles = StyleSheet.create({
   businessAddress: {
@@ -132,6 +133,11 @@ const styles = StyleSheet.create({
     color: c.text,
     fontSize: 9,
     fontWeight: 500,
+  },
+  dateValueDue: {
+    color: c.black,
+    fontSize: 9,
+    fontWeight: 600,
   },
   footer: {
     borderTopColor: c.border,
@@ -202,7 +208,7 @@ const styles = StyleSheet.create({
     width: 44,
   },
   notes: {
-    marginTop: 40,
+    marginTop: 32,
   },
   notesLabel: {
     color: c.tertiary,
@@ -224,6 +230,41 @@ const styles = StyleSheet.create({
     paddingBottom: 72,
     paddingHorizontal: 56,
     paddingTop: 52,
+  },
+  paymentDetails: {
+    borderColor: c.border,
+    borderRadius: 4,
+    borderWidth: 1,
+    marginTop: 32,
+    padding: 20,
+  },
+  paymentLabel: {
+    color: c.tertiary,
+    fontSize: 9,
+    width: 72,
+  },
+  paymentLink: {
+    color: c.text,
+    fontSize: 9,
+    fontWeight: 500,
+    textDecoration: "none",
+  },
+  paymentRow: {
+    flexDirection: "row" as const,
+    marginBottom: 6,
+  },
+  paymentSectionLabel: {
+    color: c.tertiary,
+    fontSize: 8,
+    fontWeight: 500,
+    letterSpacing: 1.5,
+    marginBottom: 12,
+    textTransform: "uppercase" as const,
+  },
+  paymentValue: {
+    color: c.text,
+    fontSize: 9,
+    fontWeight: 500,
   },
   reverseCharge: {
     color: c.tertiary,
@@ -321,6 +362,7 @@ function formatDatePdf(dateStr: string): string {
 export function InvoicePdf({ business, client, invoice }: InvoicePdfProps) {
   const currency = invoice.currency;
   const taxRate = Number.parseFloat(invoice.taxRate);
+  const hasPaymentDetails = business.bankDetails || invoice.paymentLinkUrl;
 
   return (
     <Document>
@@ -355,11 +397,7 @@ export function InvoicePdf({ business, client, invoice }: InvoicePdfProps) {
             </View>
             <View style={styles.dateRow}>
               <Text style={styles.dateLabel}>Due</Text>
-              <Text style={styles.dateValue}>{formatDatePdf(invoice.dueAt)}</Text>
-            </View>
-            <View style={[styles.dateRow, { marginTop: 10 }]}>
-              <Text style={styles.dateLabel}>Currency</Text>
-              <Text style={styles.dateValue}>{currency}</Text>
+              <Text style={styles.dateValueDue}>{formatDatePdf(invoice.dueAt)}</Text>
             </View>
           </View>
         </View>
@@ -410,6 +448,31 @@ export function InvoicePdf({ business, client, invoice }: InvoicePdfProps) {
           </Text>
         )}
 
+        {/* ── Payment Details ── */}
+        {hasPaymentDetails && (
+          <View style={styles.paymentDetails}>
+            <Text style={styles.paymentSectionLabel}>Payment Details</Text>
+            {invoice.paymentLinkUrl && (
+              <View style={styles.paymentRow}>
+                <Text style={styles.paymentLabel}>Pay online</Text>
+                <Link src={invoice.paymentLinkUrl} style={styles.paymentLink}>
+                  {invoice.paymentLinkUrl}
+                </Link>
+              </View>
+            )}
+            {business.bankDetails && (
+              <View style={styles.paymentRow}>
+                <Text style={styles.paymentLabel}>Bank transfer</Text>
+                <Text style={styles.paymentValue}>{business.bankDetails}</Text>
+              </View>
+            )}
+            <View style={[styles.paymentRow, { marginBottom: 0 }]}>
+              <Text style={styles.paymentLabel}>Reference</Text>
+              <Text style={styles.paymentValue}>Invoice {invoice.number}</Text>
+            </View>
+          </View>
+        )}
+
         {/* ── Notes ── */}
         {invoice.notes && (
           <View style={styles.notes}>
@@ -424,11 +487,6 @@ export function InvoicePdf({ business, client, invoice }: InvoicePdfProps) {
             {business.vatNumber && <Text style={styles.footerText}>VAT: {business.vatNumber}</Text>}
             {business.name && <Text style={styles.footerText}>{business.name}</Text>}
           </View>
-          {business.bankDetails && (
-            <View>
-              <Text style={styles.footerText}>{business.bankDetails}</Text>
-            </View>
-          )}
         </View>
       </Page>
     </Document>
