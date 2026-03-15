@@ -86,6 +86,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
         })),
         notes: invoice.notes,
         number: invoice.number,
+        paymentLinkUrl: invoice.stripePaymentLinkUrl,
         reverseCharge: invoice.reverseCharge,
         subtotal: invoice.subtotal ?? "0.00",
         taxAmount: invoice.taxAmount ?? "0.00",
