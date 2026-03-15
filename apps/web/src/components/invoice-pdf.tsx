@@ -1,7 +1,32 @@
-import { Document, Image, Page, StyleSheet, Text, View } from "@react-pdf/renderer";
+import { Document, Font, Image, Page, StyleSheet, Text, View } from "@react-pdf/renderer";
 
-import { APP_MONOGRAM, APP_NAME } from "@/lib/app-brand";
+// ---------------------------------------------------------------------------
+// Register Inter font family
+// ---------------------------------------------------------------------------
+Font.register({
+  family: "Inter",
+  fonts: [
+    {
+      fontWeight: 400,
+      src: "https://cdn.jsdelivr.net/fontsource/fonts/inter@latest/latin-400-normal.ttf",
+    },
+    {
+      fontWeight: 500,
+      src: "https://cdn.jsdelivr.net/fontsource/fonts/inter@latest/latin-500-normal.ttf",
+    },
+    {
+      fontWeight: 600,
+      src: "https://cdn.jsdelivr.net/fontsource/fonts/inter@latest/latin-600-normal.ttf",
+    },
+  ],
+});
 
+// Disable hyphenation for cleaner text
+Font.registerHyphenationCallback((word) => [word]);
+
+// ---------------------------------------------------------------------------
+// Types
+// ---------------------------------------------------------------------------
 type LineItem = {
   amount: string;
   description: string;
@@ -39,226 +64,241 @@ type InvoicePdfProps = {
   };
 };
 
+// ---------------------------------------------------------------------------
+// Color palette — monochrome, Vercel-inspired
+// ---------------------------------------------------------------------------
+const c = {
+  black: "#000000",
+  border: "#e5e5e5",
+  borderSubtle: "#f0f0f0",
+  muted: "#a3a3a3",
+  secondary: "#525252",
+  tertiary: "#737373",
+  text: "#171717",
+};
+
+// ---------------------------------------------------------------------------
+// Styles
+// ---------------------------------------------------------------------------
 const styles = StyleSheet.create({
-  billTo: {
-    color: "#71717a",
-    fontSize: 8,
-    letterSpacing: 1,
-    marginBottom: 6,
-    textTransform: "uppercase" as const,
+  businessAddress: {
+    color: c.tertiary,
+    fontSize: 9,
+    lineHeight: 1.6,
   },
-  body: {
-    fontFamily: "Helvetica",
-    fontSize: 10,
-    paddingBottom: 60,
-    paddingHorizontal: 48,
-    paddingTop: 48,
+  businessName: {
+    color: c.text,
+    fontSize: 13,
+    fontWeight: 600,
+    marginBottom: 4,
   },
   clientAddress: {
-    color: "#52525b",
+    color: c.secondary,
     fontSize: 9,
     lineHeight: 1.5,
+    marginTop: 4,
   },
   clientCompany: {
-    color: "#3f3f46",
+    color: c.secondary,
     fontSize: 10,
+    marginBottom: 2,
   },
   clientEmail: {
-    color: "#71717a",
+    color: c.tertiary,
     fontSize: 9,
     marginTop: 2,
   },
   clientName: {
-    color: "#18181b",
+    color: c.text,
     fontSize: 11,
-    fontWeight: 700,
+    fontWeight: 600,
+    marginBottom: 2,
+  },
+  clientVat: {
+    color: c.tertiary,
+    fontSize: 8,
+    marginTop: 6,
   },
   dateLabel: {
-    color: "#71717a",
+    color: c.tertiary,
     fontSize: 9,
-    width: 60,
+    width: 64,
   },
   dateRow: {
     flexDirection: "row" as const,
-    marginBottom: 4,
+    marginBottom: 6,
   },
   dateValue: {
-    color: "#18181b",
+    color: c.text,
     fontSize: 9,
-    fontWeight: 700,
+    fontWeight: 500,
   },
   footer: {
-    borderTopColor: "#e4e4e7",
+    borderTopColor: c.border,
     borderTopWidth: 1,
-    bottom: 30,
+    bottom: 32,
     flexDirection: "row" as const,
     justifyContent: "space-between" as const,
-    left: 48,
-    paddingTop: 12,
+    left: 56,
+    paddingTop: 14,
     position: "absolute" as const,
-    right: 48,
+    right: 56,
   },
   footerText: {
-    color: "#a1a1aa",
-    fontSize: 7,
-    lineHeight: 1.5,
+    color: c.muted,
+    fontSize: 8,
+    lineHeight: 1.6,
+  },
+  grandTotalLabel: {
+    color: c.black,
+    fontSize: 12,
+    fontWeight: 600,
+    textAlign: "right" as const,
+    width: 80,
+  },
+  grandTotalValue: {
+    color: c.black,
+    fontSize: 12,
+    fontWeight: 600,
+    textAlign: "right" as const,
+    width: 90,
   },
   header: {
     flexDirection: "row" as const,
     justifyContent: "space-between" as const,
-    marginBottom: 40,
+    marginBottom: 48,
+  },
+  headerLeft: {},
+  headerRight: {
+    alignItems: "flex-end" as const,
   },
   invoiceLabel: {
-    color: "#71717a",
+    color: c.tertiary,
     fontSize: 8,
-    letterSpacing: 1,
+    fontWeight: 500,
+    letterSpacing: 1.5,
     textTransform: "uppercase" as const,
   },
   invoiceNumber: {
-    color: "#18181b",
-    fontFamily: "Courier",
-    fontSize: 14,
-    fontWeight: 700,
+    color: c.black,
+    fontSize: 20,
+    fontWeight: 600,
+    letterSpacing: -0.5,
     marginBottom: 4,
   },
   lineItemAmount: {
-    color: "#18181b",
-    fontWeight: 700,
+    color: c.text,
+    fontWeight: 500,
     textAlign: "right" as const,
     width: "20%",
   },
-  lineItemDesc: {
-    color: "#18181b",
-    width: "40%",
-  },
-  lineItemQty: {
-    color: "#52525b",
-    textAlign: "right" as const,
-    width: "15%",
-  },
-  lineItemRate: {
-    color: "#52525b",
-    textAlign: "right" as const,
-    width: "25%",
-  },
-  logo: {
-    backgroundColor: "#18181b",
-    borderRadius: 4,
-    color: "#ffffff",
-    fontFamily: "Courier",
-    fontSize: 10,
-    fontWeight: 700,
-    height: 28,
-    lineHeight: 1,
-    paddingTop: 9,
-    textAlign: "center" as const,
-    width: 28,
-  },
+  lineItemDesc: { color: c.text, width: "45%" },
+  lineItemQty: { color: c.secondary, textAlign: "right" as const, width: "15%" },
+  lineItemRate: { color: c.secondary, textAlign: "right" as const, width: "20%" },
   logoImage: {
-    borderRadius: 6,
-    height: 28,
+    height: 44,
+    marginBottom: 12,
     objectFit: "contain" as const,
-    width: 28,
-  },
-  logoRow: {
-    alignItems: "center" as const,
-    flexDirection: "row" as const,
-    gap: 8,
-    marginBottom: 6,
-  },
-  logoText: {
-    color: "#18181b",
-    fontSize: 16,
-    fontWeight: 700,
+    width: 44,
   },
   notes: {
-    marginTop: 32,
+    marginTop: 40,
   },
   notesLabel: {
-    color: "#71717a",
+    color: c.tertiary,
     fontSize: 8,
-    letterSpacing: 1,
-    marginBottom: 4,
+    fontWeight: 500,
+    letterSpacing: 1.5,
+    marginBottom: 6,
     textTransform: "uppercase" as const,
   },
   notesText: {
-    color: "#52525b",
+    color: c.secondary,
     fontSize: 9,
-    lineHeight: 1.5,
+    lineHeight: 1.6,
+  },
+  page: {
+    fontFamily: "Inter",
+    fontSize: 9,
+    fontWeight: 400,
+    paddingBottom: 72,
+    paddingHorizontal: 56,
+    paddingTop: 52,
   },
   reverseCharge: {
-    color: "#71717a",
+    color: c.tertiary,
     fontSize: 8,
-    marginTop: 8,
+    marginTop: 12,
   },
   section: {
     flexDirection: "row" as const,
     justifyContent: "space-between" as const,
-    marginBottom: 32,
+    marginBottom: 40,
   },
-  tableBody: {},
-  tableHeader: {
-    borderBottomColor: "#e4e4e7",
-    borderBottomWidth: 1,
-    color: "#71717a",
-    flexDirection: "row" as const,
+  sectionLabel: {
+    color: c.tertiary,
     fontSize: 8,
-    letterSpacing: 1,
-    paddingBottom: 8,
+    fontWeight: 500,
+    letterSpacing: 1.5,
+    marginBottom: 8,
     textTransform: "uppercase" as const,
   },
-  tableHeaderAmount: {
-    textAlign: "right" as const,
-    width: "20%",
+  tableHeader: {
+    borderBottomColor: c.border,
+    borderBottomWidth: 1,
+    color: c.tertiary,
+    flexDirection: "row" as const,
+    fontSize: 8,
+    fontWeight: 500,
+    letterSpacing: 1,
+    paddingBottom: 10,
+    textTransform: "uppercase" as const,
   },
-  tableHeaderDesc: {
-    width: "40%",
-  },
-  tableHeaderQty: {
-    textAlign: "right" as const,
-    width: "15%",
-  },
-  tableHeaderRate: {
-    textAlign: "right" as const,
-    width: "25%",
-  },
+  tableHeaderAmount: { textAlign: "right" as const, width: "20%" },
+  tableHeaderDesc: { width: "45%" },
+  tableHeaderQty: { textAlign: "right" as const, width: "15%" },
+  tableHeaderRate: { textAlign: "right" as const, width: "20%" },
   tableRow: {
-    borderBottomColor: "#f4f4f5",
+    borderBottomColor: c.borderSubtle,
     borderBottomWidth: 1,
     flexDirection: "row" as const,
     fontSize: 9,
-    paddingVertical: 10,
+    paddingVertical: 12,
   },
   totalLabel: {
-    color: "#71717a",
+    color: c.tertiary,
     fontSize: 9,
+    textAlign: "right" as const,
     width: 80,
   },
   totalRow: {
     flexDirection: "row" as const,
     justifyContent: "flex-end" as const,
-    marginBottom: 4,
+    marginBottom: 6,
   },
   totals: {
-    marginTop: 16,
+    marginTop: 20,
   },
   totalSeparator: {
-    borderTopColor: "#e4e4e7",
+    borderTopColor: c.border,
     borderTopWidth: 1,
-    marginBottom: 6,
+    marginBottom: 8,
     marginLeft: "auto" as const,
     marginTop: 4,
-    width: 160,
+    width: 170,
   },
   totalValue: {
-    color: "#18181b",
+    color: c.text,
     fontSize: 9,
-    fontWeight: 700,
+    fontWeight: 500,
     textAlign: "right" as const,
-    width: 80,
+    width: 90,
   },
 });
 
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
 function formatCurrencyPdf(amount: number | string, currency: string): string {
   const num = typeof amount === "string" ? Number.parseFloat(amount) : amount;
   return new Intl.NumberFormat("en-US", {
@@ -275,54 +315,38 @@ function formatDatePdf(dateStr: string): string {
   });
 }
 
+// ---------------------------------------------------------------------------
+// Component
+// ---------------------------------------------------------------------------
 export function InvoicePdf({ business, client, invoice }: InvoicePdfProps) {
   const currency = invoice.currency;
   const taxRate = Number.parseFloat(invoice.taxRate);
 
   return (
     <Document>
-      <Page size="A4" style={styles.body}>
-        {/* Header: Logo + Invoice Number */}
+      <Page size="A4" style={styles.page}>
+        {/* ── Header ── */}
         <View style={styles.header}>
-          <View>
-            <View style={styles.logoRow}>
-              {business.logoSrc ? (
-                <Image src={business.logoSrc} style={styles.logoImage} />
-              ) : (
-                <View style={styles.logo}>
-                  <Text>{APP_MONOGRAM}</Text>
-                </View>
-              )}
-              <Text style={styles.logoText}>{APP_NAME}</Text>
-            </View>
-            {business.name && (
-              <Text style={{ color: "#3f3f46", fontSize: 10, marginTop: 4 }}>{business.name}</Text>
-            )}
-            {business.address && (
-              <Text style={{ color: "#71717a", fontSize: 9, lineHeight: 1.5, marginTop: 2 }}>
-                {business.address}
-              </Text>
-            )}
+          <View style={styles.headerLeft}>
+            {business.logoSrc && <Image src={business.logoSrc} style={styles.logoImage} />}
+            {business.name && <Text style={styles.businessName}>{business.name}</Text>}
+            {business.address && <Text style={styles.businessAddress}>{business.address}</Text>}
           </View>
-          <View style={{ alignItems: "flex-end" as const }}>
+          <View style={styles.headerRight}>
             <Text style={styles.invoiceNumber}>{invoice.number}</Text>
             <Text style={styles.invoiceLabel}>Invoice</Text>
           </View>
         </View>
 
-        {/* Bill To + Dates */}
+        {/* ── Bill To + Dates ── */}
         <View style={styles.section}>
-          <View style={{ maxWidth: 240 }}>
-            <Text style={styles.billTo}>Bill To</Text>
+          <View style={{ maxWidth: 260 }}>
+            <Text style={styles.sectionLabel}>Bill To</Text>
             <Text style={styles.clientName}>{client.name}</Text>
             {client.company && <Text style={styles.clientCompany}>{client.company}</Text>}
             <Text style={styles.clientEmail}>{client.email}</Text>
             {client.address && <Text style={styles.clientAddress}>{client.address}</Text>}
-            {client.vatNumber && (
-              <Text style={{ color: "#71717a", fontSize: 8, marginTop: 4 }}>
-                VAT: {client.vatNumber}
-              </Text>
-            )}
+            {client.vatNumber && <Text style={styles.clientVat}>VAT: {client.vatNumber}</Text>}
           </View>
           <View>
             <View style={styles.dateRow}>
@@ -333,14 +357,14 @@ export function InvoicePdf({ business, client, invoice }: InvoicePdfProps) {
               <Text style={styles.dateLabel}>Due</Text>
               <Text style={styles.dateValue}>{formatDatePdf(invoice.dueAt)}</Text>
             </View>
-            <View style={[styles.dateRow, { marginTop: 8 }]}>
+            <View style={[styles.dateRow, { marginTop: 10 }]}>
               <Text style={styles.dateLabel}>Currency</Text>
               <Text style={styles.dateValue}>{currency}</Text>
             </View>
           </View>
         </View>
 
-        {/* Line Items Table */}
+        {/* ── Line Items ── */}
         <View>
           <View style={styles.tableHeader}>
             <Text style={styles.tableHeaderDesc}>Description</Text>
@@ -348,23 +372,17 @@ export function InvoicePdf({ business, client, invoice }: InvoicePdfProps) {
             <Text style={styles.tableHeaderRate}>Rate</Text>
             <Text style={styles.tableHeaderAmount}>Amount</Text>
           </View>
-          <View style={styles.tableBody}>
-            {invoice.lineItems.map((item, index) => (
-              <View key={index} style={styles.tableRow}>
-                <Text style={styles.lineItemDesc}>{item.description}</Text>
-                <Text style={styles.lineItemQty}>{item.quantity}</Text>
-                <Text style={styles.lineItemRate}>
-                  {formatCurrencyPdf(item.unitPrice, currency)}
-                </Text>
-                <Text style={styles.lineItemAmount}>
-                  {formatCurrencyPdf(item.amount, currency)}
-                </Text>
-              </View>
-            ))}
-          </View>
+          {invoice.lineItems.map((item, index) => (
+            <View key={index} style={styles.tableRow}>
+              <Text style={styles.lineItemDesc}>{item.description}</Text>
+              <Text style={styles.lineItemQty}>{item.quantity}</Text>
+              <Text style={styles.lineItemRate}>{formatCurrencyPdf(item.unitPrice, currency)}</Text>
+              <Text style={styles.lineItemAmount}>{formatCurrencyPdf(item.amount, currency)}</Text>
+            </View>
+          ))}
         </View>
 
-        {/* Totals */}
+        {/* ── Totals ── */}
         <View style={styles.totals}>
           <View style={styles.totalRow}>
             <Text style={styles.totalLabel}>Subtotal</Text>
@@ -380,21 +398,19 @@ export function InvoicePdf({ business, client, invoice }: InvoicePdfProps) {
           )}
           <View style={styles.totalSeparator} />
           <View style={styles.totalRow}>
-            <Text style={[styles.totalLabel, { fontSize: 11, fontWeight: 700 }]}>Total</Text>
-            <Text style={[styles.totalValue, { fontSize: 11 }]}>
-              {formatCurrencyPdf(invoice.total, currency)}
-            </Text>
+            <Text style={styles.grandTotalLabel}>Total</Text>
+            <Text style={styles.grandTotalValue}>{formatCurrencyPdf(invoice.total, currency)}</Text>
           </View>
         </View>
 
-        {/* Reverse Charge */}
+        {/* ── Reverse Charge ── */}
         {invoice.reverseCharge === "true" && (
           <Text style={styles.reverseCharge}>
             Reverse charge — VAT not applicable per Article 196 of the EU VAT Directive
           </Text>
         )}
 
-        {/* Notes */}
+        {/* ── Notes ── */}
         {invoice.notes && (
           <View style={styles.notes}>
             <Text style={styles.notesLabel}>Notes</Text>
@@ -402,7 +418,7 @@ export function InvoicePdf({ business, client, invoice }: InvoicePdfProps) {
           </View>
         )}
 
-        {/* Footer */}
+        {/* ── Footer ── */}
         <View fixed style={styles.footer}>
           <View>
             {business.vatNumber && <Text style={styles.footerText}>VAT: {business.vatNumber}</Text>}
