@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 
 import { getCurrentUser } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { clients, invoices, lineItems } from "@/lib/db/schema";
+import { bankAccounts, clients, invoices, lineItems } from "@/lib/db/schema";
 import { generateXRechnung } from "@/lib/xrechnung";
 
 export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -36,9 +36,28 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
     .where(eq(lineItems.invoiceId, id))
     .orderBy(asc(lineItems.sortOrder));
 
+  let bankDetails: string | null = null;
+  if (client.bankAccountId) {
+    const [ba] = await db
+      .select({ details: bankAccounts.details })
+      .from(bankAccounts)
+      .where(and(eq(bankAccounts.id, client.bankAccountId), eq(bankAccounts.orgId, org.id)))
+      .limit(1);
+    bankDetails = ba?.details ?? null;
+  }
+  if (!bankDetails) {
+    const [defaultBa] = await db
+      .select({ details: bankAccounts.details })
+      .from(bankAccounts)
+      .where(and(eq(bankAccounts.orgId, org.id), eq(bankAccounts.isDefault, true)))
+      .limit(1);
+    bankDetails = defaultBa?.details ?? null;
+  }
+
   const xml = generateXRechnung({
     business: {
       address: org.businessAddress,
+      bankDetails,
       email: user.email,
       name: org.businessName ?? org.name,
       vatNumber: org.vatNumber,
@@ -62,6 +81,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
       })),
       notes: invoice.notes,
       number: invoice.number,
+      paymentLinkUrl: invoice.stripePaymentLinkUrl,
       reverseCharge: invoice.reverseCharge,
       subtotal: invoice.subtotal ?? "0.00",
       taxAmount: invoice.taxAmount ?? "0.00",

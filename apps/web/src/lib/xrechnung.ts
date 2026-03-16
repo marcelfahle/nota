@@ -1,6 +1,7 @@
 type XRechnungData = {
   business: {
     address?: string | null;
+    bankDetails?: string | null;
     email: string;
     name?: string | null;
     vatNumber?: string | null;
@@ -24,6 +25,7 @@ type XRechnungData = {
     }>;
     notes?: string | null;
     number: string;
+    paymentLinkUrl?: string | null;
     reverseCharge?: string | null;
     subtotal: string;
     taxAmount: string;
@@ -32,6 +34,56 @@ type XRechnungData = {
   };
 };
 
+// ---------------------------------------------------------------------------
+// Country name → ISO 3166-1 alpha-2
+// ---------------------------------------------------------------------------
+const COUNTRY_CODES: Record<string, string> = {
+  austria: "AT",
+  belgium: "BE",
+  bulgaria: "BG",
+  croatia: "HR",
+  cyprus: "CY",
+  czechia: "CZ",
+  denmark: "DK",
+  deutschland: "DE",
+  españa: "ES",
+  estonia: "EE",
+  finland: "FI",
+  france: "FR",
+  germany: "DE",
+  greece: "GR",
+  hungary: "HU",
+  ireland: "IE",
+  italy: "IT",
+  latvia: "LV",
+  lithuania: "LT",
+  luxembourg: "LU",
+  malta: "MT",
+  netherlands: "NL",
+  norway: "NO",
+  poland: "PL",
+  portugal: "PT",
+  romania: "RO",
+  slovakia: "SK",
+  slovenia: "SI",
+  spain: "ES",
+  sweden: "SE",
+  switzerland: "CH",
+  "united kingdom": "GB",
+};
+
+function toCountryCode(country: string): string {
+  const trimmed = country.trim();
+  // Already an ISO alpha-2 code
+  if (/^[A-Z]{2}$/.test(trimmed)) {
+    return trimmed;
+  }
+  return COUNTRY_CODES[trimmed.toLowerCase()] ?? trimmed.toUpperCase().slice(0, 2);
+}
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
 function escapeXml(value: string): string {
   return value
     .replaceAll("&", "&amp;")
@@ -69,7 +121,8 @@ function parseAddress(address?: string | null): {
   }
 
   const street = lines[0];
-  const country = lines.length >= 3 ? (lines.at(-1) ?? "") : "";
+  const rawCountry = lines.length >= 3 ? (lines.at(-1) ?? "") : "";
+  const country = rawCountry ? toCountryCode(rawCountry) : "";
   const cityLine = lines.length >= 3 ? (lines.at(-2) ?? "") : lines[1];
 
   const postalMatch = cityLine.match(/^(\d{4,6})\s+(.+)$/);
@@ -82,12 +135,21 @@ function parseAddress(address?: string | null): {
     return { city: postalMatch2[1], country, postal: postalMatch2[2], street };
   }
 
-  return {
-    city: cityLine,
-    country: lines.length >= 3 ? (lines.at(-1) ?? "") : "",
-    postal: "",
-    street,
-  };
+  return { city: cityLine, country, postal: "", street };
+}
+
+// ---------------------------------------------------------------------------
+// Extract IBAN from free-text bank details
+// ---------------------------------------------------------------------------
+function extractIban(bankDetails?: string | null): string | null {
+  if (!bankDetails) {
+    return null;
+  }
+  const match = bankDetails.match(/\b([A-Z]{2}\d{2}[\s]?[\dA-Z]{4,30})\b/i);
+  if (!match) {
+    return null;
+  }
+  return match[1].replaceAll(/\s/g, "").toUpperCase();
 }
 
 function buildPartyAddress(address?: string | null): string {
@@ -97,7 +159,7 @@ ${street ? `<cbc:StreetName>${escapeXml(street)}</cbc:StreetName>` : ""}
 ${city ? `<cbc:CityName>${escapeXml(city)}</cbc:CityName>` : ""}
 ${postal ? `<cbc:PostalZone>${escapeXml(postal)}</cbc:PostalZone>` : ""}
 <cac:Country>
-<cbc:IdentificationCode>${country ? escapeXml(country) : "DE"}</cbc:IdentificationCode>
+<cbc:IdentificationCode>${country || "DE"}</cbc:IdentificationCode>
 </cac:Country>
 </cac:PostalAddress>`;
 }
@@ -120,11 +182,15 @@ function buildTaxCategory(
   return { code: "S", exemption: "", rate: taxRate };
 }
 
+// ---------------------------------------------------------------------------
+// Generate XRechnung UBL XML
+// ---------------------------------------------------------------------------
 export function generateXRechnung(data: XRechnungData): string {
   const { business, client, invoice } = data;
   const cur = escapeXml(invoice.currency);
   const tax = buildTaxCategory(invoice.reverseCharge, invoice.taxRate);
   const buyerName = escapeXml(client.company || client.name);
+  const iban = extractIban(business.bankDetails);
 
   const lines = invoice.lineItems
     .map(
@@ -148,6 +214,19 @@ export function generateXRechnung(data: XRechnungData): string {
 </cac:InvoiceLine>`,
     )
     .join("\n");
+
+  // PaymentMeans: SEPA credit transfer (58) with IBAN if available
+  let paymentMeans = `<cac:PaymentMeans>
+<cbc:PaymentMeansCode>58</cbc:PaymentMeansCode>
+<cbc:PaymentID>${escapeXml(invoice.number)}</cbc:PaymentID>`;
+  if (iban) {
+    paymentMeans += `
+<cac:PayeeFinancialAccount>
+<cbc:ID>${escapeXml(iban)}</cbc:ID>
+</cac:PayeeFinancialAccount>`;
+  }
+  paymentMeans += `
+</cac:PaymentMeans>`;
 
   return `<?xml version="1.0" encoding="UTF-8"?>
 <Invoice xmlns="urn:oasis:names:specification:ubl:schema:xsd:Invoice-2" xmlns:cac="urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2" xmlns:cbc="urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2">
@@ -190,9 +269,7 @@ ${client.vatNumber ? `<cac:PartyTaxScheme>\n<cbc:CompanyID>${escapeXml(client.va
 </cac:Contact>
 </cac:Party>
 </cac:AccountingCustomerParty>
-<cac:PaymentMeans>
-<cbc:PaymentMeansCode>58</cbc:PaymentMeansCode>
-</cac:PaymentMeans>
+${paymentMeans}
 <cac:TaxTotal>
 <cbc:TaxAmount currencyID="${cur}">${fmt(invoice.taxAmount)}</cbc:TaxAmount>
 <cac:TaxSubtotal>
