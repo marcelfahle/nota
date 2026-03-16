@@ -376,7 +376,12 @@ export function InvoicePdf({ business, client, invoice }: InvoicePdfProps) {
           <View style={styles.headerLeft}>
             {business.logoSrc && <Image src={business.logoSrc} style={styles.logoImage} />}
             {business.name && <Text style={styles.businessName}>{business.name}</Text>}
-            {business.address && <Text style={styles.businessAddress}>{business.address}</Text>}
+            {business.address &&
+              business.address.split("\n").map((line, i) => (
+                <Text key={i} style={styles.businessAddress}>
+                  {line}
+                </Text>
+              ))}
           </View>
           <View style={styles.headerRight}>
             <Text style={styles.invoiceNumber}>{invoice.number}</Text>
@@ -393,7 +398,12 @@ export function InvoicePdf({ business, client, invoice }: InvoicePdfProps) {
               <Text style={styles.clientCompany}>{client.company}</Text>
             )}
             <Text style={styles.clientEmail}>{client.email}</Text>
-            {client.address && <Text style={styles.clientAddress}>{client.address}</Text>}
+            {client.address &&
+              client.address.split("\n").map((line, i) => (
+                <Text key={i} style={styles.clientAddress}>
+                  {line}
+                </Text>
+              ))}
             {client.vatNumber && <Text style={styles.clientVat}>VAT: {client.vatNumber}</Text>}
           </View>
           <View>
