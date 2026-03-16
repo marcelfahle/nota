@@ -50,6 +50,13 @@
       "when": 1772789805855,
       "tag": "0006_gifted_colleen_wing",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1773637713149,
+      "tag": "0007_structured_bank_accounts",
+      "breakpoints": true
     }
   ]
 }

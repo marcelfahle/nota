@@ -23,11 +23,15 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { formatIbanDisplay, validateIban } from "@/lib/iban";
 import { formatInvoiceNumber } from "@/lib/invoice-number";
 
 type BankAccount = {
+  accountType: string;
+  bic: string | null;
   createdAt: Date;
   details: string;
+  iban: string | null;
   id: string;
   isDefault: boolean;
   name: string;
@@ -354,10 +358,152 @@ export function SettingsForm({
 }
 
 type BankAccountFormState = {
+  accountType: "freeform" | "iban";
+  bic: string;
   details: string;
+  iban: string;
+  ibanError: string | null;
   isDefault: boolean;
   name: string;
 };
+
+const EMPTY_FORM: BankAccountFormState = {
+  accountType: "iban",
+  bic: "",
+  details: "",
+  iban: "",
+  ibanError: null,
+  isDefault: false,
+  name: "",
+};
+
+function formStateFromAccount(account: BankAccount): BankAccountFormState {
+  return {
+    accountType: account.accountType === "iban" ? "iban" : "freeform",
+    bic: account.bic ?? "",
+    details: account.details,
+    iban: account.iban ?? "",
+    ibanError: null,
+    isDefault: account.isDefault,
+    name: account.name,
+  };
+}
+
+function BankAccountFormFields({
+  formState,
+  idPrefix,
+  setFormState,
+}: {
+  formState: BankAccountFormState;
+  idPrefix: string;
+  setFormState: React.Dispatch<React.SetStateAction<BankAccountFormState>>;
+}) {
+  const handleIbanBlur = () => {
+    if (!formState.iban) {
+      setFormState((s) => ({ ...s, ibanError: null }));
+      return;
+    }
+    const result = validateIban(formState.iban);
+    setFormState((s) => ({ ...s, ibanError: result.valid ? null : (result.error ?? "Invalid IBAN") }));
+  };
+
+  return (
+    <>
+      <div className="space-y-2">
+        <Label htmlFor={`${idPrefix}-name`}>Name</Label>
+        <Input
+          id={`${idPrefix}-name`}
+          name="name"
+          onChange={(e) => setFormState((s) => ({ ...s, name: e.target.value }))}
+          placeholder="Business account"
+          required
+          value={formState.name}
+        />
+      </div>
+
+      <div className="space-y-2">
+        <Label>Account Type</Label>
+        <div className="flex gap-4">
+          <label className="flex items-center gap-2 text-sm text-zinc-700">
+            <input
+              checked={formState.accountType === "iban"}
+              name="accountType"
+              onChange={() => setFormState((s) => ({ ...s, accountType: "iban", ibanError: null }))}
+              type="radio"
+              value="iban"
+            />
+            IBAN
+          </label>
+          <label className="flex items-center gap-2 text-sm text-zinc-700">
+            <input
+              checked={formState.accountType === "freeform"}
+              name="accountType"
+              onChange={() => setFormState((s) => ({ ...s, accountType: "freeform", ibanError: null }))}
+              type="radio"
+              value="freeform"
+            />
+            Freeform
+          </label>
+        </div>
+      </div>
+
+      {formState.accountType === "iban" ? (
+        <>
+          <div className="space-y-2">
+            <Label htmlFor={`${idPrefix}-iban`}>IBAN</Label>
+            <Input
+              id={`${idPrefix}-iban`}
+              name="iban"
+              onBlur={handleIbanBlur}
+              onChange={(e) => setFormState((s) => ({ ...s, iban: e.target.value, ibanError: null }))}
+              placeholder="DE89 3704 0044 0532 0130 00"
+              required
+              value={formState.iban}
+            />
+            {formState.ibanError ? (
+              <p className="text-sm text-red-600">{formState.ibanError}</p>
+            ) : null}
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor={`${idPrefix}-bic`}>BIC (optional)</Label>
+            <Input
+              id={`${idPrefix}-bic`}
+              name="bic"
+              onChange={(e) => setFormState((s) => ({ ...s, bic: e.target.value }))}
+              placeholder="COBADEFFXXX"
+              value={formState.bic}
+            />
+          </div>
+        </>
+      ) : (
+        <div className="space-y-2">
+          <Label htmlFor={`${idPrefix}-details`}>Details</Label>
+          <textarea
+            className="min-h-[140px] w-full rounded-md border border-input bg-transparent px-3 py-2 text-base shadow-xs transition-[color,box-shadow] outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50 md:text-sm"
+            id={`${idPrefix}-details`}
+            name="details"
+            onChange={(e) => setFormState((s) => ({ ...s, details: e.target.value }))}
+            placeholder="IBAN\nBIC\nBank name"
+            required
+            rows={6}
+            value={formState.details}
+          />
+        </div>
+      )}
+
+      <label className="flex items-center gap-2 text-sm text-zinc-700">
+        <input
+          checked={formState.isDefault}
+          name="isDefault"
+          onChange={(e) => setFormState((s) => ({ ...s, isDefault: e.target.checked }))}
+          type="checkbox"
+          value="true"
+        />
+        Set as default account
+      </label>
+    </>
+  );
+}
 
 function BankAccountsSection({
   accounts,
@@ -368,23 +514,19 @@ function BankAccountsSection({
 }) {
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [editingAccount, setEditingAccount] = useState<BankAccount | null>(null);
-  const [formState, setFormState] = useState<BankAccountFormState>({
-    details: "",
-    isDefault: false,
-    name: "",
-  });
+  const [formState, setFormState] = useState<BankAccountFormState>(EMPTY_FORM);
   const [error, setError] = useState<string | null>(null);
   const [isPending, setIsPending] = useState(false);
 
   const openCreateDialog = () => {
-    setFormState({ details: "", isDefault: false, name: "" });
+    setFormState(EMPTY_FORM);
     setError(null);
     setIsCreateOpen(true);
   };
 
   const openEditDialog = (account: BankAccount) => {
     setEditingAccount(account);
-    setFormState({ details: account.details, isDefault: account.isDefault, name: account.name });
+    setFormState(formStateFromAccount(account));
     setError(null);
   };
 
@@ -482,9 +624,18 @@ function BankAccountsSection({
                       </span>
                     ) : null}
                   </div>
-                  <pre className="font-sans text-sm leading-6 whitespace-pre-wrap text-zinc-600">
-                    {account.details}
-                  </pre>
+                  {account.accountType === "iban" && account.iban ? (
+                    <div className="text-sm leading-6 text-zinc-600">
+                      <span className="font-mono">{formatIbanDisplay(account.iban)}</span>
+                      {account.bic ? (
+                        <span className="ml-3 text-zinc-500">BIC: {account.bic}</span>
+                      ) : null}
+                    </div>
+                  ) : (
+                    <pre className="font-sans text-sm leading-6 whitespace-pre-wrap text-zinc-600">
+                      {account.details}
+                    </pre>
+                  )}
                 </div>
                 <div className="flex items-center gap-2">
                   <Button
@@ -521,46 +672,11 @@ function BankAccountsSection({
             </DialogDescription>
           </DialogHeader>
           <form className="space-y-4" onSubmit={handleCreate}>
-            <div className="space-y-2">
-              <Label htmlFor="create-bank-account-name">Name</Label>
-              <Input
-                id="create-bank-account-name"
-                name="name"
-                onChange={(event) =>
-                  setFormState((current) => ({ ...current, name: event.target.value }))
-                }
-                placeholder="Business account"
-                required
-                value={formState.name}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="create-bank-account-details">Details</Label>
-              <textarea
-                className="min-h-[140px] w-full rounded-md border border-input bg-transparent px-3 py-2 text-base shadow-xs transition-[color,box-shadow] outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50 md:text-sm"
-                id="create-bank-account-details"
-                name="details"
-                onChange={(event) =>
-                  setFormState((current) => ({ ...current, details: event.target.value }))
-                }
-                placeholder="IBAN\nBIC\nBank name"
-                required
-                rows={6}
-                value={formState.details}
-              />
-            </div>
-            <label className="flex items-center gap-2 text-sm text-zinc-700">
-              <input
-                checked={formState.isDefault}
-                name="isDefault"
-                onChange={(event) =>
-                  setFormState((current) => ({ ...current, isDefault: event.target.checked }))
-                }
-                type="checkbox"
-                value="true"
-              />
-              Set as default account
-            </label>
+            <BankAccountFormFields
+              formState={formState}
+              idPrefix="create-bank-account"
+              setFormState={setFormState}
+            />
             {error ? <p className="text-sm text-red-600">{error}</p> : null}
             <DialogFooter>
               <Button onClick={closeDialogs} type="button" variant="ghost">
@@ -583,44 +699,11 @@ function BankAccountsSection({
             </DialogDescription>
           </DialogHeader>
           <form className="space-y-4" onSubmit={handleUpdate}>
-            <div className="space-y-2">
-              <Label htmlFor="edit-bank-account-name">Name</Label>
-              <Input
-                id="edit-bank-account-name"
-                name="name"
-                onChange={(event) =>
-                  setFormState((current) => ({ ...current, name: event.target.value }))
-                }
-                required
-                value={formState.name}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="edit-bank-account-details">Details</Label>
-              <textarea
-                className="min-h-[140px] w-full rounded-md border border-input bg-transparent px-3 py-2 text-base shadow-xs transition-[color,box-shadow] outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50 md:text-sm"
-                id="edit-bank-account-details"
-                name="details"
-                onChange={(event) =>
-                  setFormState((current) => ({ ...current, details: event.target.value }))
-                }
-                required
-                rows={6}
-                value={formState.details}
-              />
-            </div>
-            <label className="flex items-center gap-2 text-sm text-zinc-700">
-              <input
-                checked={formState.isDefault}
-                name="isDefault"
-                onChange={(event) =>
-                  setFormState((current) => ({ ...current, isDefault: event.target.checked }))
-                }
-                type="checkbox"
-                value="true"
-              />
-              Set as default account
-            </label>
+            <BankAccountFormFields
+              formState={formState}
+              idPrefix="edit-bank-account"
+              setFormState={setFormState}
+            />
             {error ? <p className="text-sm text-red-600">{error}</p> : null}
             <DialogFooter>
               <Button onClick={closeDialogs} type="button" variant="ghost">

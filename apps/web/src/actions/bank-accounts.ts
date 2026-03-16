@@ -7,19 +7,78 @@ import { z } from "zod";
 import { getCurrentUser } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { bankAccounts } from "@/lib/db/schema";
+import { formatIban, formatIbanDisplay, validateIban } from "@/lib/iban";
 import { canManageBankAccounts, getInsufficientPermissionsError } from "@/lib/roles";
 
-const bankAccountSchema = z.object({
+const ibanAccountSchema = z.object({
+  accountType: z.literal("iban"),
+  bic: z
+    .string()
+    .transform((v) => v.trim())
+    .pipe(z.string().max(11).optional().default("")),
+  iban: z.string().min(1, "IBAN is required").refine(
+    (val) => validateIban(val).valid,
+    (val) => ({ message: validateIban(val).error ?? "Invalid IBAN" }),
+  ),
+  isDefault: z.boolean().default(false),
+  name: z.string().min(1, "Account name is required"),
+});
+
+const freeformAccountSchema = z.object({
+  accountType: z.literal("freeform"),
   details: z.string().min(1, "Bank details are required"),
   isDefault: z.boolean().default(false),
   name: z.string().min(1, "Account name is required"),
 });
 
+const bankAccountSchema = z.discriminatedUnion("accountType", [
+  ibanAccountSchema,
+  freeformAccountSchema,
+]);
+
 function parseBankAccountFormData(formData: FormData) {
+  const accountType = (formData.get("accountType") as string) || "freeform";
+
+  if (accountType === "iban") {
+    return {
+      accountType: "iban" as const,
+      bic: (formData.get("bic") as string) || "",
+      iban: (formData.get("iban") as string) || "",
+      isDefault: formData.get("isDefault") === "true",
+      name: formData.get("name") as string,
+    };
+  }
+
   return {
-    details: formData.get("details") as string,
+    accountType: "freeform" as const,
+    details: (formData.get("details") as string) || "",
     isDefault: formData.get("isDefault") === "true",
     name: formData.get("name") as string,
+  };
+}
+
+function buildInsertValues(data: z.infer<typeof bankAccountSchema>) {
+  if (data.accountType === "iban") {
+    const normalized = formatIban(data.iban);
+    const display = formatIbanDisplay(data.iban);
+    const details = data.bic ? `${display}\nBIC: ${data.bic}` : display;
+    return {
+      accountType: "iban" as const,
+      bic: data.bic || null,
+      details,
+      iban: normalized,
+      isDefault: data.isDefault,
+      name: data.name,
+    };
+  }
+
+  return {
+    accountType: "freeform" as const,
+    bic: null,
+    details: data.details,
+    iban: null,
+    isDefault: data.isDefault,
+    name: data.name,
   };
 }
 
@@ -38,23 +97,23 @@ export async function createBankAccount(
     return { error: getInsufficientPermissionsError() };
   }
 
+  const values = buildInsertValues(result.data);
+
   await db.transaction(async (tx) => {
-    // If this is the first account or marked as default, ensure only one default
     const existing = await tx
       .select({ id: bankAccounts.id })
       .from(bankAccounts)
       .where(eq(bankAccounts.orgId, org.id));
 
-    const shouldBeDefault = result.data.isDefault || existing.length === 0;
+    const shouldBeDefault = values.isDefault || existing.length === 0;
 
     if (shouldBeDefault) {
       await tx.update(bankAccounts).set({ isDefault: false }).where(eq(bankAccounts.orgId, org.id));
     }
 
     await tx.insert(bankAccounts).values({
-      details: result.data.details,
+      ...values,
       isDefault: shouldBeDefault,
-      name: result.data.name,
       orgId: org.id,
       userId: user.id,
     });
@@ -80,17 +139,17 @@ export async function updateBankAccount(
     return { error: getInsufficientPermissionsError() };
   }
 
+  const values = buildInsertValues(result.data);
+
   await db.transaction(async (tx) => {
-    if (result.data.isDefault) {
+    if (values.isDefault) {
       await tx.update(bankAccounts).set({ isDefault: false }).where(eq(bankAccounts.orgId, org.id));
     }
 
     await tx
       .update(bankAccounts)
       .set({
-        details: result.data.details,
-        isDefault: result.data.isDefault,
-        name: result.data.name,
+        ...values,
         updatedAt: new Date(),
       })
       .where(and(eq(bankAccounts.id, accountId), eq(bankAccounts.orgId, org.id)));
@@ -107,7 +166,6 @@ export async function deleteBankAccount(accountId: string) {
     return { error: getInsufficientPermissionsError() };
   }
 
-  // Prevent deleting the default account
   const [account] = await db
     .select({ isDefault: bankAccounts.isDefault })
     .from(bankAccounts)

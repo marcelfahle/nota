@@ -40,10 +40,10 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     .where(eq(lineItems.invoiceId, id))
     .orderBy(asc(lineItems.sortOrder));
 
-  let bankDetails: string | null = null;
+  let ba: { bic: string | null; details: string; iban: string | null } | null = null;
   if (client.bankAccountId) {
-    const [bankAccount] = await db
-      .select({ details: bankAccounts.details })
+    const [found] = await db
+      .select({ bic: bankAccounts.bic, details: bankAccounts.details, iban: bankAccounts.iban })
       .from(bankAccounts)
       .where(
         and(
@@ -52,16 +52,16 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
         ),
       )
       .limit(1);
-    bankDetails = bankAccount?.details ?? null;
+    ba = found ?? null;
   }
 
-  if (!bankDetails) {
-    const [defaultBankAccount] = await db
-      .select({ details: bankAccounts.details })
+  if (!ba) {
+    const [defaultBa] = await db
+      .select({ bic: bankAccounts.bic, details: bankAccounts.details, iban: bankAccounts.iban })
       .from(bankAccounts)
       .where(and(eq(bankAccounts.orgId, authResult.auth.org.id), eq(bankAccounts.isDefault, true)))
       .limit(1);
-    bankDetails = defaultBankAccount?.details ?? null;
+    ba = defaultBa ?? null;
   }
 
   const logoSrc = await getPdfLogoSrc(authResult.auth.org.logoUrl);
@@ -69,7 +69,9 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     InvoicePdf({
       business: {
         address: authResult.auth.org.businessAddress,
-        bankDetails,
+        bankDetails: ba?.details ?? null,
+        bic: ba?.bic ?? null,
+        iban: ba?.iban ?? null,
         logoSrc,
         name: authResult.auth.org.businessName ?? authResult.auth.org.name,
         vatNumber: authResult.auth.org.vatNumber,

@@ -36,29 +36,31 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
     .where(eq(lineItems.invoiceId, id))
     .orderBy(asc(lineItems.sortOrder));
 
-  let bankDetails: string | null = null;
+  let bankAccount: { bic: string | null; details: string; iban: string | null } | null = null;
   if (client.bankAccountId) {
     const [ba] = await db
-      .select({ details: bankAccounts.details })
+      .select({ bic: bankAccounts.bic, details: bankAccounts.details, iban: bankAccounts.iban })
       .from(bankAccounts)
       .where(and(eq(bankAccounts.id, client.bankAccountId), eq(bankAccounts.orgId, org.id)))
       .limit(1);
-    bankDetails = ba?.details ?? null;
+    bankAccount = ba ?? null;
   }
-  if (!bankDetails) {
+  if (!bankAccount) {
     const [defaultBa] = await db
-      .select({ details: bankAccounts.details })
+      .select({ bic: bankAccounts.bic, details: bankAccounts.details, iban: bankAccounts.iban })
       .from(bankAccounts)
       .where(and(eq(bankAccounts.orgId, org.id), eq(bankAccounts.isDefault, true)))
       .limit(1);
-    bankDetails = defaultBa?.details ?? null;
+    bankAccount = defaultBa ?? null;
   }
 
   const xml = generateXRechnung({
     business: {
       address: org.businessAddress,
-      bankDetails,
+      bankDetails: bankAccount?.details ?? null,
+      bic: bankAccount?.bic ?? null,
       email: user.email,
+      iban: bankAccount?.iban ?? null,
       name: org.businessName ?? org.name,
       vatNumber: org.vatNumber,
     },

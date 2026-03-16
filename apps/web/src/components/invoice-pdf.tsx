@@ -1,5 +1,7 @@
 import { Document, Font, Image, Link, Page, StyleSheet, Text, View } from "@react-pdf/renderer";
 
+import { formatIbanDisplay } from "@/lib/iban";
+
 // ---------------------------------------------------------------------------
 // Register Inter font family
 // ---------------------------------------------------------------------------
@@ -38,6 +40,8 @@ type InvoicePdfProps = {
   business: {
     address?: string | null;
     bankDetails?: string | null;
+    bic?: string | null;
+    iban?: string | null;
     logoSrc?: string | null;
     name?: string | null;
     vatNumber?: string | null;
@@ -362,7 +366,7 @@ function formatDatePdf(dateStr: string): string {
 export function InvoicePdf({ business, client, invoice }: InvoicePdfProps) {
   const currency = invoice.currency;
   const taxRate = Number.parseFloat(invoice.taxRate);
-  const hasPaymentDetails = business.bankDetails || invoice.paymentLinkUrl;
+  const hasPaymentDetails = business.iban || business.bankDetails || invoice.paymentLinkUrl;
 
   return (
     <Document>
@@ -460,12 +464,25 @@ export function InvoicePdf({ business, client, invoice }: InvoicePdfProps) {
                 </Link>
               </View>
             )}
-            {business.bankDetails && (
+            {business.iban ? (
+              <View>
+                <View style={styles.paymentRow}>
+                  <Text style={styles.paymentLabel}>IBAN</Text>
+                  <Text style={styles.paymentValue}>{formatIbanDisplay(business.iban)}</Text>
+                </View>
+                {business.bic && (
+                  <View style={styles.paymentRow}>
+                    <Text style={styles.paymentLabel}>BIC</Text>
+                    <Text style={styles.paymentValue}>{business.bic}</Text>
+                  </View>
+                )}
+              </View>
+            ) : business.bankDetails ? (
               <View style={styles.paymentRow}>
                 <Text style={styles.paymentLabel}>Bank transfer</Text>
                 <Text style={styles.paymentValue}>{business.bankDetails}</Text>
               </View>
-            )}
+            ) : null}
             <View style={[styles.paymentRow, { marginBottom: 0 }]}>
               <Text style={styles.paymentLabel}>Reference</Text>
               <Text style={styles.paymentValue}>Invoice {invoice.number}</Text>

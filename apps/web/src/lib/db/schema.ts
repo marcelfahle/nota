@@ -98,8 +98,11 @@ export const apiKeys = pgTable("api_keys", {
 });
 
 export const bankAccounts = pgTable("bank_accounts", {
+  accountType: text("account_type").notNull().default("freeform"),
+  bic: text("bic"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   details: text().notNull(),
+  iban: text("iban"),
   id: uuid().defaultRandom().primaryKey(),
   isDefault: boolean("is_default").notNull().default(false),
   name: text().notNull(),

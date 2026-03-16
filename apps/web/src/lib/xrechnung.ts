@@ -2,7 +2,9 @@ type XRechnungData = {
   business: {
     address?: string | null;
     bankDetails?: string | null;
+    bic?: string | null;
     email: string;
+    iban?: string | null;
     name?: string | null;
     vatNumber?: string | null;
   };
@@ -72,7 +74,7 @@ const COUNTRY_CODES: Record<string, string> = {
   "united kingdom": "GB",
 };
 
-function toCountryCode(country: string): string {
+export function toCountryCode(country: string): string {
   const trimmed = country.trim();
   // Already an ISO alpha-2 code
   if (/^[A-Z]{2}$/.test(trimmed)) {
@@ -84,7 +86,7 @@ function toCountryCode(country: string): string {
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-function escapeXml(value: string): string {
+export function escapeXml(value: string): string {
   return value
     .replaceAll("&", "&amp;")
     .replaceAll("<", "&lt;")
@@ -97,7 +99,7 @@ function fmt(value: string): string {
   return Number(value).toFixed(2);
 }
 
-function parseAddress(address?: string | null): {
+export function parseAddress(address?: string | null): {
   city: string;
   country: string;
   postal: string;
@@ -141,7 +143,7 @@ function parseAddress(address?: string | null): {
 // ---------------------------------------------------------------------------
 // Extract IBAN from free-text bank details
 // ---------------------------------------------------------------------------
-function extractIban(bankDetails?: string | null): string | null {
+export function extractIban(bankDetails?: string | null): string | null {
   if (!bankDetails) {
     return null;
   }
@@ -190,7 +192,8 @@ export function generateXRechnung(data: XRechnungData): string {
   const cur = escapeXml(invoice.currency);
   const tax = buildTaxCategory(invoice.reverseCharge, invoice.taxRate);
   const buyerName = escapeXml(client.company || client.name);
-  const iban = extractIban(business.bankDetails);
+  const iban = business.iban || extractIban(business.bankDetails);
+  const bic = business.bic || null;
 
   const lines = invoice.lineItems
     .map(
@@ -222,7 +225,14 @@ export function generateXRechnung(data: XRechnungData): string {
   if (iban) {
     paymentMeans += `
 <cac:PayeeFinancialAccount>
-<cbc:ID>${escapeXml(iban)}</cbc:ID>
+<cbc:ID>${escapeXml(iban)}</cbc:ID>`;
+    if (bic) {
+      paymentMeans += `
+<cac:FinancialInstitutionBranch>
+<cbc:ID>${escapeXml(bic)}</cbc:ID>
+</cac:FinancialInstitutionBranch>`;
+    }
+    paymentMeans += `
 </cac:PayeeFinancialAccount>`;
   }
   paymentMeans += `
