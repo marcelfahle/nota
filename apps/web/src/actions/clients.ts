@@ -9,14 +9,14 @@ import { db } from "@/lib/db";
 import { bankAccounts, clients } from "@/lib/db/schema";
 
 const clientSchema = z.object({
-  address: z.string().optional(),
+  address: z.string().nullable().optional(),
   bankAccountId: z.string().uuid().nullable().optional(),
-  company: z.string().optional(),
+  company: z.string().nullable().optional(),
   defaultCurrency: z.string().optional().default("EUR"),
   email: z.string().email("Invalid email address"),
   name: z.string().min(1, "Name is required"),
-  notes: z.string().optional(),
-  vatNumber: z.string().optional(),
+  notes: z.string().nullable().optional(),
+  vatNumber: z.string().nullable().optional(),
 });
 
 function parseClientFormData(formData: FormData) {
