@@ -93,7 +93,9 @@ export function ClientDetailView({
           <div className="min-w-0">
             <h1 className="truncate text-lg font-semibold">{client.name}</h1>
             <p className="truncate text-sm text-zinc-500">
-              {client.company && <span>{client.company} &middot; </span>}
+              {client.company && client.company !== client.name && (
+                <span>{client.company} &middot; </span>
+              )}
               {client.email}
             </p>
           </div>

@@ -106,12 +106,25 @@ export function ClientForm({
 
       <div className="space-y-2">
         <Label htmlFor="address">Address</Label>
-        <Input defaultValue={defaultValues?.address ?? ""} id="address" name="address" />
+        <textarea
+          className="w-full min-w-0 rounded-md border border-input bg-transparent px-3 py-2 text-base shadow-xs transition-[color,box-shadow] outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50 md:text-sm"
+          defaultValue={defaultValues?.address ?? ""}
+          id="address"
+          name="address"
+          placeholder={"Street\nPostal City\nCountry"}
+          rows={3}
+        />
       </div>
 
       <div className="space-y-2">
         <Label htmlFor="notes">Notes</Label>
-        <Input defaultValue={defaultValues?.notes ?? ""} id="notes" name="notes" />
+        <textarea
+          className="w-full min-w-0 rounded-md border border-input bg-transparent px-3 py-2 text-base shadow-xs transition-[color,box-shadow] outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50 md:text-sm"
+          defaultValue={defaultValues?.notes ?? ""}
+          id="notes"
+          name="notes"
+          rows={2}
+        />
       </div>
 
       <div className="space-y-2">

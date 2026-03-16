@@ -389,7 +389,9 @@ export function InvoicePdf({ business, client, invoice }: InvoicePdfProps) {
           <View style={{ maxWidth: 260 }}>
             <Text style={styles.sectionLabel}>Bill To</Text>
             <Text style={styles.clientName}>{client.name}</Text>
-            {client.company && <Text style={styles.clientCompany}>{client.company}</Text>}
+            {client.company && client.company !== client.name && (
+              <Text style={styles.clientCompany}>{client.company}</Text>
+            )}
             <Text style={styles.clientEmail}>{client.email}</Text>
             {client.address && <Text style={styles.clientAddress}>{client.address}</Text>}
             {client.vatNumber && <Text style={styles.clientVat}>VAT: {client.vatNumber}</Text>}

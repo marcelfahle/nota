@@ -22,14 +22,14 @@ const clientSchema = z.object({
 function parseClientFormData(formData: FormData) {
   const bankAccountId = formData.get("bankAccountId") as string;
   return {
-    address: (formData.get("address") as string) || undefined,
+    address: (formData.get("address") as string) || null,
     bankAccountId: bankAccountId && bankAccountId !== "" ? bankAccountId : null,
-    company: (formData.get("company") as string) || undefined,
+    company: (formData.get("company") as string) || null,
     defaultCurrency: (formData.get("defaultCurrency") as string) || undefined,
     email: formData.get("email") as string,
     name: formData.get("name") as string,
-    notes: (formData.get("notes") as string) || undefined,
-    vatNumber: (formData.get("vatNumber") as string) || undefined,
+    notes: (formData.get("notes") as string) || null,
+    vatNumber: (formData.get("vatNumber") as string) || null,
   };
 }
 
