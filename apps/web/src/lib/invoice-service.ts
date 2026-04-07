@@ -107,13 +107,27 @@ export async function createNextInvoiceNumber(tx: DbTransaction, orgId: string) 
     throw new Error("Organization not found");
   }
 
-  const sequenceNumber = organization.nextInvoiceNumber;
-  const number = formatInvoiceNumber({
-    digits: organization.invoiceDigits,
-    number: sequenceNumber,
-    prefix: organization.invoicePrefix,
-    separator: organization.invoiceSeparator,
-  });
+  let sequenceNumber = organization.nextInvoiceNumber;
+  let number: string;
+
+  // Skip over numbers that already exist (e.g. cancelled invoices)
+  do {
+    number = formatInvoiceNumber({
+      digits: organization.invoiceDigits,
+      number: sequenceNumber,
+      prefix: organization.invoicePrefix,
+      separator: organization.invoiceSeparator,
+    });
+
+    const [existing] = await tx
+      .select({ id: invoices.id })
+      .from(invoices)
+      .where(and(eq(invoices.orgId, orgId), eq(invoices.number, number)))
+      .limit(1);
+
+    if (!existing) break;
+    sequenceNumber++;
+  } while (true);
 
   await tx
     .update(orgs)
@@ -326,7 +340,7 @@ export async function deleteInvoice(
   }
 
   if (!canDeleteInvoiceStatus(invoice.status)) {
-    return { error: "Only draft invoices can be deleted" };
+    return { error: "Only draft or cancelled invoices can be deleted" };
   }
 
   await db.transaction(async (tx) => {

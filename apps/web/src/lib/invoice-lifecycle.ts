@@ -18,7 +18,8 @@ export function canEditInvoice(status: string | null | undefined) {
 }
 
 export function canDeleteInvoice(status: string | null | undefined) {
-  return normalizeInvoiceStatus(status) === "draft";
+  const normalized = normalizeInvoiceStatus(status);
+  return normalized === "draft" || normalized === "cancelled";
 }
 
 export function canSendInvoice(status: string | null | undefined) {

@@ -377,7 +377,7 @@ export function InvoiceDetailView({ activities, invoice, role }: InvoiceDetailPr
               Cancel Invoice
             </Button>
           )}
-          {isDraft && canManageDelete && (
+          {(isDraft || status === "cancelled") && canManageDelete && (
             <Button
               className="text-red-600 hover:bg-red-50 hover:text-red-700"
               data-testid="invoice-delete-draft"
@@ -387,7 +387,7 @@ export function InvoiceDetailView({ activities, invoice, role }: InvoiceDetailPr
               variant="outline"
             >
               <Trash2 className="size-4" />
-              Delete Draft
+              {isDraft ? "Delete Draft" : "Delete Invoice"}
             </Button>
           )}
         </div>
@@ -535,7 +535,7 @@ export function InvoiceDetailView({ activities, invoice, role }: InvoiceDetailPr
         <DialogContent>
           <DialogHeader>
             <DialogTitle>
-              {confirmAction === "delete" ? "Delete draft" : "Cancel invoice"}
+              {confirmAction === "delete" ? "Delete invoice" : "Cancel invoice"}
             </DialogTitle>
             <DialogDescription>
               {confirmAction === "delete"
@@ -563,7 +563,7 @@ export function InvoiceDetailView({ activities, invoice, role }: InvoiceDetailPr
                 : pendingAction === "cancel"
                   ? "Cancelling..."
                   : confirmAction === "delete"
-                    ? "Delete Draft"
+                    ? "Delete Invoice"
                     : "Cancel Invoice"}
             </Button>
           </DialogFooter>

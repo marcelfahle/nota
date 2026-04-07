@@ -38,6 +38,13 @@ describe("invoice lifecycle", () => {
     expect(canCancelInvoice("cancelled")).toBe(false);
   });
 
+  test("cancelled invoices can be deleted", () => {
+    expect(canDeleteInvoice("cancelled")).toBe(true);
+    expect(canDeleteInvoice("sent")).toBe(false);
+    expect(canDeleteInvoice("paid")).toBe(false);
+    expect(canDeleteInvoice("overdue")).toBe(false);
+  });
+
   test("send finalization requires a sent status, activity, and payment link", () => {
     expect(isInvoiceSendFinalized("sent", true, true)).toBe(true);
     expect(isInvoiceSendFinalized("sent", false, true)).toBe(false);
