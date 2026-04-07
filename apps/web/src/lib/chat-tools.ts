@@ -22,6 +22,17 @@ import {
 
 type ChatToolContext = Pick<AuthenticatedUserContext, "org" | "role" | "user">;
 
+async function withRetry<T>(fn: () => Promise<T>, retries = 1): Promise<T> {
+  try {
+    return await fn();
+  } catch (error) {
+    if (retries <= 0) throw error;
+    console.warn("[chat] tool execution failed, retrying:", error);
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    return withRetry(fn, retries - 1);
+  }
+}
+
 type InvoiceToolSummary = {
   clientName: string | null;
   currency: string | null;
@@ -235,7 +246,7 @@ export function buildChatSystemPrompt(
     `Known clients: ${clientSummary}`,
     `Recent invoices: ${recentInvoiceSummary}`,
     "Use tools whenever the user asks for live data or wants to change data.",
-    "Available invoice actions include creating drafts, listing, loading details, sending, reminding, duplicating, marking paid, cancelling, and deleting draft invoices.",
+    "Available invoice actions include creating drafts, listing, loading details, sending, reminding, duplicating, marking paid, cancelling, and deleting draft or cancelled invoices.",
     "When creating invoices, prefer clientName when the user mentions a client by name. If line items are described naturally, pass them via lineItemsText.",
     "Be concise. After a successful mutation, confirm the result with the invoice number or client name.",
   ].join("\n");
@@ -245,23 +256,24 @@ export function createChatTools(auth: ChatToolContext) {
   return {
     cancel_invoice: tool({
       description: "Cancel a sent or overdue invoice.",
-      execute: async (input) => {
-        const invoice = await resolveInvoice(auth, input);
-        const result = await cancelInvoice(buildServiceContext(auth), invoice.id);
-        if ("error" in result) {
-          throw new Error(result.error);
-        }
+      execute: (input) =>
+        withRetry(async () => {
+          const invoice = await resolveInvoice(auth, input);
+          const result = await cancelInvoice(buildServiceContext(auth), invoice.id);
+          if ("error" in result) {
+            throw new Error(result.error);
+          }
 
-        const updatedInvoice = await loadInvoiceSummary(auth, invoice.id);
-        revalidateInvoiceViews(updatedInvoice.id);
+          const updatedInvoice = await loadInvoiceSummary(auth, invoice.id);
+          revalidateInvoiceViews(updatedInvoice.id);
 
-        return {
-          invoice: toInvoiceSummary(updatedInvoice),
-          kind: "invoice",
-          message: `Cancelled invoice ${updatedInvoice.number}.`,
-          warning: result.warning,
-        };
-      },
+          return {
+            invoice: toInvoiceSummary(updatedInvoice),
+            kind: "invoice",
+            message: `Cancelled invoice ${updatedInvoice.number}.`,
+            warning: result.warning,
+          };
+        }),
       inputSchema: z.object({
         invoiceId: z.string().uuid().optional(),
         invoiceNumber: z.string().trim().optional(),
@@ -269,35 +281,36 @@ export function createChatTools(auth: ChatToolContext) {
     }),
     create_client: tool({
       description: "Create a client in Nota.",
-      execute: async (input) => {
-        const [client] = await db
-          .insert(clients)
-          .values({
-            address: input.address,
-            company: input.company,
-            defaultCurrency: input.defaultCurrency ?? auth.org.defaultCurrency ?? "EUR",
-            email: input.email.trim().toLowerCase(),
-            name: input.name.trim(),
-            notes: input.notes,
-            orgId: auth.org.id,
-            userId: auth.user.id,
-            vatNumber: input.vatNumber,
-          })
-          .returning({
-            company: clients.company,
-            email: clients.email,
-            id: clients.id,
-            name: clients.name,
-          });
+      execute: (input) =>
+        withRetry(async () => {
+          const [client] = await db
+            .insert(clients)
+            .values({
+              address: input.address,
+              company: input.company,
+              defaultCurrency: input.defaultCurrency ?? auth.org.defaultCurrency ?? "EUR",
+              email: input.email.trim().toLowerCase(),
+              name: input.name.trim(),
+              notes: input.notes,
+              orgId: auth.org.id,
+              userId: auth.user.id,
+              vatNumber: input.vatNumber,
+            })
+            .returning({
+              company: clients.company,
+              email: clients.email,
+              id: clients.id,
+              name: clients.name,
+            });
 
-        revalidateClientViews();
+          revalidateClientViews();
 
-        return {
-          client,
-          kind: "client",
-          message: `Created client ${client.name}.`,
-        };
-      },
+          return {
+            client,
+            kind: "client",
+            message: `Created client ${client.name}.`,
+          };
+        }),
       inputSchema: z.object({
         address: z.string().trim().optional(),
         company: z.string().trim().optional(),
@@ -310,38 +323,39 @@ export function createChatTools(auth: ChatToolContext) {
     }),
     create_invoice: tool({
       description: "Create a draft invoice for a client.",
-      execute: async (input) => {
-        const client = await resolveClient(auth, input);
-        const dates = getDefaultInvoiceDates();
-        const mutationInput: InvoiceMutationInput = {
-          clientId: client.id,
-          currency: input.currency ?? client.defaultCurrency ?? auth.org.defaultCurrency ?? "EUR",
-          dueAt: input.dueAt ?? dates.dueAt,
-          internalNotes: input.internalNotes,
-          issuedAt: input.issuedAt ?? dates.issuedAt,
-          lineItems: resolveChatInvoiceLineItems({
-            lineItems: input.lineItems,
-            lineItemsText: input.lineItemsText,
-          }),
-          notes: input.notes,
-          reverseCharge: input.reverseCharge ? "true" : "false",
-          taxRate: input.taxRate ?? 0,
-        };
+      execute: (input) =>
+        withRetry(async () => {
+          const client = await resolveClient(auth, input);
+          const dates = getDefaultInvoiceDates();
+          const mutationInput: InvoiceMutationInput = {
+            clientId: client.id,
+            currency: input.currency ?? client.defaultCurrency ?? auth.org.defaultCurrency ?? "EUR",
+            dueAt: input.dueAt ?? dates.dueAt,
+            internalNotes: input.internalNotes,
+            issuedAt: input.issuedAt ?? dates.issuedAt,
+            lineItems: resolveChatInvoiceLineItems({
+              lineItems: input.lineItems,
+              lineItemsText: input.lineItemsText,
+            }),
+            notes: input.notes,
+            reverseCharge: input.reverseCharge ? "true" : "false",
+            taxRate: input.taxRate ?? 0,
+          };
 
-        const result = await createInvoice(buildServiceContext(auth), mutationInput);
-        if ("error" in result) {
-          throw new Error(result.error);
-        }
+          const result = await createInvoice(buildServiceContext(auth), mutationInput);
+          if ("error" in result) {
+            throw new Error(result.error);
+          }
 
-        const invoice = await loadInvoiceSummary(auth, result.invoiceId);
-        revalidateInvoiceViews(invoice.id);
+          const invoice = await loadInvoiceSummary(auth, result.invoiceId);
+          revalidateInvoiceViews(invoice.id);
 
-        return {
-          invoice: toInvoiceSummary(invoice),
-          kind: "invoice",
-          message: `Created draft invoice ${invoice.number}.`,
-        };
-      },
+          return {
+            invoice: toInvoiceSummary(invoice),
+            kind: "invoice",
+            message: `Created draft invoice ${invoice.number}.`,
+          };
+        }),
       inputSchema: z.object({
         clientId: z.string().uuid().optional(),
         clientName: z.string().trim().optional(),
@@ -365,21 +379,22 @@ export function createChatTools(auth: ChatToolContext) {
       }),
     }),
     delete_invoice_draft: tool({
-      description: "Delete a draft invoice.",
-      execute: async (input) => {
-        const invoice = await resolveInvoice(auth, input);
-        const result = await deleteInvoice(buildServiceContext(auth), invoice.id);
-        if ("error" in result) {
-          throw new Error(result.error);
-        }
+      description: "Delete a draft or cancelled invoice.",
+      execute: (input) =>
+        withRetry(async () => {
+          const invoice = await resolveInvoice(auth, input);
+          const result = await deleteInvoice(buildServiceContext(auth), invoice.id);
+          if ("error" in result) {
+            throw new Error(result.error);
+          }
 
-        revalidateInvoiceViews();
+          revalidateInvoiceViews();
 
-        return {
-          kind: "invoice",
-          message: `Deleted draft invoice ${invoice.number}.`,
-        };
-      },
+          return {
+            kind: "invoice",
+            message: `Deleted invoice ${invoice.number}.`,
+          };
+        }),
       inputSchema: z.object({
         invoiceId: z.string().uuid().optional(),
         invoiceNumber: z.string().trim().optional(),
@@ -387,22 +402,23 @@ export function createChatTools(auth: ChatToolContext) {
     }),
     duplicate_invoice: tool({
       description: "Duplicate an existing invoice into a fresh draft.",
-      execute: async (input) => {
-        const invoice = await resolveInvoice(auth, input);
-        const result = await duplicateInvoice(buildServiceContext(auth), invoice.id);
-        if ("error" in result) {
-          throw new Error(result.error);
-        }
+      execute: (input) =>
+        withRetry(async () => {
+          const invoice = await resolveInvoice(auth, input);
+          const result = await duplicateInvoice(buildServiceContext(auth), invoice.id);
+          if ("error" in result) {
+            throw new Error(result.error);
+          }
 
-        const duplicatedInvoice = await loadInvoiceSummary(auth, result.invoiceId);
-        revalidateInvoiceViews(duplicatedInvoice.id);
+          const duplicatedInvoice = await loadInvoiceSummary(auth, result.invoiceId);
+          revalidateInvoiceViews(duplicatedInvoice.id);
 
-        return {
-          invoice: toInvoiceSummary(duplicatedInvoice),
-          kind: "invoice",
-          message: `Duplicated invoice ${invoice.number} as ${duplicatedInvoice.number}.`,
-        };
-      },
+          return {
+            invoice: toInvoiceSummary(duplicatedInvoice),
+            kind: "invoice",
+            message: `Duplicated invoice ${invoice.number} as ${duplicatedInvoice.number}.`,
+          };
+        }),
       inputSchema: z.object({
         invoiceId: z.string().uuid().optional(),
         invoiceNumber: z.string().trim().optional(),
@@ -410,65 +426,67 @@ export function createChatTools(auth: ChatToolContext) {
     }),
     get_dashboard_stats: tool({
       description: "Get current invoice and client stats for the workspace.",
-      execute: async () => {
-        const [invoiceRows, clientList] = await Promise.all([
-          db
-            .select({
-              currency: invoices.currency,
-              id: invoices.id,
-              number: invoices.number,
-              status: invoices.status,
-              total: invoices.total,
-            })
-            .from(invoices)
-            .where(eq(invoices.orgId, auth.org.id))
-            .orderBy(desc(invoices.createdAt)),
-          listClientsForOrg(auth.org.id, undefined, 12),
-        ]);
+      execute: () =>
+        withRetry(async () => {
+          const [invoiceRows, clientList] = await Promise.all([
+            db
+              .select({
+                currency: invoices.currency,
+                id: invoices.id,
+                number: invoices.number,
+                status: invoices.status,
+                total: invoices.total,
+              })
+              .from(invoices)
+              .where(eq(invoices.orgId, auth.org.id))
+              .orderBy(desc(invoices.createdAt)),
+            listClientsForOrg(auth.org.id, undefined, 12),
+          ]);
 
-        const counts = {
-          cancelled: 0,
-          clients: clientList.length,
-          draft: 0,
-          overdue: 0,
-          paid: 0,
-          sent: 0,
-          totalInvoices: invoiceRows.length,
-        };
+          const counts = {
+            cancelled: 0,
+            clients: clientList.length,
+            draft: 0,
+            overdue: 0,
+            paid: 0,
+            sent: 0,
+            totalInvoices: invoiceRows.length,
+          };
 
-        for (const invoice of invoiceRows) {
-          const status = invoice.status ?? "draft";
-          if (status in counts) {
-            counts[status as keyof typeof counts] += 1;
+          for (const invoice of invoiceRows) {
+            const status = invoice.status ?? "draft";
+            if (status in counts) {
+              counts[status as keyof typeof counts] += 1;
+            }
           }
-        }
 
-        return {
-          counts,
-          kind: "dashboard",
-          recentInvoices: invoiceRows.slice(0, 5),
-          topClients: clientList.slice(0, 5),
-        };
-      },
+          return {
+            counts,
+            kind: "dashboard",
+            recentInvoices: invoiceRows.slice(0, 5),
+            topClients: clientList.slice(0, 5),
+          };
+        }),
       inputSchema: z.object({}),
     }),
     get_invoice: tool({
       description: "Get a specific invoice by id or invoice number.",
-      execute: async (input) => {
-        const invoice = await resolveInvoice(auth, input);
+      execute: (input) =>
+        withRetry(async () => {
+          const invoice = await resolveInvoice(auth, input);
 
-        return {
-          invoice: toInvoiceSummary(invoice),
-          kind: "invoice",
-          lineItems: invoice.lineItems.map((item) => ({
-            amount: item.amount,
-            description: item.description,
-            quantity: item.quantity,
-            unitPrice: item.unitPrice,
-          })),
-          message: `Loaded invoice ${invoice.number}.`,
-        };
-      },
+          return {
+            invoice: toInvoiceSummary(invoice),
+            kind: "invoice",
+            lineItems: invoice.lineItems.map((item) => ({
+              amount: item.amount,
+              description: item.description,
+              quantity: item.quantity,
+              unitPrice: item.unitPrice,
+            })),
+            message: `Loaded invoice ${invoice.number}.`,
+          };
+        }),
       inputSchema: z.object({
         invoiceId: z.string().uuid().optional(),
         invoiceNumber: z.string().trim().optional(),
@@ -476,46 +494,48 @@ export function createChatTools(auth: ChatToolContext) {
     }),
     list_clients: tool({
       description: "List clients in the current workspace.",
-      execute: async ({ search }) => {
-        const clientList = await listClientsForOrg(auth.org.id, search, 20);
+      execute: ({ search }) =>
+        withRetry(async () => {
+          const clientList = await listClientsForOrg(auth.org.id, search, 20);
 
-        return {
-          clients: clientList,
-          kind: "client-list",
-          total: clientList.length,
-        };
-      },
+          return {
+            clients: clientList,
+            kind: "client-list",
+            total: clientList.length,
+          };
+        }),
       inputSchema: z.object({
         search: z.string().trim().optional(),
       }),
     }),
     list_invoices: tool({
       description: "List invoices with optional status, client, and search filters.",
-      execute: async ({ clientId, clientName, page, perPage, search, status }) => {
-        const resolvedClient =
-          clientId || clientName ? await resolveClient(auth, { clientId, clientName }) : null;
-        const result = await getInvoiceList(auth.org.id, {
-          clientId: resolvedClient?.id ?? null,
-          page: page ?? 1,
-          perPage: perPage ?? 12,
-          search: search ?? null,
-          status: status ?? null,
-        });
+      execute: ({ clientId, clientName, page, perPage, search, status }) =>
+        withRetry(async () => {
+          const resolvedClient =
+            clientId || clientName ? await resolveClient(auth, { clientId, clientName }) : null;
+          const result = await getInvoiceList(auth.org.id, {
+            clientId: resolvedClient?.id ?? null,
+            page: page ?? 1,
+            perPage: perPage ?? 12,
+            search: search ?? null,
+            status: status ?? null,
+          });
 
-        return {
-          invoices: result.data.map((invoice) => ({
-            clientName: invoice.client?.name ?? null,
-            currency: invoice.currency,
-            dueAt: invoice.dueAt,
-            id: invoice.id,
-            number: invoice.number,
-            status: invoice.status,
-            total: invoice.total,
-          })),
-          kind: "invoice-list",
-          pagination: result.pagination,
-        };
-      },
+          return {
+            invoices: result.data.map((invoice) => ({
+              clientName: invoice.client?.name ?? null,
+              currency: invoice.currency,
+              dueAt: invoice.dueAt,
+              id: invoice.id,
+              number: invoice.number,
+              status: invoice.status,
+              total: invoice.total,
+            })),
+            kind: "invoice-list",
+            pagination: result.pagination,
+          };
+        }),
       inputSchema: z.object({
         clientId: z.string().uuid().optional(),
         clientName: z.string().trim().optional(),
@@ -527,22 +547,23 @@ export function createChatTools(auth: ChatToolContext) {
     }),
     mark_invoice_paid: tool({
       description: "Mark an invoice as paid.",
-      execute: async (input) => {
-        const invoice = await resolveInvoice(auth, input);
-        const result = await markInvoicePaid(buildServiceContext(auth), invoice.id);
-        if ("error" in result) {
-          throw new Error(result.error);
-        }
+      execute: (input) =>
+        withRetry(async () => {
+          const invoice = await resolveInvoice(auth, input);
+          const result = await markInvoicePaid(buildServiceContext(auth), invoice.id);
+          if ("error" in result) {
+            throw new Error(result.error);
+          }
 
-        const updatedInvoice = await loadInvoiceSummary(auth, invoice.id);
-        revalidateInvoiceViews(updatedInvoice.id);
+          const updatedInvoice = await loadInvoiceSummary(auth, invoice.id);
+          revalidateInvoiceViews(updatedInvoice.id);
 
-        return {
-          invoice: toInvoiceSummary(updatedInvoice),
-          kind: "invoice",
-          message: `Marked invoice ${updatedInvoice.number} as paid.`,
-        };
-      },
+          return {
+            invoice: toInvoiceSummary(updatedInvoice),
+            kind: "invoice",
+            message: `Marked invoice ${updatedInvoice.number} as paid.`,
+          };
+        }),
       inputSchema: z.object({
         invoiceId: z.string().uuid().optional(),
         invoiceNumber: z.string().trim().optional(),
@@ -550,23 +571,24 @@ export function createChatTools(auth: ChatToolContext) {
     }),
     send_invoice: tool({
       description: "Send a draft invoice.",
-      execute: async (input) => {
-        const invoice = await resolveInvoice(auth, input);
-        const result = await sendInvoice(buildServiceContext(auth), invoice.id);
-        if ("error" in result) {
-          throw new Error(result.error);
-        }
+      execute: (input) =>
+        withRetry(async () => {
+          const invoice = await resolveInvoice(auth, input);
+          const result = await sendInvoice(buildServiceContext(auth), invoice.id);
+          if ("error" in result) {
+            throw new Error(result.error);
+          }
 
-        const updatedInvoice = await loadInvoiceSummary(auth, invoice.id);
-        revalidateInvoiceViews(updatedInvoice.id);
+          const updatedInvoice = await loadInvoiceSummary(auth, invoice.id);
+          revalidateInvoiceViews(updatedInvoice.id);
 
-        return {
-          invoice: toInvoiceSummary(updatedInvoice),
-          kind: "invoice",
-          message: `Sent invoice ${updatedInvoice.number}.`,
-          warning: result.warning,
-        };
-      },
+          return {
+            invoice: toInvoiceSummary(updatedInvoice),
+            kind: "invoice",
+            message: `Sent invoice ${updatedInvoice.number}.`,
+            warning: result.warning,
+          };
+        }),
       inputSchema: z.object({
         invoiceId: z.string().uuid().optional(),
         invoiceNumber: z.string().trim().optional(),
@@ -574,22 +596,23 @@ export function createChatTools(auth: ChatToolContext) {
     }),
     send_invoice_reminder: tool({
       description: "Send a reminder for a sent or overdue invoice.",
-      execute: async (input) => {
-        const invoice = await resolveInvoice(auth, input);
-        const result = await sendReminder(buildServiceContext(auth), invoice.id);
-        if ("error" in result) {
-          throw new Error(result.error);
-        }
+      execute: (input) =>
+        withRetry(async () => {
+          const invoice = await resolveInvoice(auth, input);
+          const result = await sendReminder(buildServiceContext(auth), invoice.id);
+          if ("error" in result) {
+            throw new Error(result.error);
+          }
 
-        const updatedInvoice = await loadInvoiceSummary(auth, invoice.id);
-        revalidateInvoiceViews(updatedInvoice.id);
+          const updatedInvoice = await loadInvoiceSummary(auth, invoice.id);
+          revalidateInvoiceViews(updatedInvoice.id);
 
-        return {
-          invoice: toInvoiceSummary(updatedInvoice),
-          kind: "invoice",
-          message: `Queued a reminder for invoice ${updatedInvoice.number}.`,
-        };
-      },
+          return {
+            invoice: toInvoiceSummary(updatedInvoice),
+            kind: "invoice",
+            message: `Queued a reminder for invoice ${updatedInvoice.number}.`,
+          };
+        }),
       inputSchema: z.object({
         invoiceId: z.string().uuid().optional(),
         invoiceNumber: z.string().trim().optional(),

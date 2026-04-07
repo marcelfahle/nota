@@ -66,7 +66,12 @@ export async function POST(request: Request) {
     });
 
     return result.toUIMessageStreamResponse({
-      onError: () => "Nota chat failed. Try again.",
+      onError: (error) => {
+        console.error("[chat] stream error:", error);
+        const message =
+          error instanceof Error ? error.message : "Unknown error";
+        return `Nota chat failed: ${message}`;
+      },
     });
   } catch {
     return Response.json({ error: "Nota chat is unavailable right now" }, { status: 500 });
