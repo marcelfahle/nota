@@ -1,4 +1,4 @@
-import { and, desc, eq, ilike, or, sql } from "drizzle-orm";
+import { and, desc, eq, gte, ilike, lte, or, sql } from "drizzle-orm";
 import { z } from "zod";
 
 import {
@@ -23,7 +23,9 @@ export const apiInvoicePayloadSchema = z.object({
   dueAt: z.string().min(1, "Due date is required"),
   internalNotes: z.string().trim().optional(),
   issuedAt: z.string().min(1, "Issue date is required"),
-  lineItems: z.array(apiLineItemSchema).min(1, "At least one line item is required"),
+  lineItems: z
+    .array(apiLineItemSchema)
+    .min(1, "At least one line item is required"),
   notes: z.string().trim().optional(),
   reverseCharge: z.enum(["false", "true"]).default("false"),
   taxRate: z.coerce.number().min(0).max(100).default(0),
@@ -31,9 +33,16 @@ export const apiInvoicePayloadSchema = z.object({
 
 export type ApiInvoicePayload = z.infer<typeof apiInvoicePayloadSchema>;
 
-export { createInvoiceFromApi, deleteInvoiceFromApi, getInvoiceDetail, updateInvoiceFromApi };
+export {
+  createInvoiceFromApi,
+  deleteInvoiceFromApi,
+  getInvoiceDetail,
+  updateInvoiceFromApi,
+};
 
-export function getInvoiceValidationError(result: z.ZodSafeParseError<ApiInvoicePayload>) {
+export function getInvoiceValidationError(
+  result: z.ZodSafeParseError<ApiInvoicePayload>,
+) {
   return result.error.issues[0]?.message ?? "Invalid invoice payload";
 }
 
@@ -50,10 +59,17 @@ export function normalizeInvoicePayload(payload: Record<string, unknown>) {
         ? payload.internalNotes
         : undefined,
     issuedAt: payload.issuedAt,
-    lineItems: Array.isArray(payload.lineItems) ? payload.lineItems : (payload.lineItems ?? []),
-    notes: typeof payload.notes === "string" && payload.notes.trim() ? payload.notes : undefined,
+    lineItems: Array.isArray(payload.lineItems)
+      ? payload.lineItems
+      : (payload.lineItems ?? []),
+    notes:
+      typeof payload.notes === "string" && payload.notes.trim()
+        ? payload.notes
+        : undefined,
     reverseCharge:
-      payload.reverseCharge === true || payload.reverseCharge === "true" ? "true" : "false",
+      payload.reverseCharge === true || payload.reverseCharge === "true"
+        ? "true"
+        : "false",
     taxRate: payload.taxRate,
   };
 }
@@ -62,6 +78,8 @@ export async function getInvoiceList(
   orgId: string,
   filters: {
     clientId?: string | null;
+    issuedFrom?: string | null;
+    issuedTo?: string | null;
     page: number;
     perPage: number;
     search?: string | null;
@@ -88,7 +106,10 @@ export async function getInvoiceList(
         total: invoices.total,
       })
       .from(invoices)
-      .leftJoin(clients, and(eq(clients.id, invoices.clientId), eq(clients.orgId, orgId)))
+      .leftJoin(
+        clients,
+        and(eq(clients.id, invoices.clientId), eq(clients.orgId, orgId)),
+      )
       .where(whereClause)
       .orderBy(desc(invoices.issuedAt), desc(invoices.createdAt))
       .limit(filters.perPage)
@@ -96,7 +117,10 @@ export async function getInvoiceList(
     db
       .select({ total: sql<number>`count(*)::int` })
       .from(invoices)
-      .leftJoin(clients, and(eq(clients.id, invoices.clientId), eq(clients.orgId, orgId)))
+      .leftJoin(
+        clients,
+        and(eq(clients.id, invoices.clientId), eq(clients.orgId, orgId)),
+      )
       .where(whereClause)
       .limit(1),
   ]);
@@ -115,6 +139,8 @@ function getInvoiceWhereClause(
   orgId: string,
   filters: {
     clientId?: string | null;
+    issuedFrom?: string | null;
+    issuedTo?: string | null;
     search?: string | null;
     status?: string | null;
   },
@@ -127,6 +153,14 @@ function getInvoiceWhereClause(
 
   if (filters.clientId) {
     clauses.push(eq(invoices.clientId, filters.clientId));
+  }
+
+  if (filters.issuedFrom) {
+    clauses.push(gte(invoices.issuedAt, filters.issuedFrom));
+  }
+
+  if (filters.issuedTo) {
+    clauses.push(lte(invoices.issuedAt, filters.issuedTo));
   }
 
   if (filters.search) {

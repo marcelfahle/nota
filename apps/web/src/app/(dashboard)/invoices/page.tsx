@@ -2,6 +2,8 @@ import { and, desc, eq } from "drizzle-orm";
 import { FileText, Plus } from "lucide-react";
 import Link from "next/link";
 
+import { InvoiceArchiveMenu } from "@/components/invoice-archive-menu";
+import { InvoiceRowActions } from "@/components/invoice-row-actions";
 import { StatCard } from "@/components/stat-card";
 import { StatusBadge } from "@/components/status-badge";
 import { Button } from "@/components/ui/button";
@@ -10,7 +12,14 @@ import { db } from "@/lib/db";
 import { clients, invoices } from "@/lib/db/schema";
 import { formatCurrency } from "@/lib/utils";
 
-const FILTER_STATUSES = ["all", "draft", "sent", "paid", "overdue", "cancelled"] as const;
+const FILTER_STATUSES = [
+  "all",
+  "draft",
+  "sent",
+  "paid",
+  "overdue",
+  "cancelled",
+] as const;
 
 export default async function InvoicesPage({
   searchParams,
@@ -18,7 +27,7 @@ export default async function InvoicesPage({
   searchParams: Promise<{ status?: string }>;
 }) {
   const { status: filterStatus } = await searchParams;
-  const { org } = await getCurrentUser();
+  const { org, role } = await getCurrentUser();
 
   const invoiceList = await db
     .select({
@@ -30,10 +39,14 @@ export default async function InvoicesPage({
       issuedAt: invoices.issuedAt,
       number: invoices.number,
       status: invoices.status,
+      stripePaymentLinkUrl: invoices.stripePaymentLinkUrl,
       total: invoices.total,
     })
     .from(invoices)
-    .leftJoin(clients, and(eq(invoices.clientId, clients.id), eq(clients.orgId, org.id)))
+    .leftJoin(
+      clients,
+      and(eq(invoices.clientId, clients.id), eq(clients.orgId, org.id)),
+    )
     .where(eq(invoices.orgId, org.id))
     .orderBy(desc(invoices.issuedAt));
 
@@ -41,9 +54,18 @@ export default async function InvoicesPage({
   let totalPaid = 0;
   let overdueAmount = 0;
   let overdueCount = 0;
+  const statusCounts = {
+    cancelled: 0,
+    draft: 0,
+    overdue: 0,
+    paid: 0,
+    sent: 0,
+  };
 
   for (const inv of invoiceList) {
     const amount = Number(inv.total ?? 0);
+    const status = inv.status ?? "draft";
+    statusCounts[status] += 1;
     if (inv.status === "sent" || inv.status === "overdue") {
       outstanding += amount;
     }
@@ -57,17 +79,25 @@ export default async function InvoicesPage({
   }
 
   const activeFilter =
-    filterStatus && FILTER_STATUSES.includes(filterStatus as (typeof FILTER_STATUSES)[number])
+    filterStatus &&
+    FILTER_STATUSES.includes(filterStatus as (typeof FILTER_STATUSES)[number])
       ? filterStatus
       : "all";
 
   const filtered =
-    activeFilter === "all" ? invoiceList : invoiceList.filter((inv) => inv.status === activeFilter);
+    activeFilter === "all"
+      ? invoiceList
+      : invoiceList.filter((inv) => inv.status === activeFilter);
+
+  const filterCounts = { all: invoiceList.length, ...statusCounts };
 
   return (
     <div>
-      <div className="mb-8 flex items-center justify-between">
-        <h1 className="text-lg font-semibold">Invoices</h1>
+      <div className="mb-8 flex items-center justify-between gap-4">
+        <h1 className="text-lg font-semibold tracking-tight">Invoices</h1>
+        <InvoiceArchiveMenu
+          status={activeFilter === "all" ? undefined : activeFilter}
+        />
       </div>
 
       <div className="mb-8 grid grid-cols-1 gap-4 sm:grid-cols-3 sm:gap-8">
@@ -76,7 +106,9 @@ export default async function InvoicesPage({
         <StatCard
           label="Overdue"
           sub={
-            overdueCount > 0 ? `${overdueCount} invoice${overdueCount === 1 ? "" : "s"}` : undefined
+            overdueCount > 0
+              ? `${overdueCount} invoice${overdueCount === 1 ? "" : "s"}`
+              : undefined
           }
           value={formatCurrency(overdueAmount)}
         />
@@ -86,12 +118,17 @@ export default async function InvoicesPage({
         {FILTER_STATUSES.map((s) => (
           <Link
             className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
-              activeFilter === s ? "bg-zinc-100 text-zinc-900" : "text-zinc-500 hover:text-zinc-700"
+              activeFilter === s
+                ? "bg-zinc-100 text-zinc-900"
+                : "text-zinc-500 hover:text-zinc-700"
             }`}
             href={s === "all" ? "/invoices" : `/invoices?status=${s}`}
             key={s}
           >
-            {s.charAt(0).toUpperCase() + s.slice(1)}
+            <span>{s.charAt(0).toUpperCase() + s.slice(1)}</span>
+            <span className="ml-1.5 text-xs text-zinc-400 tabular-nums">
+              {filterCounts[s]}
+            </span>
           </Link>
         ))}
       </div>
@@ -101,64 +138,115 @@ export default async function InvoicesPage({
           <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-zinc-100">
             <FileText className="h-6 w-6 text-zinc-400" />
           </div>
-          <p className="mb-1 text-sm font-medium text-zinc-900">No invoices yet</p>
-          <p className="mb-4 text-sm text-zinc-500">Create your first invoice to get started.</p>
-          <Button asChild size="sm">
-            <Link href="/invoices/new">
-              <Plus />
-              Create Invoice
-            </Link>
-          </Button>
+          <p className="mb-1 text-sm font-medium text-zinc-900">
+            {activeFilter === "all"
+              ? "No invoices yet"
+              : `No ${activeFilter} invoices`}
+          </p>
+          <p className="mb-4 text-sm text-zinc-500">
+            {activeFilter === "all"
+              ? "Create your first invoice to get started."
+              : "Try another status or return to all invoices."}
+          </p>
+          {activeFilter === "all" ? (
+            <Button asChild size="sm">
+              <Link href="/invoices/new">
+                <Plus />
+                Create Invoice
+              </Link>
+            </Button>
+          ) : (
+            <Button asChild size="sm" variant="outline">
+              <Link href="/invoices">View all invoices</Link>
+            </Button>
+          )}
         </div>
       ) : (
-        <table className="w-full">
-          <thead>
-            <tr className="border-b border-zinc-100 text-left text-xs font-medium tracking-wide text-zinc-400 uppercase">
-              <th className="pr-4 pb-3">Number</th>
-              <th className="pr-4 pb-3">Client</th>
-              <th className="pr-4 pb-3 text-right">Amount</th>
-              <th className="pr-4 pb-3">Status</th>
-              <th className="hidden pr-4 pb-3 sm:table-cell">Issued</th>
-              <th className="hidden pb-3 sm:table-cell">Due</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-zinc-50">
+        <div>
+          <div className="hidden grid-cols-[minmax(7rem,0.8fr)_minmax(12rem,1.5fr)_minmax(7rem,0.7fr)_minmax(6rem,0.6fr)_minmax(7.5rem,0.8fr)_auto] gap-4 border-b border-zinc-100 pb-3 text-xs font-medium tracking-wide text-zinc-400 uppercase md:grid">
+            <span>Invoice</span>
+            <span>Client</span>
+            <span className="text-right">Amount</span>
+            <span>Status</span>
+            <span>Due</span>
+            <span className="text-right">Actions</span>
+          </div>
+          <ul className="divide-y divide-zinc-100">
             {filtered.map((inv) => (
-              <tr className="group" key={inv.id}>
-                <td className="py-3 pr-4">
+              <li
+                className="group grid grid-cols-[minmax(0,1fr)_auto] gap-x-4 gap-y-3 py-4 md:grid-cols-[minmax(7rem,0.8fr)_minmax(12rem,1.5fr)_minmax(7rem,0.7fr)_minmax(6rem,0.6fr)_minmax(7.5rem,0.8fr)_auto] md:items-center md:gap-4"
+                data-testid="invoice-list-row"
+                key={inv.id}
+              >
+                <div className="min-w-0">
                   <Link
-                    className="font-mono text-sm font-medium text-zinc-900 group-hover:text-zinc-600"
+                    className="font-mono text-sm font-semibold text-zinc-900 underline-offset-4 group-hover:underline"
                     href={`/invoices/${inv.id}`}
                   >
                     {inv.number}
                   </Link>
-                </td>
-                <td className="py-3 pr-4">
-                  <Link className="block" href={`/invoices/${inv.id}`}>
-                    <p className="text-sm text-zinc-900">{inv.clientName}</p>
-                    <p className="text-xs text-zinc-500">{inv.clientEmail}</p>
+                  <p className="mt-1 text-xs text-zinc-400">
+                    Issued {formatDate(inv.issuedAt)}
+                  </p>
+                  <div className="mt-2 md:hidden">
+                    <StatusBadge status={inv.status ?? "draft"} />
+                  </div>
+                </div>
+                <div className="min-w-0 md:col-start-2 md:row-start-1">
+                  <Link className="block min-w-0" href={`/invoices/${inv.id}`}>
+                    <p className="truncate text-sm font-medium text-zinc-900">
+                      {inv.clientName}
+                    </p>
+                    <p className="truncate text-xs text-zinc-500">
+                      {inv.clientEmail}
+                    </p>
                   </Link>
-                </td>
-                <td className="py-3 pr-4 text-right text-sm font-semibold text-zinc-900">
-                  <Link href={`/invoices/${inv.id}`}>
-                    {formatCurrency(Number(inv.total ?? 0), inv.currency ?? "EUR")}
+                </div>
+                <div className="col-start-2 row-start-1 text-right md:col-start-3">
+                  <Link
+                    className="text-sm font-semibold text-zinc-900 tabular-nums"
+                    href={`/invoices/${inv.id}`}
+                  >
+                    {formatCurrency(
+                      Number(inv.total ?? 0),
+                      inv.currency ?? "EUR",
+                    )}
                   </Link>
-                </td>
-                <td className="py-3 pr-4">
-                  <Link href={`/invoices/${inv.id}`}>
+                </div>
+                <div className="hidden md:col-start-4 md:block">
+                  <Link className="inline-flex" href={`/invoices/${inv.id}`}>
                     <StatusBadge status={inv.status ?? "draft"} />
                   </Link>
-                </td>
-                <td className="hidden py-3 pr-4 text-sm text-zinc-500 sm:table-cell">
-                  <Link href={`/invoices/${inv.id}`}>{formatDate(inv.issuedAt)}</Link>
-                </td>
-                <td className="hidden py-3 text-sm text-zinc-500 sm:table-cell">
-                  <Link href={`/invoices/${inv.id}`}>{formatDate(inv.dueAt)}</Link>
-                </td>
-              </tr>
+                </div>
+                <div className="text-sm text-zinc-500 md:col-start-5">
+                  <Link href={`/invoices/${inv.id}`}>
+                    <span className="md:hidden">Due </span>
+                    <span
+                      className={
+                        inv.status === "overdue"
+                          ? "font-medium text-red-700"
+                          : ""
+                      }
+                    >
+                      {formatDate(inv.dueAt)}
+                    </span>
+                  </Link>
+                </div>
+                <div className="col-span-2 md:col-span-1 md:col-start-6">
+                  <InvoiceRowActions
+                    invoice={{
+                      id: inv.id,
+                      number: inv.number,
+                      status: inv.status,
+                      stripePaymentLinkUrl: inv.stripePaymentLinkUrl,
+                    }}
+                    role={role}
+                  />
+                </div>
+              </li>
             ))}
-          </tbody>
-        </table>
+          </ul>
+        </div>
       )}
     </div>
   );

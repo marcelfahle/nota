@@ -1,6 +1,12 @@
 import { expect, test } from "@playwright/test";
 
-import { acceptInvite, createClient, registerAccount, selectClient, uniqueSuffix } from "./helpers";
+import {
+  acceptInvite,
+  createClient,
+  registerAccount,
+  selectClient,
+  uniqueSuffix,
+} from "./helpers";
 
 test("registers, signs out, and signs back in", async ({ page }) => {
   const credentials = await registerAccount(page);
@@ -17,7 +23,9 @@ test("registers, signs out, and signs back in", async ({ page }) => {
   await expect(page.getByRole("heading", { name: "Invoices" })).toBeVisible();
 });
 
-test("updates organization settings and reflects branding", async ({ page }) => {
+test("updates organization settings and reflects branding", async ({
+  page,
+}) => {
   const suffix = uniqueSuffix();
   await registerAccount(page);
   const businessName = `Nota Studio ${suffix}`;
@@ -44,11 +52,17 @@ test("creates and deletes an API key from settings", async ({ page }) => {
   await expect(page.getByTestId("api-keys-settings")).toContainText("nota_");
   await expect(page.getByTestId("api-keys-table")).toContainText(keyName);
 
-  await page.locator(`tr:has-text("${keyName}")`).getByRole("button", { name: "Delete" }).click();
+  await page
+    .locator(`tr:has-text("${keyName}")`)
+    .getByRole("button", { name: "Delete" })
+    .click();
   await expect(page.locator(`tr:has-text("${keyName}")`)).toHaveCount(0);
 });
 
-test("owner invites a teammate who joins from the invite link", async ({ browser, page }) => {
+test("owner invites a teammate who joins from the invite link", async ({
+  browser,
+  page,
+}) => {
   const suffix = uniqueSuffix();
   const teammateEmail = `teammate-${suffix}@example.com`;
   const teammatePassword = `Teammate-${suffix}`;
@@ -71,28 +85,51 @@ test("owner invites a teammate who joins from the invite link", async ({ browser
   await acceptInvite(browser, inviteUrl, teammatePassword);
 
   await page.goto("/settings");
-  await expect(page.getByTestId("team-members-table")).toContainText(teammateEmail);
+  await expect(page.getByTestId("team-members-table")).toContainText(
+    teammateEmail,
+  );
   await expect(page.getByTestId("team-members-table")).toContainText("Admin");
-  await expect(page.locator('[data-testid^="team-invite-row-"]')).toHaveCount(0);
+  await expect(page.locator('[data-testid^="team-invite-row-"]')).toHaveCount(
+    0,
+  );
 });
 
-test("creates a client and moves an invoice through the manual lifecycle", async ({ page }) => {
+test("creates a client and moves an invoice through the manual lifecycle", async ({
+  page,
+}) => {
   const suffix = uniqueSuffix();
   await registerAccount(page);
   const clientName = await createClient(page, suffix);
 
   await page.goto("/invoices/new");
   await selectClient(page, clientName);
-  await page.getByTestId("invoice-line-item-description-0").fill("Monthly consulting retainer");
+  await page
+    .getByTestId("invoice-line-item-description-0")
+    .fill("Monthly consulting retainer");
   await page.getByTestId("invoice-line-item-unit-price-0").fill("500");
   await page.getByTestId("invoice-submit").click();
 
   await expect(page).toHaveURL(/\/invoices$/);
 
-  const invoiceLink = page.locator('tbody a[href^="/invoices/"]').first();
+  const invoiceRow = page.getByTestId("invoice-list-row").first();
+  const invoiceLink = invoiceRow.locator('a[href^="/invoices/"]').first();
   await expect(invoiceLink).toBeVisible();
+  const invoiceNumber = (await invoiceLink.textContent())?.trim();
+  if (!invoiceNumber) {
+    throw new Error("Expected invoice number in the invoice list");
+  }
+
+  await expect(
+    invoiceRow.getByRole("link", { name: `Download ${invoiceNumber} PDF` }),
+  ).toBeVisible();
+  await expect(
+    invoiceRow.getByRole("button", {
+      name: `More actions for ${invoiceNumber}`,
+    }),
+  ).toBeVisible();
   await invoiceLink.click();
 
+  await expect(page).toHaveTitle(`${invoiceNumber} · ${clientName} — nota`);
   await expect(page.getByTestId("invoice-status")).toContainText("draft");
 
   await page.getByTestId("invoice-mark-sent").click();

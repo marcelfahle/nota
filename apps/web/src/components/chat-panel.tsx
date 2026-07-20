@@ -1,8 +1,21 @@
 "use client";
 
 import { useChat } from "@ai-sdk/react";
-import { DefaultChatTransport, isTextUIPart, isToolOrDynamicToolUIPart, type UIMessage } from "ai";
-import { Bot, LoaderCircle, Send, Sparkles, X } from "lucide-react";
+import {
+  DefaultChatTransport,
+  isTextUIPart,
+  isToolOrDynamicToolUIPart,
+  type UIMessage,
+} from "ai";
+import {
+  Bot,
+  Download,
+  FileArchive,
+  LoaderCircle,
+  Send,
+  Sparkles,
+  X,
+} from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 
@@ -18,7 +31,14 @@ type ToolOutputShape = {
     name?: string | null;
   };
   clients?: Array<{ email?: string | null; id?: string; name?: string | null }>;
+  comparison?: {
+    period?: { label?: string };
+    summary?: InvoiceAnalysisSummary;
+  } | null;
+  count?: number;
   counts?: Record<string, number>;
+  downloadUrl?: string;
+  filename?: string;
   invoice?: {
     clientName?: string | null;
     currency?: string | null;
@@ -40,16 +60,50 @@ type ToolOutputShape = {
   kind?: string;
   message?: string;
   pagination?: { page?: number; perPage?: number; total?: number };
+  period?: { from?: string | null; label?: string; to?: string | null };
   recentInvoices?: Array<{
     currency?: string | null;
     number?: string;
     status?: string;
     total?: string | null;
   }>;
-  topClients?: Array<{ email?: string | null; id?: string; name?: string | null }>;
+  summary?: InvoiceAnalysisSummary;
+  topClients?: Array<{
+    email?: string | null;
+    id?: string;
+    name?: string | null;
+  }>;
   total?: number;
   warning?: string;
 };
+
+type InvoiceAnalysisSummary = {
+  currencies?: Array<{
+    averageDaysToPay?: number | null;
+    collected?: number;
+    collectionRate?: number;
+    currency?: string;
+    draft?: number;
+    issued?: number;
+    outstanding?: number;
+    overdue?: number;
+    topClients?: Array<{
+      clientName?: string;
+      issued?: number;
+      outstanding?: number;
+      overdue?: number;
+    }>;
+  }>;
+  invoiceCount?: number;
+  statusCounts?: Record<string, number>;
+};
+
+const STARTER_PROMPTS = [
+  "Download all invoices for last quarter",
+  "Who still owes me money?",
+  "Compare this quarter with last quarter",
+  "Which clients generated the most revenue this year?",
+] as const;
 
 const transport = new DefaultChatTransport({
   api: "/api/chat",
@@ -58,7 +112,9 @@ const transport = new DefaultChatTransport({
 
 function getToolLabel(type: string) {
   const raw = type.startsWith("tool-") ? type.slice(5) : type;
-  return raw.replaceAll("_", " ").replaceAll(/\b\w/g, (char) => char.toUpperCase());
+  return raw
+    .replaceAll("_", " ")
+    .replaceAll(/\b\w/g, (char) => char.toUpperCase());
 }
 
 function formatInvoiceAmount(
@@ -68,8 +124,124 @@ function formatInvoiceAmount(
   return formatCurrency(Number(total ?? 0), currency ?? "EUR");
 }
 
-function ToolResultCard({ output, type }: { output: ToolOutputShape; type: string }) {
+function ToolResultCard({
+  output,
+  type,
+}: {
+  output: ToolOutputShape;
+  type: string;
+}) {
   const label = getToolLabel(type);
+
+  if (output.kind === "invoice-archive" && output.downloadUrl) {
+    return (
+      <div className="rounded-2xl border border-zinc-200/80 bg-white px-3 py-3 shadow-sm">
+        <div className="flex items-start gap-3">
+          <div className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-zinc-100 text-zinc-700">
+            <FileArchive className="size-4" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className="text-[11px] font-medium tracking-[0.2em] text-zinc-500 uppercase">
+              {output.period?.label ?? label}
+            </p>
+            <p className="mt-1 text-sm font-medium text-zinc-950">
+              {output.count ?? 0} invoice{output.count === 1 ? "" : "s"} · ZIP
+            </p>
+            <p className="mt-0.5 truncate text-xs text-zinc-500">
+              {output.filename}
+            </p>
+          </div>
+        </div>
+        <Button asChild className="mt-3 w-full" size="sm">
+          <a download={output.filename} href={output.downloadUrl}>
+            <Download />
+            Download archive
+          </a>
+        </Button>
+      </div>
+    );
+  }
+
+  if (
+    (output.kind === "invoice-analysis" || output.kind === "client-insights") &&
+    output.summary
+  ) {
+    const currencies = output.summary.currencies ?? [];
+    return (
+      <div className="rounded-2xl border border-zinc-200/80 bg-white px-3 py-3 shadow-sm">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <p className="text-[11px] font-medium tracking-[0.2em] text-zinc-500 uppercase">
+              {output.kind === "client-insights" ? output.client?.name : label}
+            </p>
+            <p className="mt-1 text-sm font-medium text-zinc-950">
+              {output.period?.label ?? "Invoice history"}
+            </p>
+          </div>
+          <span className="text-xs text-zinc-500 tabular-nums">
+            {output.summary.invoiceCount ?? 0} invoices
+          </span>
+        </div>
+
+        {currencies.length > 0 ? (
+          <div className="mt-3 divide-y divide-zinc-100 border-y border-zinc-100">
+            {currencies.slice(0, 2).map((currency) => (
+              <div className="py-3" key={currency.currency ?? "currency"}>
+                <div className="mb-2 flex items-center justify-between">
+                  <span className="text-xs font-semibold text-zinc-900">
+                    {currency.currency}
+                  </span>
+                  {currency.averageDaysToPay !== null &&
+                  currency.averageDaysToPay !== undefined ? (
+                    <span className="text-[11px] text-zinc-500">
+                      Paid in {currency.averageDaysToPay} days avg.
+                    </span>
+                  ) : null}
+                </div>
+                <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-xs">
+                  <Metric
+                    currency={currency.currency}
+                    label="Issued"
+                    value={currency.issued}
+                  />
+                  <Metric
+                    currency={currency.currency}
+                    label="Collected"
+                    value={currency.collected}
+                  />
+                  <Metric
+                    currency={currency.currency}
+                    label="Outstanding"
+                    value={currency.outstanding}
+                  />
+                  <Metric
+                    currency={currency.currency}
+                    label="Overdue"
+                    value={currency.overdue}
+                  />
+                </dl>
+                {currency.topClients?.[0] ? (
+                  <p className="mt-2 text-[11px] text-zinc-500">
+                    Top client: {currency.topClients[0].clientName}
+                  </p>
+                ) : null}
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="mt-3 border-y border-zinc-100 py-3 text-sm text-zinc-500">
+            No matching invoice value.
+          </p>
+        )}
+
+        {output.comparison?.period?.label ? (
+          <p className="mt-2 text-xs text-zinc-500">
+            Compared with {output.comparison.period.label}
+          </p>
+        ) : null}
+      </div>
+    );
+  }
 
   if (output.invoice?.number) {
     return (
@@ -82,15 +254,29 @@ function ToolResultCard({ output, type }: { output: ToolOutputShape; type: strin
             {output.invoice.status ?? "draft"}
           </span>
         </div>
-        <p className="font-mono text-sm font-semibold text-zinc-950">{output.invoice.number}</p>
+        <p className="font-mono text-sm font-semibold text-zinc-950">
+          {output.invoice.number}
+        </p>
         <p className="mt-1 text-sm text-zinc-600">
           {output.invoice.clientName ?? "Unknown client"}
         </p>
         <div className="mt-3 flex items-center justify-between text-sm text-zinc-700">
-          <span>{formatInvoiceAmount(output.invoice.total, output.invoice.currency)}</span>
+          <span>
+            {formatInvoiceAmount(output.invoice.total, output.invoice.currency)}
+          </span>
           <span>{output.invoice.dueAt ?? "No due date"}</span>
         </div>
-        {output.warning ? <p className="mt-2 text-xs text-amber-700">{output.warning}</p> : null}
+        {output.downloadUrl ? (
+          <Button asChild className="mt-3 w-full" size="sm" variant="outline">
+            <a href={output.downloadUrl}>
+              <Download />
+              Download PDF
+            </a>
+          </Button>
+        ) : null}
+        {output.warning ? (
+          <p className="mt-2 text-xs text-amber-700">{output.warning}</p>
+        ) : null}
       </div>
     );
   }
@@ -98,9 +284,15 @@ function ToolResultCard({ output, type }: { output: ToolOutputShape; type: strin
   if (output.client?.name) {
     return (
       <div className="rounded-2xl border border-zinc-200/80 bg-white px-3 py-3 shadow-sm">
-        <p className="text-[11px] font-medium tracking-[0.2em] text-zinc-500 uppercase">{label}</p>
-        <p className="mt-1 text-sm font-semibold text-zinc-950">{output.client.name}</p>
-        <p className="text-sm text-zinc-600">{output.client.email ?? "No email"}</p>
+        <p className="text-[11px] font-medium tracking-[0.2em] text-zinc-500 uppercase">
+          {label}
+        </p>
+        <p className="mt-1 text-sm font-semibold text-zinc-950">
+          {output.client.name}
+        </p>
+        <p className="text-sm text-zinc-600">
+          {output.client.email ?? "No email"}
+        </p>
         {output.client.company ? (
           <p className="text-xs text-zinc-500">{output.client.company}</p>
         ) : null}
@@ -127,13 +319,17 @@ function ToolResultCard({ output, type }: { output: ToolOutputShape; type: strin
             >
               <div>
                 <p className="font-mono text-zinc-950">{invoice.number}</p>
-                <p className="text-xs text-zinc-500">{invoice.clientName ?? "Unknown client"}</p>
+                <p className="text-xs text-zinc-500">
+                  {invoice.clientName ?? "Unknown client"}
+                </p>
               </div>
               <div className="text-right">
                 <p className="text-zinc-800">
                   {formatInvoiceAmount(invoice.total, invoice.currency)}
                 </p>
-                <p className="text-xs text-zinc-500 uppercase">{invoice.status}</p>
+                <p className="text-xs text-zinc-500 uppercase">
+                  {invoice.status}
+                </p>
               </div>
             </div>
           ))}
@@ -156,8 +352,12 @@ function ToolResultCard({ output, type }: { output: ToolOutputShape; type: strin
         <div className="space-y-2">
           {output.clients.slice(0, 3).map((client) => (
             <div key={client.id ?? client.email}>
-              <p className="text-sm font-medium text-zinc-950">{client.name ?? "Unnamed client"}</p>
-              <p className="text-xs text-zinc-500">{client.email ?? "No email"}</p>
+              <p className="text-sm font-medium text-zinc-950">
+                {client.name ?? "Unnamed client"}
+              </p>
+              <p className="text-xs text-zinc-500">
+                {client.email ?? "No email"}
+              </p>
             </div>
           ))}
         </div>
@@ -168,7 +368,9 @@ function ToolResultCard({ output, type }: { output: ToolOutputShape; type: strin
   if (output.kind === "dashboard" && output.counts) {
     return (
       <div className="rounded-2xl border border-zinc-200/80 bg-white px-3 py-3 shadow-sm">
-        <p className="text-[11px] font-medium tracking-[0.2em] text-zinc-500 uppercase">{label}</p>
+        <p className="text-[11px] font-medium tracking-[0.2em] text-zinc-500 uppercase">
+          {label}
+        </p>
         <div className="mt-2 grid grid-cols-3 gap-2 text-sm">
           {Object.entries(output.counts).map(([key, value]) => (
             <div className="rounded-xl bg-zinc-50 px-2 py-2" key={key}>
@@ -183,18 +385,47 @@ function ToolResultCard({ output, type }: { output: ToolOutputShape; type: strin
 
   return (
     <div className="rounded-2xl border border-zinc-200/80 bg-white px-3 py-3 shadow-sm">
-      <p className="text-[11px] font-medium tracking-[0.2em] text-zinc-500 uppercase">{label}</p>
-      <p className="mt-1 text-sm text-zinc-700">{output.message ?? "Tool completed."}</p>
+      <p className="text-[11px] font-medium tracking-[0.2em] text-zinc-500 uppercase">
+        {label}
+      </p>
+      <p className="mt-1 text-sm text-zinc-700">
+        {output.message ?? "Tool completed."}
+      </p>
     </div>
   );
 }
 
-function ToolPart({ part }: { part: Extract<UIMessage["parts"][number], { type: string }> }) {
+function Metric({
+  currency,
+  label,
+  value,
+}: {
+  currency?: string;
+  label: string;
+  value?: number;
+}) {
+  return (
+    <div>
+      <dt className="text-zinc-500">{label}</dt>
+      <dd className="mt-0.5 font-medium text-zinc-900 tabular-nums">
+        {formatCurrency(value ?? 0, currency ?? "EUR")}
+      </dd>
+    </div>
+  );
+}
+
+function ToolPart({
+  part,
+}: {
+  part: Extract<UIMessage["parts"][number], { type: string }>;
+}) {
   if (!isToolOrDynamicToolUIPart(part)) {
     return null;
   }
 
-  const label = getToolLabel(part.type === "dynamic-tool" ? part.toolName : part.type);
+  const label = getToolLabel(
+    part.type === "dynamic-tool" ? part.toolName : part.type,
+  );
 
   if (part.state === "output-error") {
     return (
@@ -229,7 +460,9 @@ function ToolPart({ part }: { part: Extract<UIMessage["parts"][number], { type: 
 function MessageBubble({ message }: { message: UIMessage }) {
   const isUser = message.role === "user";
   const hasText = message.parts.some((part) => isTextUIPart(part));
-  const hasTools = message.parts.some((part) => isToolOrDynamicToolUIPart(part));
+  const hasTools = message.parts.some((part) =>
+    isToolOrDynamicToolUIPart(part),
+  );
 
   return (
     <div className={cn("flex", isUser ? "justify-end" : "justify-start")}>
@@ -244,7 +477,9 @@ function MessageBubble({ message }: { message: UIMessage }) {
         {hasText ? (
           <div className="space-y-2 text-sm leading-6">
             {message.parts.map((part, index) =>
-              isTextUIPart(part) ? <p key={`${message.id}-text-${index}`}>{part.text}</p> : null,
+              isTextUIPart(part) ? (
+                <p key={`${message.id}-text-${index}`}>{part.text}</p>
+              ) : null,
             )}
           </div>
         ) : null}
@@ -283,11 +518,16 @@ export function ChatPanel() {
         (message) =>
           message.role === "assistant" &&
           message.parts.some(
-            (part) => isToolOrDynamicToolUIPart(part) && part.state === "output-available",
+            (part) =>
+              isToolOrDynamicToolUIPart(part) &&
+              part.state === "output-available",
           ),
       );
 
-    if (!latestToolMessage || refreshedMessages.current.has(latestToolMessage.id)) {
+    if (
+      !latestToolMessage ||
+      refreshedMessages.current.has(latestToolMessage.id)
+    ) {
       return;
     }
 
@@ -340,7 +580,9 @@ export function ChatPanel() {
       <div
         className={cn(
           "fixed inset-x-4 bottom-40 z-30 flex max-h-[72vh] w-auto flex-col overflow-hidden rounded-[28px] border border-zinc-200 bg-[#f5f3ef] shadow-[0_30px_80px_rgba(15,23,42,0.18)] transition-all duration-300 sm:right-6 sm:bottom-44 sm:left-auto sm:w-[420px]",
-          open ? "translate-y-0 opacity-100" : "pointer-events-none translate-y-6 opacity-0",
+          open
+            ? "translate-y-0 opacity-100"
+            : "pointer-events-none translate-y-6 opacity-0",
         )}
       >
         <div className="border-b border-zinc-200 bg-white/80 px-5 py-4 backdrop-blur">
@@ -351,12 +593,19 @@ export function ChatPanel() {
                   <Bot className="size-4" />
                 </div>
                 <div>
-                  <p className="text-sm font-semibold tracking-tight">Nota Chat</p>
+                  <p className="text-sm font-semibold tracking-tight">
+                    Nota Chat
+                  </p>
                   <p className="text-xs text-zinc-500">{headerLabel}</p>
                 </div>
               </div>
             </div>
-            <Button onClick={() => setOpen(false)} size="icon-sm" type="button" variant="ghost">
+            <Button
+              onClick={() => setOpen(false)}
+              size="icon-sm"
+              type="button"
+              variant="ghost"
+            >
               <X className="size-4" />
             </Button>
           </div>
@@ -365,15 +614,28 @@ export function ChatPanel() {
         <div className="flex-1 space-y-4 overflow-y-auto px-4 py-4">
           {messages.length === 0 ? (
             <div className="space-y-4 rounded-[24px] border border-dashed border-zinc-300 bg-white/80 p-4 text-sm text-zinc-600">
-              <p className="font-medium text-zinc-900">Try one of these</p>
-              <ul className="space-y-2 text-sm leading-6">
-                <li>Create an invoice for Acme GmbH for Development, 40hrs at 120.</li>
-                <li>Show me overdue invoices.</li>
-                <li>Create a client for Oxide with billing@oxide.test.</li>
-              </ul>
+              <p className="font-medium text-zinc-900">Put Nota to work</p>
+              <div className="divide-y divide-zinc-100 border-y border-zinc-100">
+                {STARTER_PROMPTS.map((prompt) => (
+                  <button
+                    className="flex min-h-11 w-full items-center justify-between gap-3 py-2.5 text-left text-sm text-zinc-700 transition-colors hover:text-zinc-950 focus-visible:ring-2 focus-visible:ring-zinc-400 focus-visible:ring-offset-2 focus-visible:outline-none"
+                    disabled={isBusy}
+                    key={prompt}
+                    onClick={() => submitInput(prompt)}
+                    type="button"
+                  >
+                    <span>{prompt}</span>
+                    <span aria-hidden="true" className="text-zinc-300">
+                      →
+                    </span>
+                  </button>
+                ))}
+              </div>
             </div>
           ) : (
-            messages.map((message) => <MessageBubble key={message.id} message={message} />)
+            messages.map((message) => (
+              <MessageBubble key={message.id} message={message} />
+            ))
           )}
 
           {isBusy ? (
@@ -400,7 +662,12 @@ export function ChatPanel() {
               data-testid="chat-panel-input"
               onChange={(event) => setInput(event.target.value)}
               onKeyDown={(event) => {
-                if (event.key === "Enter" && !event.shiftKey && input.trim() && !isBusy) {
+                if (
+                  event.key === "Enter" &&
+                  !event.shiftKey &&
+                  input.trim() &&
+                  !isBusy
+                ) {
                   event.preventDefault();
                   void submitInput(input);
                 }
@@ -412,7 +679,11 @@ export function ChatPanel() {
               <p className="text-[11px] text-zinc-400">
                 Enter to send, Shift+Enter for a new line.
               </p>
-              <Button disabled={!input.trim() || isBusy} size="sm" type="submit">
+              <Button
+                disabled={!input.trim() || isBusy}
+                size="sm"
+                type="submit"
+              >
                 <Send className="size-4" />
                 Send
               </Button>

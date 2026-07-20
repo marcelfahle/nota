@@ -1,30 +1,65 @@
 import { and, asc, desc, eq } from "drizzle-orm";
+import type { Metadata } from "next";
 import { notFound } from "next/navigation";
+import { cache } from "react";
 
 import { InvoiceDetailView } from "@/components/invoice-detail";
+import { APP_NAME } from "@/lib/app-brand";
 import { getCurrentUser } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { activityLog, clients, invoices, lineItems } from "@/lib/db/schema";
 
-export default async function InvoiceDetailPage({ params }: { params: Promise<{ id: string }> }) {
+const loadInvoiceWithClient = cache(
+  async (orgId: string, invoiceId: string) => {
+    const [record] = await db
+      .select({
+        clientEmail: clients.email,
+        clientName: clients.name,
+        invoice: invoices,
+      })
+      .from(invoices)
+      .leftJoin(
+        clients,
+        and(eq(clients.id, invoices.clientId), eq(clients.orgId, orgId)),
+      )
+      .where(and(eq(invoices.id, invoiceId), eq(invoices.orgId, orgId)))
+      .limit(1);
+
+    return record ?? null;
+  },
+);
+
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}): Promise<Metadata> {
+  const { id } = await params;
+  const { org } = await getCurrentUser();
+  const record = await loadInvoiceWithClient(org.id, id);
+
+  return {
+    title: record
+      ? `${record.invoice.number} · ${record.clientName ?? "Invoice"} — ${APP_NAME}`
+      : `Invoice — ${APP_NAME}`,
+  };
+}
+
+export default async function InvoiceDetailPage({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}) {
   const { id } = await params;
   const { org, role } = await getCurrentUser();
 
-  const [invoice] = await db
-    .select()
-    .from(invoices)
-    .where(and(eq(invoices.id, id), eq(invoices.orgId, org.id)))
-    .limit(1);
+  const record = await loadInvoiceWithClient(org.id, id);
 
-  if (!invoice) {
+  if (!record) {
     notFound();
   }
 
-  const [client] = await db
-    .select({ email: clients.email, name: clients.name })
-    .from(clients)
-    .where(and(eq(clients.id, invoice.clientId), eq(clients.orgId, org.id)))
-    .limit(1);
+  const invoice = record.invoice;
 
   const items = await db
     .select()
@@ -47,7 +82,10 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
       }))}
       invoice={{
         ...invoice,
-        client: client ?? { email: "", name: "Unknown" },
+        client: {
+          email: record.clientEmail ?? "",
+          name: record.clientName ?? "Unknown",
+        },
         lineItems: items,
         status: invoice.status ?? "draft",
       }}

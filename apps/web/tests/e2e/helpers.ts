@@ -68,20 +68,30 @@ export async function createDraftInvoice(
   await page.goto("/invoices?status=draft");
   await expect(page).toHaveURL(/\/invoices\?status=draft$/);
 
-  const invoiceLink = page.locator('tbody a[href^="/invoices/"]').first();
+  const invoiceLink = page
+    .getByTestId("invoice-list-row")
+    .first()
+    .locator('a[href^="/invoices/"]')
+    .first();
   await expect(invoiceLink).toBeVisible();
 
   const invoicePath = await invoiceLink.getAttribute("href");
   const invoiceNumber = (await invoiceLink.textContent())?.trim();
 
   if (!invoicePath || !invoiceNumber) {
-    throw new Error("Expected invoice link and number after creating a draft invoice");
+    throw new Error(
+      "Expected invoice link and number after creating a draft invoice",
+    );
   }
 
   return { invoiceNumber, invoicePath };
 }
 
-export async function createInvite(page: Page, email: string, role: "Admin" | "Member" | "Owner") {
+export async function createInvite(
+  page: Page,
+  email: string,
+  role: "Admin" | "Member" | "Owner",
+) {
   await page.goto("/settings");
   await page.getByTestId("team-invite-email").fill(email);
   await page.getByTestId("team-invite-role").click();
