@@ -168,6 +168,28 @@ curl "$NOTA_API_BASE_URL/clients" \
   }'
 ```
 
+### POST /clients/import
+
+Preview a UTF-8 client CSV before importing. Maximum 250 KB and 1,000 data rows; supports comma/semicolon/tab separators and common FreshBooks-style column labels. Requires email and a client/company name. Billing address, currency, VAT number, and notes are preserved. Unused columns are reported, and duplicate emails/invalid rows are skipped. Existing records are never updated.
+
+Preview request:
+
+```json
+{ "mode": "preview", "csv": "Organization,Email\nRanger GmbH,invoice@ranger.test" }
+```
+
+Response `data` includes `rows` with `ready`/`duplicate`/`invalid` status, matched `columns`, `ignoredColumns`, `counts`, and `hash`. Preview performs no writes. After reviewing, submit the same CSV:
+
+```json
+{
+  "mode": "commit",
+  "csv": "Organization,Email\nRanger GmbH,invoice@ranger.test",
+  "previewHash": "<hash from the reviewed preview>"
+}
+```
+
+Commit returns `data.added` and `data.counts`. A changed CSV/client list returns **409** with a refreshed preview; review it before trying again. The import runs atomically within the authenticated workspace and does not create invoices, payment links, or emails. Invoice-history CSV import is not supported yet.
+
 ### GET /clients/:id
 
 Returns a single client with invoice summary fields.

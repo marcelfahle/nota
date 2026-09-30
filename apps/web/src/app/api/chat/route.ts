@@ -59,6 +59,10 @@ export async function POST(request: Request) {
       maxOutputTokens: 1200,
       messages: modelMessages,
       model: anthropic(chatModel),
+      providerOptions:
+        chatModel === "claude-sonnet-5-5"
+          ? { anthropic: { effort: "low", thinking: { type: "adaptive" } } }
+          : undefined,
 
       stopWhen: stepCountIs(6),
       system: buildChatSystemPrompt(auth, context),

@@ -2,10 +2,20 @@
 
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport, isTextUIPart, isToolOrDynamicToolUIPart, type UIMessage } from "ai";
-import { Bot, Download, FileArchive, LoaderCircle, Send, Sparkles, X } from "lucide-react";
+import {
+  Bot,
+  Download,
+  FileArchive,
+  LoaderCircle,
+  Paperclip,
+  Send,
+  Sparkles,
+  X,
+} from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 
+import { ChatClientImport } from "@/components/chat-client-import";
 import { ChatMarkdown } from "@/components/chat-markdown";
 import { Button } from "@/components/ui/button";
 import { formatCurrency } from "@/lib/utils";
@@ -87,10 +97,9 @@ type InvoiceAnalysisSummary = {
 };
 
 const STARTER_PROMPTS = [
-  "Download all invoices for last quarter",
+  "Create a draft invoice",
   "Who still owes me money?",
-  "Compare this quarter with last quarter",
-  "Which clients generated the most revenue this year?",
+  "Download all invoices for last quarter",
 ] as const;
 
 const transport = new DefaultChatTransport({
@@ -430,14 +439,17 @@ export function ChatPanel() {
   const router = useRouter();
   const [input, setInput] = useState("");
   const [open, setOpen] = useState(false);
+  const [csvFile, setCsvFile] = useState<File | null>(null);
+  const [importBusy, setImportBusy] = useState(false);
+  const fileInput = useRef<HTMLInputElement>(null);
   const refreshedMessages = useRef<Set<string>>(new Set());
 
-  const { clearError, error, messages, sendMessage, status } = useChat({
+  const { clearError, error, messages, sendMessage, setMessages, status } = useChat({
     experimental_throttle: 50,
     transport,
   });
 
-  const isBusy = status === "submitted" || status === "streaming";
+  const isBusy = status === "submitted" || status === "streaming" || importBusy;
 
   useEffect(() => {
     const latestToolMessage = [...messages]
@@ -461,9 +473,7 @@ export function ChatPanel() {
   const hasConversation = messages.length > 0;
   const headerLabel = useMemo(
     () =>
-      hasConversation
-        ? "Working with live Nota data"
-        : "Ask Nota to manage invoices, clients, and dashboard stats.",
+      hasConversation ? "Working with live Nota data" : "Clients, invoices, and getting paid.",
     [hasConversation],
   );
 
@@ -505,6 +515,13 @@ export function ChatPanel() {
           "fixed inset-x-4 bottom-40 z-30 flex max-h-[72vh] w-auto flex-col overflow-hidden rounded-[28px] border border-zinc-200 bg-[#f5f3ef] shadow-[0_30px_80px_rgba(15,23,42,0.18)] transition-all duration-300 sm:right-6 sm:bottom-44 sm:left-auto sm:w-[420px]",
           open ? "translate-y-0 opacity-100" : "pointer-events-none translate-y-6 opacity-0",
         )}
+        onDragOver={(event) => event.preventDefault()}
+        onDrop={(event) => {
+          event.preventDefault();
+          if (!isBusy && !csvFile) {
+            setCsvFile(event.dataTransfer.files[0] ?? null);
+          }
+        }}
       >
         <div className="border-b border-zinc-200 bg-white/80 px-5 py-4 backdrop-blur">
           <div className="flex items-start justify-between gap-4">
@@ -529,6 +546,9 @@ export function ChatPanel() {
           {messages.length === 0 ? (
             <div className="space-y-4 rounded-[24px] border border-dashed border-zinc-300 bg-white/80 p-4 text-sm text-zinc-600">
               <p className="font-medium text-zinc-900">Put Nota to work</p>
+              <p className="text-xs leading-5">
+                Moving from FreshBooks? Drop your client CSV here or use the paperclip.
+              </p>
               <div className="divide-y divide-zinc-100 border-y border-zinc-100">
                 {STARTER_PROMPTS.map((prompt) => (
                   <button
@@ -550,6 +570,37 @@ export function ChatPanel() {
             messages.map((message) => <MessageBubble key={message.id} message={message} />)
           )}
 
+          {csvFile ? (
+            <ChatClientImport
+              file={csvFile}
+              key={`${csvFile.name}-${csvFile.lastModified}`}
+              onBusyChange={setImportBusy}
+              onComplete={(result) => {
+                router.refresh();
+                setMessages((previous) => [
+                  ...previous,
+                  {
+                    id: crypto.randomUUID(),
+                    parts: [{ text: "Import my client CSV.", type: "text" }],
+                    role: "user",
+                  },
+                  {
+                    id: crypto.randomUUID(),
+                    parts: [
+                      {
+                        text: `Added **${result.added} client${result.added === 1 ? "" : "s"}** from your CSV. Skipped ${result.counts.duplicate} duplicates and ${result.counts.invalid} rows needing attention. No invoices were created or sent.`,
+                        type: "text",
+                      },
+                    ],
+                    role: "assistant",
+                  },
+                ]);
+                setCsvFile(null);
+              }}
+              onDismiss={() => setCsvFile(null)}
+            />
+          ) : null}
+
           {isBusy ? (
             <div className="flex items-center gap-2 px-2 text-sm text-zinc-500">
               <LoaderCircle className="size-4 animate-spin" />
@@ -564,35 +615,59 @@ export function ChatPanel() {
           ) : null}
         </div>
 
-        <form
-          className="border-t border-zinc-200 bg-white/85 px-4 py-4 backdrop-blur"
-          onSubmit={handleSubmit}
-        >
-          <div className="rounded-[22px] border border-zinc-200 bg-white p-2 shadow-sm">
-            <textarea
-              className="min-h-[88px] w-full resize-none border-0 bg-transparent px-2 py-2 text-sm leading-6 text-zinc-900 outline-none placeholder:text-zinc-400"
-              data-testid="chat-panel-input"
-              onChange={(event) => setInput(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key === "Enter" && !event.shiftKey && input.trim() && !isBusy) {
-                  event.preventDefault();
-                  void submitInput(input);
-                }
-              }}
-              placeholder="Ask Nota to create invoices, send them, or summarize your dashboard..."
-              value={input}
-            />
-            <div className="flex items-center justify-between gap-3 px-2 pb-1">
-              <p className="text-[11px] text-zinc-400">
-                Enter to send, Shift+Enter for a new line.
-              </p>
-              <Button disabled={!input.trim() || isBusy} size="sm" type="submit">
-                <Send className="size-4" />
-                Send
-              </Button>
+        {!csvFile ? (
+          <form
+            className="border-t border-zinc-200 bg-white/85 px-4 py-4 backdrop-blur"
+            onSubmit={handleSubmit}
+          >
+            <div className="rounded-[22px] border border-zinc-200 bg-white p-2 shadow-sm">
+              <textarea
+                className="min-h-[88px] w-full resize-none border-0 bg-transparent px-2 py-2 text-sm leading-6 text-zinc-900 outline-none placeholder:text-zinc-400"
+                data-testid="chat-panel-input"
+                onChange={(event) => setInput(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" && !event.shiftKey && input.trim() && !isBusy) {
+                    event.preventDefault();
+                    void submitInput(input);
+                  }
+                }}
+                placeholder="Describe the work, ask about an invoice, or attach a client CSV…"
+                value={input}
+              />
+              <div className="flex items-center justify-between gap-3 px-2 pb-1">
+                <input
+                  accept=".csv,text/csv"
+                  aria-label="Client CSV file"
+                  className="hidden"
+                  data-testid="client-csv-input"
+                  onChange={(event) => {
+                    setCsvFile(event.target.files?.[0] ?? null);
+                    event.target.value = "";
+                  }}
+                  ref={fileInput}
+                  type="file"
+                />
+                <Button
+                  aria-label="Attach client CSV"
+                  disabled={isBusy || csvFile !== null}
+                  onClick={() => fileInput.current?.click()}
+                  size="icon-sm"
+                  type="button"
+                  variant="ghost"
+                >
+                  <Paperclip className="size-4" />
+                </Button>
+                <p className="text-[11px] text-zinc-400">
+                  Enter to send, Shift+Enter for a new line.
+                </p>
+                <Button disabled={!input.trim() || isBusy} size="sm" type="submit">
+                  <Send className="size-4" />
+                  Send
+                </Button>
+              </div>
             </div>
-          </div>
-        </form>
+          </form>
+        ) : null}
       </div>
     </>
   );

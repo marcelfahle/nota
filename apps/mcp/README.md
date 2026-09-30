@@ -39,6 +39,7 @@ The remote server is deployed. Your individual Claude/ChatGPT account connection
 ## What it does
 
 - Lists and creates clients
+- Previews and imports client CSVs after explicit approval
 - Lists invoices with status and client filters
 - Creates draft invoices from structured line items or newline-based text input
 - Resolves `clientName` and `invoiceNumber` references when UUIDs are not convenient
@@ -88,9 +89,7 @@ Add a local stdio server entry to `claude_desktop_config.json`.
     "nota": {
       "type": "stdio",
       "command": "node",
-      "args": [
-        "/absolute/path/to/nota/apps/mcp/dist/index.js"
-      ],
+      "args": ["/absolute/path/to/nota/apps/mcp/dist/index.js"],
       "env": {
         "NOTA_URL": "https://nota-weld.vercel.app",
         "NOTA_API_KEY": "nota_..."
@@ -108,10 +107,7 @@ When the package is published, you can switch the command to `npx`.
     "nota": {
       "type": "stdio",
       "command": "npx",
-      "args": [
-        "-y",
-        "@nota-app/mcp"
-      ],
+      "args": ["-y", "@nota-app/mcp"],
       "env": {
         "NOTA_URL": "https://nota-weld.vercel.app",
         "NOTA_API_KEY": "nota_..."
@@ -133,9 +129,7 @@ Project config:
     "nota": {
       "type": "stdio",
       "command": "node",
-      "args": [
-        "/absolute/path/to/nota/apps/mcp/dist/index.js"
-      ],
+      "args": ["/absolute/path/to/nota/apps/mcp/dist/index.js"],
       "env": {
         "NOTA_URL": "https://nota-weld.vercel.app",
         "NOTA_API_KEY": "nota_..."
@@ -164,9 +158,7 @@ Cursor supports project config in `.cursor/mcp.json` and user config in `~/.curs
   "mcpServers": {
     "nota": {
       "command": "node",
-      "args": [
-        "/absolute/path/to/nota/apps/mcp/dist/index.js"
-      ],
+      "args": ["/absolute/path/to/nota/apps/mcp/dist/index.js"],
       "env": {
         "NOTA_URL": "https://nota-weld.vercel.app",
         "NOTA_API_KEY": "nota_..."
@@ -178,23 +170,25 @@ Cursor supports project config in `.cursor/mcp.json` and user config in `~/.curs
 
 ## Tools
 
-| Tool | Description | Example prompt |
-| --- | --- | --- |
-| `list_clients` | List clients with optional search | `Show clients matching acme.` |
-| `invoice_overview` | Counts and recent invoices in an interactive workspace | `Show my billing dashboard.` |
-| `get_client_billing_history` | Recent invoices with full line items | `What do we usually bill Ranger for?` |
-| `change_invoice_due_date` | Change only the due date | `Change invoice 97's due date to October 8, 2026.` |
-| `create_client` | Create a client record | `Create a client for Acme GmbH with billing@acme.test.` |
-| `list_invoices` | List invoices with status, client, and search filters | `List overdue invoices for Acme.` |
-| `create_invoice` | Create a draft invoice from line items or `lineItemsText` | `Create an invoice for Acme: 2 x Strategy workshop @ 1500.` |
-| `get_invoice` | Load a single invoice by UUID or invoice number | `Show me invoice INV-0001.` |
-| `send_invoice` | Send a draft invoice | `Send invoice INV-0001.` |
-| `send_reminder` | Send a reminder for a sent or overdue invoice | `Remind the client about INV-0001.` |
-| `mark_paid` | Mark an invoice as paid | `Mark INV-0001 as paid.` |
-| `cancel_invoice` | Cancel a sent or overdue invoice | `Cancel invoice INV-0001.` |
-| `duplicate_invoice` | Duplicate an invoice into a draft | `Duplicate invoice INV-0001.` |
-| `download_pdf` | Return the invoice PDF as base64 plus metadata | `Download the PDF for INV-0001.` |
-| `download_xml` | Return XRechnung XML as base64 plus metadata | `Download the XML for invoice 97.` |
+| Tool                         | Description                                               | Example prompt                                              |
+| ---------------------------- | --------------------------------------------------------- | ----------------------------------------------------------- |
+| `list_clients`               | List clients with optional search                         | `Show clients matching acme.`                               |
+| `preview_clients_csv`        | Preview a client CSV without saving                       | `Preview the clients in this CSV.`                          |
+| `import_clients_csv`         | Add clients from an approved, unchanged preview           | `Import the clients from that preview.`                     |
+| `invoice_overview`           | Counts and recent invoices in an interactive workspace    | `Show my billing dashboard.`                                |
+| `get_client_billing_history` | Recent invoices with full line items                      | `What do we usually bill Ranger for?`                       |
+| `change_invoice_due_date`    | Change only the due date                                  | `Change invoice 97's due date to October 8, 2026.`          |
+| `create_client`              | Create a client record                                    | `Create a client for Acme GmbH with billing@acme.test.`     |
+| `list_invoices`              | List invoices with status, client, and search filters     | `List overdue invoices for Acme.`                           |
+| `create_invoice`             | Create a draft invoice from line items or `lineItemsText` | `Create an invoice for Acme: 2 x Strategy workshop @ 1500.` |
+| `get_invoice`                | Load a single invoice by UUID or invoice number           | `Show me invoice INV-0001.`                                 |
+| `send_invoice`               | Send a draft invoice                                      | `Send invoice INV-0001.`                                    |
+| `send_reminder`              | Send a reminder for a sent or overdue invoice             | `Remind the client about INV-0001.`                         |
+| `mark_paid`                  | Mark an invoice as paid                                   | `Mark INV-0001 as paid.`                                    |
+| `cancel_invoice`             | Cancel a sent or overdue invoice                          | `Cancel invoice INV-0001.`                                  |
+| `duplicate_invoice`          | Duplicate an invoice into a draft                         | `Duplicate invoice INV-0001.`                               |
+| `download_pdf`               | Return the invoice PDF as base64 plus metadata            | `Download the PDF for INV-0001.`                            |
+| `download_xml`               | Return XRechnung XML as base64 plus metadata              | `Download the XML for invoice 97.`                          |
 
 ## Resources
 
@@ -204,6 +198,8 @@ Cursor supports project config in `.cursor/mcp.json` and user config in `~/.curs
 - `ui://nota/invoices.html`: the self-contained MCP Apps invoice workspace
 
 ## Input notes
+
+For CSV migration, pass a UTF-8 client export to `preview_clients_csv`, explain its matched/unused columns and new/skipped rows, and ask the human to approve. Then pass the unchanged CSV plus the returned `hash` as `previewHash` to `import_clients_csv`. Limits: 250 KB and 1,000 rows. Existing emails are skipped; no invoices or emails are created. A 409 requires another preview and approval. These tools work through the same authenticated API as Nota Chat and the CLI.
 
 `create_invoice` accepts either:
 

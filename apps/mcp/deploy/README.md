@@ -18,6 +18,7 @@ Run from the repository root. Exclude local environments, credentials, browser a
 rsync -az \
   --exclude .git --exclude '.env*' --exclude node_modules --exclude .next \
   --exclude .vercel --exclude dist --exclude .nota --exclude .playwright-mcp \
+  --exclude test-results --exclude playwright-report \
   -e 'ssh -i ~/.ssh/id_ed25519_mf2024 -o IdentitiesOnly=yes' \
   ./ root@91.99.49.152:/opt/nota_mcp/
 
@@ -49,4 +50,4 @@ Before later deployments, tag the current image and retain the protected environ
 
 To withdraw Nota, stop only the `nota_mcp` Compose project and remove only its Caddy site, validating and reloading the edge. Leave the other services and their networks intact.
 
-The web update is deployed separately on Vercel. The pre-change deployment was `dpl_8n6w2ZHvyPG7uWzUMbwRsZTFqKCe`; this release is `dpl_cp5T6q9vZLmFCDV2Ah2Eorg9Gffi`, aliased to `https://nota-weld.vercel.app`. No live invoices were created or customer emails sent for verification.
+The web update is deployed separately on Vercel, using the stable alias `https://nota-weld.vercel.app`. The pre-MCP deployment was `dpl_8n6w2ZHvyPG7uWzUMbwRsZTFqKCe`; the initial MCP/card release was `dpl_cp5T6q9vZLmFCDV2Ah2Eorg9Gffi`. Sonnet 5.5 and client CSV imports use the same deployment topology and require no schema migration. No live invoices were created or customer emails sent for verification.

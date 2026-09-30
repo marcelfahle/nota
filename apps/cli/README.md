@@ -51,6 +51,15 @@ nota whoami
 
 ### Clients
 
+Preview a client CSV, then import the reviewed result using its hash:
+
+```bash
+nota clients import clients.csv
+nota clients import clients.csv --confirm <preview-hash>
+```
+
+The preview explains duplicate/invalid rows. Imports preserve existing clients and do not create or send invoices. If the file or client list changes, preview again. Up to 250 KB and 1,000 rows per batch.
+
 List clients:
 
 ```bash
