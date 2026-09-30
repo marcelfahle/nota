@@ -12,14 +12,7 @@ import { db } from "@/lib/db";
 import { clients, invoices } from "@/lib/db/schema";
 import { formatCurrency } from "@/lib/utils";
 
-const FILTER_STATUSES = [
-  "all",
-  "draft",
-  "sent",
-  "paid",
-  "overdue",
-  "cancelled",
-] as const;
+const FILTER_STATUSES = ["all", "draft", "sent", "paid", "overdue", "cancelled"] as const;
 
 export default async function InvoicesPage({
   searchParams,
@@ -43,10 +36,7 @@ export default async function InvoicesPage({
       total: invoices.total,
     })
     .from(invoices)
-    .leftJoin(
-      clients,
-      and(eq(invoices.clientId, clients.id), eq(clients.orgId, org.id)),
-    )
+    .leftJoin(clients, and(eq(invoices.clientId, clients.id), eq(clients.orgId, org.id)))
     .where(eq(invoices.orgId, org.id))
     .orderBy(desc(invoices.issuedAt));
 
@@ -79,15 +69,12 @@ export default async function InvoicesPage({
   }
 
   const activeFilter =
-    filterStatus &&
-    FILTER_STATUSES.includes(filterStatus as (typeof FILTER_STATUSES)[number])
+    filterStatus && FILTER_STATUSES.includes(filterStatus as (typeof FILTER_STATUSES)[number])
       ? filterStatus
       : "all";
 
   const filtered =
-    activeFilter === "all"
-      ? invoiceList
-      : invoiceList.filter((inv) => inv.status === activeFilter);
+    activeFilter === "all" ? invoiceList : invoiceList.filter((inv) => inv.status === activeFilter);
 
   const filterCounts = { all: invoiceList.length, ...statusCounts };
 
@@ -95,9 +82,7 @@ export default async function InvoicesPage({
     <div>
       <div className="mb-8 flex items-center justify-between gap-4">
         <h1 className="text-lg font-semibold tracking-tight">Invoices</h1>
-        <InvoiceArchiveMenu
-          status={activeFilter === "all" ? undefined : activeFilter}
-        />
+        <InvoiceArchiveMenu status={activeFilter === "all" ? undefined : activeFilter} />
       </div>
 
       <div className="mb-8 grid grid-cols-1 gap-4 sm:grid-cols-3 sm:gap-8">
@@ -106,9 +91,7 @@ export default async function InvoicesPage({
         <StatCard
           label="Overdue"
           sub={
-            overdueCount > 0
-              ? `${overdueCount} invoice${overdueCount === 1 ? "" : "s"}`
-              : undefined
+            overdueCount > 0 ? `${overdueCount} invoice${overdueCount === 1 ? "" : "s"}` : undefined
           }
           value={formatCurrency(overdueAmount)}
         />
@@ -118,17 +101,13 @@ export default async function InvoicesPage({
         {FILTER_STATUSES.map((s) => (
           <Link
             className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
-              activeFilter === s
-                ? "bg-zinc-100 text-zinc-900"
-                : "text-zinc-500 hover:text-zinc-700"
+              activeFilter === s ? "bg-zinc-100 text-zinc-900" : "text-zinc-500 hover:text-zinc-700"
             }`}
             href={s === "all" ? "/invoices" : `/invoices?status=${s}`}
             key={s}
           >
             <span>{s.charAt(0).toUpperCase() + s.slice(1)}</span>
-            <span className="ml-1.5 text-xs text-zinc-400 tabular-nums">
-              {filterCounts[s]}
-            </span>
+            <span className="ml-1.5 text-xs text-zinc-400 tabular-nums">{filterCounts[s]}</span>
           </Link>
         ))}
       </div>
@@ -139,9 +118,7 @@ export default async function InvoicesPage({
             <FileText className="h-6 w-6 text-zinc-400" />
           </div>
           <p className="mb-1 text-sm font-medium text-zinc-900">
-            {activeFilter === "all"
-              ? "No invoices yet"
-              : `No ${activeFilter} invoices`}
+            {activeFilter === "all" ? "No invoices yet" : `No ${activeFilter} invoices`}
           </p>
           <p className="mb-4 text-sm text-zinc-500">
             {activeFilter === "all"
@@ -185,21 +162,15 @@ export default async function InvoicesPage({
                   >
                     {inv.number}
                   </Link>
-                  <p className="mt-1 text-xs text-zinc-400">
-                    Issued {formatDate(inv.issuedAt)}
-                  </p>
+                  <p className="mt-1 text-xs text-zinc-400">Issued {formatDate(inv.issuedAt)}</p>
                   <div className="mt-2 md:hidden">
                     <StatusBadge status={inv.status ?? "draft"} />
                   </div>
                 </div>
                 <div className="min-w-0 md:col-start-2 md:row-start-1">
                   <Link className="block min-w-0" href={`/invoices/${inv.id}`}>
-                    <p className="truncate text-sm font-medium text-zinc-900">
-                      {inv.clientName}
-                    </p>
-                    <p className="truncate text-xs text-zinc-500">
-                      {inv.clientEmail}
-                    </p>
+                    <p className="truncate text-sm font-medium text-zinc-900">{inv.clientName}</p>
+                    <p className="truncate text-xs text-zinc-500">{inv.clientEmail}</p>
                   </Link>
                 </div>
                 <div className="col-start-2 row-start-1 text-right md:col-start-3">
@@ -207,10 +178,7 @@ export default async function InvoicesPage({
                     className="text-sm font-semibold text-zinc-900 tabular-nums"
                     href={`/invoices/${inv.id}`}
                   >
-                    {formatCurrency(
-                      Number(inv.total ?? 0),
-                      inv.currency ?? "EUR",
-                    )}
+                    {formatCurrency(Number(inv.total ?? 0), inv.currency ?? "EUR")}
                   </Link>
                 </div>
                 <div className="hidden md:col-start-4 md:block">
@@ -221,13 +189,7 @@ export default async function InvoicesPage({
                 <div className="text-sm text-zinc-500 md:col-start-5">
                   <Link href={`/invoices/${inv.id}`}>
                     <span className="md:hidden">Due </span>
-                    <span
-                      className={
-                        inv.status === "overdue"
-                          ? "font-medium text-red-700"
-                          : ""
-                      }
-                    >
+                    <span className={inv.status === "overdue" ? "font-medium text-red-700" : ""}>
                       {formatDate(inv.dueAt)}
                     </span>
                   </Link>

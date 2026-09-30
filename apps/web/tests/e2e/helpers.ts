@@ -79,19 +79,13 @@ export async function createDraftInvoice(
   const invoiceNumber = (await invoiceLink.textContent())?.trim();
 
   if (!invoicePath || !invoiceNumber) {
-    throw new Error(
-      "Expected invoice link and number after creating a draft invoice",
-    );
+    throw new Error("Expected invoice link and number after creating a draft invoice");
   }
 
   return { invoiceNumber, invoicePath };
 }
 
-export async function createInvite(
-  page: Page,
-  email: string,
-  role: "Admin" | "Member" | "Owner",
-) {
+export async function createInvite(page: Page, email: string, role: "Admin" | "Member" | "Owner") {
   await page.goto("/settings");
   await page.getByTestId("team-invite-email").fill(email);
   await page.getByTestId("team-invite-role").click();

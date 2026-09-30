@@ -4,15 +4,9 @@ import { z } from "zod";
 import { getCurrentUser } from "@/lib/auth";
 import { getPdfLogoSrc } from "@/lib/branding";
 import { invoiceStatusEnum } from "@/lib/db/schema";
-import {
-  listInvoicesForExport,
-  MAX_INVOICE_ARCHIVE_SIZE,
-} from "@/lib/invoice-export";
+import { listInvoicesForExport, MAX_INVOICE_ARCHIVE_SIZE } from "@/lib/invoice-export";
 import { normalizeInvoiceStatus } from "@/lib/invoice-lifecycle";
-import {
-  InvoicePdfDataError,
-  renderInvoicePdfForOrg,
-} from "@/lib/invoice-pdf-service";
+import { InvoicePdfDataError, renderInvoicePdfForOrg } from "@/lib/invoice-pdf-service";
 import {
   buildInvoiceArchiveFilename,
   getUniqueInvoiceArchiveEntryName,
@@ -27,8 +21,7 @@ export async function GET(request: Request) {
   const params = new URL(request.url).searchParams;
   const from = params.get("from");
   const to = params.get("to");
-  const periodValue =
-    params.get("period") ?? (from || to ? "custom" : "last_quarter");
+  const periodValue = params.get("period") ?? (from || to ? "custom" : "last_quarter");
   if (!isInvoicePeriodKey(periodValue)) {
     return Response.json({ error: "Unknown invoice period" }, { status: 400 });
   }
@@ -58,8 +51,7 @@ export async function GET(request: Request) {
   } catch (error) {
     return Response.json(
       {
-        error:
-          error instanceof Error ? error.message : "Invalid invoice period",
+        error: error instanceof Error ? error.message : "Invalid invoice period",
       },
       { status: 400 },
     );
@@ -73,10 +65,7 @@ export async function GET(request: Request) {
     });
 
     if (rows.length === 0) {
-      return Response.json(
-        { error: `No invoices found for ${period.label}.` },
-        { status: 404 },
-      );
+      return Response.json({ error: `No invoices found for ${period.label}.` }, { status: 404 });
     }
     if (rows.length > MAX_INVOICE_ARCHIVE_SIZE) {
       return Response.json(
@@ -93,13 +82,10 @@ export async function GET(request: Request) {
 
     for (let index = 0; index < rows.length; index += 3) {
       const batch = await Promise.all(
-        rows
-          .slice(index, index + 3)
-          .map((row) => renderInvoicePdfForOrg(org, row.id, { logoSrc })),
+        rows.slice(index, index + 3).map((row) => renderInvoicePdfForOrg(org, row.id, { logoSrc })),
       );
       for (const pdf of batch) {
-        files[getUniqueInvoiceArchiveEntryName(pdf.filename, usedFilenames)] =
-          pdf.buffer;
+        files[getUniqueInvoiceArchiveEntryName(pdf.filename, usedFilenames)] = pdf.buffer;
       }
     }
 
@@ -123,9 +109,6 @@ export async function GET(request: Request) {
       return Response.json({ error: error.message }, { status: error.status });
     }
 
-    return Response.json(
-      { error: "Invoice archive could not be created" },
-      { status: 500 },
-    );
+    return Response.json({ error: "Invoice archive could not be created" }, { status: 500 });
   }
 }

@@ -12,7 +12,11 @@ import { canManageBankAccounts, getInsufficientPermissionsError } from "@/lib/ro
 
 const ibanAccountSchema = z.object({
   accountType: z.literal("iban"),
-  bic: z.string().max(11).transform((v) => v.trim()).default(""),
+  bic: z
+    .string()
+    .max(11)
+    .transform((v) => v.trim())
+    .default(""),
   iban: z
     .string()
     .min(1, "IBAN is required")

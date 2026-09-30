@@ -1,15 +1,9 @@
 import { NextResponse } from "next/server";
 
 import { getCurrentUser } from "@/lib/auth";
-import {
-  InvoicePdfDataError,
-  renderInvoicePdfForOrg,
-} from "@/lib/invoice-pdf-service";
+import { InvoicePdfDataError, renderInvoicePdfForOrg } from "@/lib/invoice-pdf-service";
 
-export async function GET(
-  _request: Request,
-  { params }: { params: Promise<{ id: string }> },
-) {
+export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const { org } = await getCurrentUser();
 
@@ -24,15 +18,9 @@ export async function GET(
     });
   } catch (error) {
     if (error instanceof InvoicePdfDataError) {
-      return NextResponse.json(
-        { error: error.message },
-        { status: error.status },
-      );
+      return NextResponse.json({ error: error.message }, { status: error.status });
     }
 
-    return NextResponse.json(
-      { error: "Invoice PDF could not be created" },
-      { status: 500 },
-    );
+    return NextResponse.json({ error: "Invoice PDF could not be created" }, { status: 500 });
   }
 }

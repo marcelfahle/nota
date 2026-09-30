@@ -75,15 +75,11 @@ describe("summarizeInvoiceRows", () => {
     ]);
 
     expect(summary.currencies).toHaveLength(2);
-    expect(
-      summary.currencies.find((entry) => entry.currency === "EUR"),
-    ).toMatchObject({
+    expect(summary.currencies.find((entry) => entry.currency === "EUR")).toMatchObject({
       averageDaysToPay: 10,
       collected: 1000,
     });
-    expect(
-      summary.currencies.find((entry) => entry.currency === "USD"),
-    ).toMatchObject({
+    expect(summary.currencies.find((entry) => entry.currency === "USD")).toMatchObject({
       collected: 0,
       outstanding: 2000,
     });

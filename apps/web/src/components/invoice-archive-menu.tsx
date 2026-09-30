@@ -11,10 +11,7 @@ import {
   DropdownMenuShortcut,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import {
-  buildInvoiceArchiveUrl,
-  type InvoicePeriodKey,
-} from "@/lib/invoice-period";
+import { buildInvoiceArchiveUrl, type InvoicePeriodKey } from "@/lib/invoice-period";
 
 const ARCHIVE_PERIODS: Array<{ key: InvoicePeriodKey; label: string }> = [
   { key: "last_quarter", label: "Last quarter" },
@@ -35,9 +32,7 @@ export function InvoiceArchiveMenu({ status }: { status?: string }) {
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-56">
         <DropdownMenuLabel className="text-xs text-zinc-500">
-          {status
-            ? `${status[0].toUpperCase()}${status.slice(1)} invoices`
-            : "All statuses"}
+          {status ? `${status[0].toUpperCase()}${status.slice(1)} invoices` : "All statuses"}
         </DropdownMenuLabel>
         {ARCHIVE_PERIODS.map((period) => (
           <DropdownMenuItem asChild key={period.key}>
