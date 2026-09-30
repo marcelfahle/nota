@@ -48,3 +48,7 @@ jobs:
 
       - name: Web build
         run: bun run build:web
+        env:
+          # Build-time module initialization only; no live database or payment credentials.
+          DATABASE_URL: postgresql://ci:ci@127.0.0.1:5432/nota_ci
+          STRIPE_SECRET_KEY: sk_test_ci_not_a_real_key
