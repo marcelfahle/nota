@@ -1,6 +1,8 @@
 .env
+.vercel/
 .DS_Store
 node_modules
+.nota/
 apps/*/node_modules
 apps/*/.next
 apps/*/.vercel

@@ -1,0 +1,27 @@
+services:
+  nota-mcp:
+    build:
+      context: ../../..
+      dockerfile: apps/mcp/Dockerfile
+    container_name: nota-mcp
+    env_file: .env
+    restart: unless-stopped
+    expose:
+      - "3100"
+    volumes:
+      - nota_oauth:/data
+    networks:
+      - edge
+    mem_limit: 256m
+    cpus: 1.0
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('node:http').get({hostname:'127.0.0.1',port:3100,path:'/health',headers:{Host:new URL(process.env.NOTA_MCP_PUBLIC_URL).host}},r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      start_period: 15s
+networks:
+  edge:
+    external: true
+    name: deploy_default
+volumes:
+  nota_oauth:

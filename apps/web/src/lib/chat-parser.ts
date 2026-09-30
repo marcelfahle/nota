@@ -1,4 +1,5 @@
 import type { InvoiceLineItemInput } from "@/lib/invoice-service";
+import { withServiceMonth } from "@/lib/service-period";
 
 export const LINE_ITEM_PARSE_ERROR =
   "Provide line items as an array, a total amount, or text like 'Development, 40hrs at 120', '2 x Workshop @ 1500', or 'Discovery | 1 | 800'.";
@@ -32,8 +33,10 @@ const MONTHS = new Map<string, number>([
 
 type ResolveChatInvoiceLineItemsInput = {
   fallbackDescription?: string;
+  issuedAt?: string;
   lineItems?: Array<InvoiceLineItemInput>;
   lineItemsText?: string;
+  serviceMonth?: string;
   taxRate?: number;
   templateLineItems?: Array<InvoiceLineItemInput>;
   totalAmount?: number;
@@ -59,10 +62,7 @@ function normalizeNumberToken(value: string) {
     const decimalSeparator = lastComma > lastDot ? "," : ".";
     const thousandsSeparator = decimalSeparator === "," ? "." : ",";
     return Number.parseFloat(
-      stripped
-        .split(thousandsSeparator)
-        .join("")
-        .replace(decimalSeparator, "."),
+      stripped.split(thousandsSeparator).join("").replace(decimalSeparator, "."),
     );
   }
 
@@ -83,10 +83,7 @@ function normalizeNumberToken(value: string) {
     return Number.parseFloat(`${integerPart}.${fractionalPart}`);
   }
 
-  if (
-    fractionalPart.length === 3 &&
-    integerPart.replace(/^-/, "").length >= 1
-  ) {
+  if (fractionalPart.length === 3 && integerPart.replace(/^-/, "").length >= 1) {
     return Number.parseFloat(`${integerPart}${fractionalPart}`);
   }
 
@@ -171,9 +168,7 @@ function parseInvoiceMonth(value: string, now: Date) {
 }
 
 function parsePipeLineItem(line: string): InvoiceLineItemInput | null {
-  const [description, quantity, unitPrice] = line
-    .split("|")
-    .map((part) => part.trim());
+  const [description, quantity, unitPrice] = line.split("|").map((part) => part.trim());
   if (!description || !quantity || !unitPrice) {
     return null;
   }
@@ -181,12 +176,7 @@ function parsePipeLineItem(line: string): InvoiceLineItemInput | null {
   const parsedQuantity = parseNumericToken(quantity);
   const parsedUnitPrice = parseNumericToken(unitPrice);
 
-  if (
-    !parsedQuantity ||
-    parsedQuantity <= 0 ||
-    parsedUnitPrice === null ||
-    parsedUnitPrice < 0
-  ) {
+  if (!parsedQuantity || parsedQuantity <= 0 || parsedUnitPrice === null || parsedUnitPrice < 0) {
     return null;
   }
 
@@ -209,12 +199,7 @@ function parseQuantityFirstLineItem(line: string): InvoiceLineItemInput | null {
   const parsedQuantity = parseNumericToken(quantity);
   const parsedUnitPrice = parseNumericToken(unitPrice);
 
-  if (
-    !parsedQuantity ||
-    parsedQuantity <= 0 ||
-    parsedUnitPrice === null ||
-    parsedUnitPrice < 0
-  ) {
+  if (!parsedQuantity || parsedQuantity <= 0 || parsedUnitPrice === null || parsedUnitPrice < 0) {
     return null;
   }
 
@@ -225,9 +210,7 @@ function parseQuantityFirstLineItem(line: string): InvoiceLineItemInput | null {
   };
 }
 
-function parseDescriptionFirstLineItem(
-  line: string,
-): InvoiceLineItemInput | null {
+function parseDescriptionFirstLineItem(line: string): InvoiceLineItemInput | null {
   const match = line.match(
     /^(.+?)(?:,| -)?\s+([\d]+(?:[.,][\d]+)?)\s*(?:x|hrs?|hours?)\s+(?:at|@)\s*([\d.,€$£-]+)$/i,
   );
@@ -239,12 +222,7 @@ function parseDescriptionFirstLineItem(
   const parsedQuantity = parseNumericToken(quantity);
   const parsedUnitPrice = parseNumericToken(unitPrice);
 
-  if (
-    !parsedQuantity ||
-    parsedQuantity <= 0 ||
-    parsedUnitPrice === null ||
-    parsedUnitPrice < 0
-  ) {
+  if (!parsedQuantity || parsedQuantity <= 0 || parsedUnitPrice === null || parsedUnitPrice < 0) {
     return null;
   }
 
@@ -306,9 +284,7 @@ function getTargetSubtotal(totalAmount: number, taxRate = 0) {
   return totalAmount / (1 + taxRate / 100);
 }
 
-function buildLineItemsFromTotalAmount(
-  input: ResolveChatInvoiceLineItemsInput,
-) {
+function buildLineItemsFromTotalAmount(input: ResolveChatInvoiceLineItemsInput) {
   const totalAmount =
     typeof input.totalAmount === "number" && Number.isFinite(input.totalAmount)
       ? input.totalAmount
@@ -338,9 +314,7 @@ function buildLineItemsFromTotalAmount(
   return [
     {
       description:
-        input.fallbackDescription?.trim() ||
-        templateLineItems[0]?.description ||
-        "Services",
+        input.fallbackDescription?.trim() || templateLineItems[0]?.description || "Services",
       quantity: 1,
       unitPrice: targetSubtotal,
     },
@@ -351,9 +325,18 @@ export function isChatInvoiceLineItemParseError(error: unknown) {
   return error instanceof Error && error.message === LINE_ITEM_PARSE_ERROR;
 }
 
-export function resolveChatInvoiceLineItems(
-  input: ResolveChatInvoiceLineItemsInput,
-) {
+export function resolveChatInvoiceLineItems(input: ResolveChatInvoiceLineItemsInput) {
+  const items = resolveRawChatInvoiceLineItems(input);
+  const serviceMonth = input.serviceMonth?.trim();
+  return serviceMonth
+    ? items.map((item) => ({
+        ...item,
+        description: withServiceMonth(item.description, serviceMonth, input.issuedAt),
+      }))
+    : items;
+}
+
+function resolveRawChatInvoiceLineItems(input: ResolveChatInvoiceLineItemsInput) {
   if (input.lineItems?.length) {
     return input.lineItems;
   }
@@ -420,11 +403,7 @@ export function resolveChatInvoiceDates({
   if (invoiceMonth?.trim()) {
     const parsedMonth = parseInvoiceMonth(invoiceMonth, now);
     if (parsedMonth) {
-      const issuedAtDate = new Date(
-        parsedMonth.year,
-        parsedMonth.monthIndex + 1,
-        0,
-      );
+      const issuedAtDate = new Date(parsedMonth.year, parsedMonth.monthIndex + 1, 0);
       return {
         dueAt: explicitDueAt || formatDateInput(addDays(issuedAtDate, 30)),
         issuedAt: formatDateInput(issuedAtDate),

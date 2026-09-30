@@ -1,0 +1,8 @@
+.playwright-mcp/
+**/.nota/
+**/.env
+**/.env.local
+**/.env.production
+**/node_modules/
+**/dist/
+**/.next/

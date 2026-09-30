@@ -270,6 +270,16 @@ Notes:
 - returns `409` if the invoice is no longer a draft
 - request body matches `POST /invoices`
 
+### PATCH /invoices/:id/due-date
+
+Changes only the due date, preserving line items and invoice amounts.
+
+```json
+{ "dueAt": "2026-10-08" }
+```
+
+Members can update drafts; sent and overdue invoices require admin or owner. Paid and cancelled invoices cannot be changed. Dates must be valid ISO dates and cannot precede the issue date. Returns `403` for insufficient permissions, `404` for an invoice outside the workspace or missing, `409` for a concurrent change, and `400` for invalid input. Success returns `{ "data": <invoice detail> }` and records an activity entry. No email is sent.
+
 ### DELETE /invoices/:id
 
 Deletes a draft invoice.

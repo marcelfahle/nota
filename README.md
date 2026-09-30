@@ -6,7 +6,7 @@
 
 - [`apps/web`](./apps/web): the deployed Next.js app for teams, billing operations, REST API, and in-app AI chat
 - [`apps/cli`](./apps/cli): the `nota` terminal client for invoices and clients
-- [`apps/mcp`](./apps/mcp): the MCP server for Claude Desktop, Claude Code, Cursor, and similar clients
+- [`apps/mcp`](./apps/mcp): local and remote OAuth MCP server with interactive Claude/ChatGPT invoice cards
 - [`packages/sdk`](./packages/sdk): the shared TypeScript API client used by the CLI and MCP server
 
 ## Product surface
@@ -32,6 +32,7 @@ bun run test:e2e
 - Web app setup: [`apps/web/README.md`](./apps/web/README.md)
 - CLI usage: [`apps/cli/README.md`](./apps/cli/README.md)
 - MCP setup: [`apps/mcp/README.md`](./apps/mcp/README.md)
+- Product gaps and AI integration roadmap: [`docs/assessments/2026-09-30-invoicing-product-review.md`](./docs/assessments/2026-09-30-invoicing-product-review.md)
 - Web API reference: [`apps/web/docs/api.md`](./apps/web/docs/api.md)
 - Vercel first deploy runbook: [`apps/web/docs/runbooks/vercel-first-deploy.md`](./apps/web/docs/runbooks/vercel-first-deploy.md)
 - Post-deploy smoke checklist: [`apps/web/docs/runbooks/nota-deploy-smoke-checklist.md`](./apps/web/docs/runbooks/nota-deploy-smoke-checklist.md)

@@ -1,13 +1,11 @@
 import { beforeEach, expect, mock, test } from "bun:test";
 
-const renderInvoicePdfForOrg = mock(
-  async (_org: unknown, invoiceId: string) => ({
-    buffer: new Uint8Array([1, 2, 3]),
-    clientName: "Acme",
-    filename: `2026-04-01_${invoiceId}_Acme.pdf`,
-    invoiceNumber: invoiceId,
-  }),
-);
+const renderInvoicePdfForOrg = mock(async (_org: unknown, invoiceId: string) => ({
+  buffer: new Uint8Array([1, 2, 3]),
+  clientName: "Acme",
+  filename: `${invoiceId}-acme-2026-04-01.pdf`,
+  invoiceNumber: invoiceId,
+}));
 
 let exportRows: Array<{
   clientName: string;
@@ -75,16 +73,14 @@ test("archive route infers a custom period from bare dates", async () => {
   ];
 
   const response = await GET(
-    new Request(
-      "http://nota.test/api/invoices/archive?from=2026-04-01&to=2026-06-30",
-    ),
+    new Request("http://nota.test/api/invoices/archive?from=2026-04-01&to=2026-06-30"),
   );
 
   expect(response.status).toBe(200);
   expect(receivedFilters?.period?.key).toBe("custom");
   expect(response.headers.get("content-type")).toBe("application/zip");
   expect(response.headers.get("content-disposition")).toContain(
-    "nota-invoices_2026-04-01_to_2026-06-30.zip",
+    "nota-invoices-2026-04-01-to-2026-06-30.zip",
   );
   expect(renderInvoicePdfForOrg).toHaveBeenCalledTimes(1);
 });
@@ -97,9 +93,7 @@ test("archive route asks large exports to be narrowed before rendering", async (
     number: `INV-${index}`,
   }));
 
-  const response = await GET(
-    new Request("http://nota.test/api/invoices/archive?period=all"),
-  );
+  const response = await GET(new Request("http://nota.test/api/invoices/archive?period=all"));
 
   expect(response.status).toBe(413);
   await expect(response.json()).resolves.toEqual({

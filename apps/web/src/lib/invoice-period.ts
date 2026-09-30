@@ -81,9 +81,7 @@ function getQuarterRange(year: number, quarter: number) {
   };
 }
 
-export function isInvoicePeriodKey(
-  value: string | null | undefined,
-): value is InvoicePeriodKey {
+export function isInvoicePeriodKey(value: string | null | undefined): value is InvoicePeriodKey {
   return INVOICE_PERIOD_KEYS.includes(value as InvoicePeriodKey);
 }
 
@@ -93,11 +91,7 @@ export function resolveInvoicePeriod(
 ): InvoicePeriod {
   const inferredPeriod = input.from || input.to ? "custom" : "all";
   const period = input.period ?? inferredPeriod;
-  const today = utcDate(
-    now.getUTCFullYear(),
-    now.getUTCMonth(),
-    now.getUTCDate(),
-  );
+  const today = utcDate(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
 
   if (period === "all") {
     return { from: null, key: period, label: "All invoices", to: null };
@@ -160,9 +154,7 @@ export function resolveInvoicePeriod(
   };
 }
 
-export function getPreviousInvoicePeriod(
-  period: InvoicePeriod,
-): InvoicePeriod | null {
+export function getPreviousInvoicePeriod(period: InvoicePeriod): InvoicePeriod | null {
   if (!period.from || !period.to) {
     return null;
   }
@@ -185,16 +177,8 @@ export function getPreviousInvoicePeriod(
   }
 
   if (period.key === "year_to_date") {
-    const previousFrom = utcDate(
-      from.getUTCFullYear() - 1,
-      from.getUTCMonth(),
-      from.getUTCDate(),
-    );
-    const previousTo = utcDate(
-      to.getUTCFullYear() - 1,
-      to.getUTCMonth(),
-      to.getUTCDate(),
-    );
+    const previousFrom = utcDate(from.getUTCFullYear() - 1, from.getUTCMonth(), from.getUTCDate());
+    const previousTo = utcDate(to.getUTCFullYear() - 1, to.getUTCMonth(), to.getUTCDate());
     return {
       from: toIsoDate(previousFrom),
       key: "custom",
@@ -241,7 +225,7 @@ function getArchivePeriodToken(period: InvoicePeriod) {
     return `${period.from.slice(0, 4)}-YTD`;
   }
 
-  return `${period.from}_to_${period.to}`;
+  return `${period.from}-to-${period.to}`;
 }
 
 export function buildInvoiceArchiveFilename(
@@ -256,40 +240,23 @@ export function buildInvoiceArchiveFilename(
     parts.push(safeFilenamePart(filters.status, true));
   }
 
-  return `${parts.filter(Boolean).join("_")}.zip`;
+  return `${parts.filter(Boolean).join("-").toLowerCase()}.zip`;
 }
 
-export function buildInvoicePdfFilename(input: {
-  clientName: string;
-  issuedAt: string;
-  number: string;
-}) {
-  const issuedAt = /^\d{4}-\d{2}-\d{2}$/.test(input.issuedAt)
-    ? input.issuedAt
-    : "invoice";
-  const number = safeFilenamePart(input.number) || "invoice";
-  const clientName = safeFilenamePart(input.clientName) || "client";
-  return `${issuedAt}_${number}_${clientName}.pdf`;
-}
-
-export function getUniqueInvoiceArchiveEntryName(
-  filename: string,
-  usedNames: Set<string>,
-) {
+export function getUniqueInvoiceArchiveEntryName(filename: string, usedNames: Set<string>) {
   if (!usedNames.has(filename)) {
     usedNames.add(filename);
     return filename;
   }
 
   const extensionIndex = filename.lastIndexOf(".");
-  const basename =
-    extensionIndex > 0 ? filename.slice(0, extensionIndex) : filename;
+  const basename = extensionIndex > 0 ? filename.slice(0, extensionIndex) : filename;
   const extension = extensionIndex > 0 ? filename.slice(extensionIndex) : "";
   let suffix = 2;
-  let candidate = `${basename}_${suffix}${extension}`;
+  let candidate = `${basename}-${suffix}${extension}`;
   while (usedNames.has(candidate)) {
     suffix += 1;
-    candidate = `${basename}_${suffix}${extension}`;
+    candidate = `${basename}-${suffix}${extension}`;
   }
 
   usedNames.add(candidate);

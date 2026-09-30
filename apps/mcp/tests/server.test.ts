@@ -232,9 +232,27 @@ beforeAll(() => {
       if (path.startsWith("/api/v1/invoices/") && request.method === "GET" && path.endsWith("/pdf")) {
         return new Response(new Uint8Array([1, 2, 3, 4]), {
           headers: {
-            "content-disposition": 'attachment; filename="INV-0001.pdf"',
+            "content-disposition": 'attachment; filename="inv-0001-acme-2026-03-06.pdf"',
             "content-type": "application/pdf",
           },
+        });
+      }
+
+      if (path.endsWith("/xrechnung") && request.method === "GET") {
+        return new Response("<Invoice/>", { headers: {
+          "content-disposition": 'attachment; filename="inv-0001-acme-2026-03-06.xml"',
+          "content-type": "application/xml",
+        } });
+      }
+
+      if (path.endsWith("/due-date") && request.method === "PATCH") {
+        return request.json().then((body) => {
+          const invoiceId = path.split("/").at(-2)!;
+          const invoice = invoiceDetails.get(invoiceId);
+          if (!invoice) return json({ error: "Invoice not found" }, 404);
+          const updated = { ...invoice, dueAt: body.dueAt };
+          invoiceDetails.set(invoiceId, updated);
+          return json({ data: updated });
         });
       }
 
@@ -322,6 +340,13 @@ describe("nota MCP server", () => {
 
     const resources = await client.listResources();
     expect(resources.resources.some((resource) => resource.uri === "nota://invoices/summary")).toBe(true);
+    const invoiceTool = tools.tools.find((tool) => tool.name === "get_invoice");
+    expect(invoiceTool?._meta?.ui).toEqual({ resourceUri: "ui://nota/invoices.html" });
+    expect(invoiceTool?.annotations?.readOnlyHint).toBe(true);
+    expect(tools.tools.find((tool) => tool.name === "send_invoice")?.annotations?.openWorldHint).toBe(true);
+    const card = await client.readResource({ uri: "ui://nota/invoices.html" });
+    expect(card.contents[0]?.mimeType).toBe("text/html;profile=mcp-app");
+    expect(card.contents[0]?.text).toContain("Invoice workspace");
 
     const templates = await client.listResourceTemplates();
     expect(templates.resourceTemplates.map((template) => template.uriTemplate)).toEqual(
@@ -365,6 +390,19 @@ describe("nota MCP server", () => {
     });
     expect(getInvoiceResult.isError).toBeFalsy();
     expect(JSON.stringify(getInvoiceResult.structuredContent)).toContain("INV-0001");
+    const shortReference = await client.callTool({ name: "get_invoice", arguments: { invoiceNumber: "1" } });
+    expect(shortReference.isError).toBeFalsy();
+    expect(JSON.stringify(shortReference.structuredContent)).toContain("INV-0001");
+
+    const dueDate = await client.callTool({ name: "change_invoice_due_date", arguments: { invoiceNumber: "1", dueAt: "2026-10-08" } });
+    expect(dueDate.isError).toBeFalsy();
+    expect((dueDate.structuredContent?.invoice as { dueAt: string }).dueAt).toBe("2026-10-08");
+    expect(invoiceDetails.get("inv_1")?.lineItems[0]?.description).toBe("Design work");
+    expect(invoiceDetails.get("inv_1")?.total).toBe("1500.00");
+
+    const history = await client.callTool({ name: "get_client_billing_history", arguments: { clientName: "Acme" } });
+    expect(history.isError).toBeFalsy();
+    expect(JSON.stringify(history.structuredContent)).toContain("Design work");
 
     const readSummary = await client.readResource({ uri: "nota://invoices/summary" });
     expect(readSummary.contents[0]?.text).toContain('"totalInvoices"');
@@ -378,6 +416,14 @@ describe("nota MCP server", () => {
     });
     expect(downloadResult.isError).toBeFalsy();
     expect(JSON.stringify(downloadResult.structuredContent)).toContain("pdfBase64");
+    const xml = await client.callTool({ name: "download_xml", arguments: { invoiceNumber: "1" } });
+    expect(xml.isError).toBeFalsy();
+    expect(xml.structuredContent?.filename).toBe("inv-0001-acme-2026-03-06.xml");
+    expect(xml.structuredContent?.xmlBase64).toBe(Buffer.from("<Invoice/>").toString("base64"));
+
+    const overviewResult = await client.callTool({ name: "invoice_overview", arguments: {} });
+    expect(overviewResult.isError).toBeFalsy();
+    expect(JSON.stringify(overviewResult.structuredContent)).toContain("totalInvoices");
 
     await client.close();
   });

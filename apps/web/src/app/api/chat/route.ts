@@ -67,9 +67,9 @@ export async function POST(request: Request) {
 
     return result.toUIMessageStreamResponse({
       onError: (error) => {
+        // eslint-disable-next-line no-console -- Preserve provider failures in server logs.
         console.error("[chat] stream error:", error);
-        const message =
-          error instanceof Error ? error.message : "Unknown error";
+        const message = error instanceof Error ? error.message : "Unknown error";
         return `Nota chat failed: ${message}`;
       },
     });
