@@ -39,9 +39,11 @@ test("OAuth consent reaches the registered callback on another origin", async ({
       }),
     );
     let callbackMethod: string | undefined;
+    let callbackReferrer: string | undefined;
     const callbackUrl = `${await listen(
       createServer((req, res) => {
         callbackMethod = req.method;
+        callbackReferrer = req.headers.referer;
         res.setHeader("Content-Type", "text/html");
         res.end("<h1>Connected to fixture</h1>");
       }),
@@ -89,7 +91,11 @@ test("OAuth consent reaches the registered callback on another origin", async ({
     });
     await page.goto(`${publicUrl}/authorize?${params}`);
     await page.getByLabel("Nota API key").fill("nota_browser_fixture");
+    const approval = page.waitForResponse((response) => response.url() === `${publicUrl}/connect`);
     await page.getByRole("button", { name: "Connect workspace" }).click();
+    const response = await approval;
+    expect(response.status()).toBe(303);
+    expect(response.request().headers().origin).toBe(publicUrl);
     await expect(page.getByRole("heading", { name: "Connected to fixture" })).toBeVisible();
     const redirect = new URL(page.url());
     expect(redirect.origin).toBe(new URL(callbackUrl).origin);
@@ -97,6 +103,7 @@ test("OAuth consent reaches the registered callback on another origin", async ({
     expect(redirect.searchParams.get("code")).toBeTruthy();
     expect(page.url()).not.toContain("nota_browser_fixture");
     expect(callbackMethod).toBe("GET");
+    expect(callbackReferrer).toBeUndefined();
     expect(cspErrors).toEqual([]);
   } finally {
     await Promise.all(

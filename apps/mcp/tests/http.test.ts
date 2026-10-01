@@ -107,6 +107,7 @@ async function connect(apiKey: string) {
   });
   const authorization = await fetch(`${baseUrl}/authorize?${params}`);
   expect(authorization.status).toBe(200);
+  expect(authorization.headers.get("referrer-policy")).toBe("same-origin");
   expect(authorization.headers.get("content-security-policy")).toContain(
     "form-action 'self' http://127.0.0.1;",
   );

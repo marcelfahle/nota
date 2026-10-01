@@ -135,7 +135,9 @@ export class NotaOAuthProvider implements OAuthServerProvider {
       "Content-Security-Policy",
       `default-src 'none'; style-src 'unsafe-inline'; form-action 'self' ${redirectSource}; frame-ancestors 'none'; base-uri 'none'`,
     );
-    res.setHeader("Referrer-Policy", "no-referrer");
+    // Preserve Origin on the same-origin consent POST; omit the referrer when
+    // redirecting to the assistant. no-referrer makes Chromium send Origin: null.
+    res.setHeader("Referrer-Policy", "same-origin");
     res
       .type("html")
       .send(
