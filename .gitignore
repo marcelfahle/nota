@@ -11,6 +11,7 @@ apps/*/dist
 apps/*/build
 apps/*/coverage
 apps/*/playwright-report
+.playwright-mcp/
 apps/*/test-results
 apps/*/*.tsbuildinfo
 apps/*/next-env.d.ts
