@@ -1,6 +1,12 @@
 import { describe, expect, test } from "bun:test";
 
-import { escapeXml, extractIban, generateXRechnung, parseAddress, toCountryCode } from "@/lib/xrechnung";
+import {
+  escapeXml,
+  extractIban,
+  generateXRechnung,
+  parseAddress,
+  toCountryCode,
+} from "@/lib/xrechnung";
 
 // ---------------------------------------------------------------------------
 // Shared fixture
@@ -45,7 +51,7 @@ function baseData() {
 // ---------------------------------------------------------------------------
 describe("escapeXml", () => {
   test("escapes &, <, >, \", '", () => {
-    expect(escapeXml('A & B < C > D "E" \'F\'')).toBe(
+    expect(escapeXml("A & B < C > D \"E\" 'F'")).toBe(
       "A &amp; B &lt; C &gt; D &quot;E&quot; &apos;F&apos;",
     );
   });
@@ -191,9 +197,7 @@ describe("generateXRechnung", () => {
     const xml = generateXRechnung(data);
     expect(xml).toContain("<cbc:ID>AE</cbc:ID>");
     expect(xml).toContain("<cbc:TaxExemptionReason>Reverse charge</cbc:TaxExemptionReason>");
-    expect(xml).toContain(
-      "<cbc:TaxExemptionReasonCode>vatex-eu-ae</cbc:TaxExemptionReasonCode>",
-    );
+    expect(xml).toContain("<cbc:TaxExemptionReasonCode>vatex-eu-ae</cbc:TaxExemptionReasonCode>");
   });
 
   test("zero tax uses Z category", () => {

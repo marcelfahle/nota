@@ -13,10 +13,7 @@ export type InvoiceExportFilters = {
   status?: InvoiceLifecycleStatus | null;
 };
 
-export async function listInvoicesForExport(
-  orgId: string,
-  filters: InvoiceExportFilters,
-) {
+export async function listInvoicesForExport(orgId: string, filters: InvoiceExportFilters) {
   const clauses = [eq(invoices.orgId, orgId)];
   if (filters.period.from) {
     clauses.push(gte(invoices.issuedAt, filters.period.from));
@@ -39,10 +36,7 @@ export async function listInvoicesForExport(
       number: invoices.number,
     })
     .from(invoices)
-    .leftJoin(
-      clients,
-      and(eq(clients.id, invoices.clientId), eq(clients.orgId, orgId)),
-    )
+    .leftJoin(clients, and(eq(clients.id, invoices.clientId), eq(clients.orgId, orgId)))
     .where(and(...clauses))
     .orderBy(asc(invoices.issuedAt), asc(invoices.number))
     .limit(MAX_INVOICE_ARCHIVE_SIZE + 1);

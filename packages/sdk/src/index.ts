@@ -67,6 +67,24 @@ export type ClientCreateInput = {
 
 export type ClientUpdateInput = ClientCreateInput;
 
+export type ClientImportPreview = {
+  columns: Array<{ field: string; header: string }>;
+  counts: { duplicate: number; invalid: number; ready: number; total: number };
+  hash: string;
+  ignoredColumns: Array<string>;
+  rows: Array<{
+    client: Partial<ClientCreateInput>;
+    line: number;
+    reason?: string;
+    status: "ready" | "duplicate" | "invalid";
+  }>;
+};
+export type ClientImportResult = {
+  added: number;
+  counts: ClientImportPreview["counts"];
+  stale: false;
+};
+
 export type InvoiceStatus = "draft" | "sent" | "paid" | "overdue" | "cancelled";
 
 export type InvoiceSummary = {
@@ -281,6 +299,28 @@ export class NotaClient {
     return response.data;
   }
 
+  async previewClientsCsv(csv: string) {
+    const response = await this.requestJson<JsonDataResponse<ClientImportPreview>>(
+      "/clients/import",
+      {
+        body: JSON.stringify({ csv, mode: "preview" }),
+        method: "POST",
+      },
+    );
+    return response.data;
+  }
+
+  async importClientsCsv(csv: string, previewHash: string) {
+    const response = await this.requestJson<JsonDataResponse<ClientImportResult>>(
+      "/clients/import",
+      {
+        body: JSON.stringify({ csv, mode: "commit", previewHash }),
+        method: "POST",
+      },
+    );
+    return response.data;
+  }
+
   async getClient(clientId: string) {
     const response = await this.requestJson<JsonDataResponse<ClientRecord>>(
       `/clients/${encodeURIComponent(clientId)}`,
@@ -424,13 +464,46 @@ export class NotaClient {
       return null;
     }
 
-    const result = await this.listInvoices({ perPage: 100, search: number });
-    const match = result.data.find((invoice) => invoice.number.toLowerCase() === normalizedNumber);
+    const rows: InvoiceSummary[] = [];
+    let page = 1;
+    let result: PaginatedResult<InvoiceSummary>;
+    do {
+      result = await this.listInvoices({ page, perPage: 100, search: number });
+      rows.push(...result.data);
+      page++;
+    } while (rows.length < result.pagination.total && result.data.length > 0);
+    const exact = rows.find((invoice) => invoice.number.toLowerCase() === normalizedNumber);
+    const numeric = /^\d+$/.test(normalizedNumber)
+      ? normalizedNumber.replace(/^0+/, "") || "0"
+      : null;
+    const candidates =
+      numeric === null
+        ? []
+        : rows.filter((invoice) => {
+            const suffix = invoice.number.match(/\d+$/)?.[0];
+            return suffix !== undefined && (suffix.replace(/^0+/, "") || "0") === numeric;
+          });
+    if (!exact && candidates.length > 1)
+      throw new Error(
+        `Invoice '${number}' is ambiguous. Use the full number: ${candidates.map((invoice) => invoice.number).join(", ")}.`,
+      );
+    const match = exact ?? candidates[0];
     if (!match) {
       return null;
     }
 
     return this.getInvoice(match.id);
+  }
+
+  async changeInvoiceDueDate(invoiceId: string, dueAt: string): Promise<InvoiceMutationResponse> {
+    const response = await this.requestJson<JsonDataResponse<InvoiceDetail>>(
+      `/invoices/${encodeURIComponent(invoiceId)}/due-date`,
+      {
+        method: "PATCH",
+        body: JSON.stringify({ dueAt }),
+      },
+    );
+    return { invoice: response.data, warning: response.warning };
   }
 
   private async postInvoiceAction(invoiceId: string, action: string) {
@@ -514,7 +587,11 @@ export class NotaClient {
   private toApiError(status: number, parsed: unknown, fallback: string) {
     if (parsed && typeof parsed === "object" && "error" in parsed) {
       const error = parsed as JsonErrorResponse;
-      return new NotaApiError((error.error ?? fallback) || "Nota API request failed", status, parsed);
+      return new NotaApiError(
+        (error.error ?? fallback) || "Nota API request failed",
+        status,
+        parsed,
+      );
     }
 
     return new NotaApiError(fallback || "Nota API request failed", status, parsed ?? fallback);

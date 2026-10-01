@@ -19,6 +19,7 @@ import {
 } from "@/lib/db/schema";
 import { getResend } from "@/lib/email";
 import { getEmailEnv } from "@/lib/env";
+import { buildInvoiceFilename } from "@/lib/invoice-filename";
 
 const JOB_LOCK_TIMEOUT_MS = 1000 * 60 * 10;
 
@@ -149,7 +150,15 @@ async function sendInvoiceEmail(invoiceId: string) {
     attachments: [
       {
         content: pdfBuffer.toString("base64"),
-        filename: `${invoice.number.replaceAll("/", "-")}.pdf`,
+        filename: buildInvoiceFilename(
+          {
+            clientName: client.name,
+            issuedAt: invoice.issuedAt,
+            lineItems: items,
+            number: invoice.number,
+          },
+          "pdf",
+        ),
       },
     ],
     from: fromEmail,

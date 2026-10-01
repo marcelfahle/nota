@@ -9,25 +9,20 @@ import { getCurrentUser } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { activityLog, clients, invoices, lineItems } from "@/lib/db/schema";
 
-const loadInvoiceWithClient = cache(
-  async (orgId: string, invoiceId: string) => {
-    const [record] = await db
-      .select({
-        clientEmail: clients.email,
-        clientName: clients.name,
-        invoice: invoices,
-      })
-      .from(invoices)
-      .leftJoin(
-        clients,
-        and(eq(clients.id, invoices.clientId), eq(clients.orgId, orgId)),
-      )
-      .where(and(eq(invoices.id, invoiceId), eq(invoices.orgId, orgId)))
-      .limit(1);
+const loadInvoiceWithClient = cache(async (orgId: string, invoiceId: string) => {
+  const [record] = await db
+    .select({
+      clientEmail: clients.email,
+      clientName: clients.name,
+      invoice: invoices,
+    })
+    .from(invoices)
+    .leftJoin(clients, and(eq(clients.id, invoices.clientId), eq(clients.orgId, orgId)))
+    .where(and(eq(invoices.id, invoiceId), eq(invoices.orgId, orgId)))
+    .limit(1);
 
-    return record ?? null;
-  },
-);
+  return record ?? null;
+});
 
 export async function generateMetadata({
   params,
@@ -45,11 +40,7 @@ export async function generateMetadata({
   };
 }
 
-export default async function InvoiceDetailPage({
-  params,
-}: {
-  params: Promise<{ id: string }>;
-}) {
+export default async function InvoiceDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const { org, role } = await getCurrentUser();
 

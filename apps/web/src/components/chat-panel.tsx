@@ -1,17 +1,13 @@
 "use client";
 
 import { useChat } from "@ai-sdk/react";
-import {
-  DefaultChatTransport,
-  isTextUIPart,
-  isToolOrDynamicToolUIPart,
-  type UIMessage,
-} from "ai";
+import { DefaultChatTransport, isTextUIPart, isToolOrDynamicToolUIPart, type UIMessage } from "ai";
 import {
   Bot,
   Download,
   FileArchive,
   LoaderCircle,
+  Paperclip,
   Send,
   Sparkles,
   X,
@@ -19,6 +15,8 @@ import {
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 
+import { ChatClientImport } from "@/components/chat-client-import";
+import { ChatMarkdown } from "@/components/chat-markdown";
 import { Button } from "@/components/ui/button";
 import { formatCurrency } from "@/lib/utils";
 import { cn } from "@/lib/utils";
@@ -99,10 +97,9 @@ type InvoiceAnalysisSummary = {
 };
 
 const STARTER_PROMPTS = [
-  "Download all invoices for last quarter",
+  "Create a draft invoice",
   "Who still owes me money?",
-  "Compare this quarter with last quarter",
-  "Which clients generated the most revenue this year?",
+  "Download all invoices for last quarter",
 ] as const;
 
 const transport = new DefaultChatTransport({
@@ -112,9 +109,7 @@ const transport = new DefaultChatTransport({
 
 function getToolLabel(type: string) {
   const raw = type.startsWith("tool-") ? type.slice(5) : type;
-  return raw
-    .replaceAll("_", " ")
-    .replaceAll(/\b\w/g, (char) => char.toUpperCase());
+  return raw.replaceAll("_", " ").replaceAll(/\b\w/g, (char) => char.toUpperCase());
 }
 
 function formatInvoiceAmount(
@@ -124,13 +119,7 @@ function formatInvoiceAmount(
   return formatCurrency(Number(total ?? 0), currency ?? "EUR");
 }
 
-function ToolResultCard({
-  output,
-  type,
-}: {
-  output: ToolOutputShape;
-  type: string;
-}) {
+function ToolResultCard({ output, type }: { output: ToolOutputShape; type: string }) {
   const label = getToolLabel(type);
 
   if (output.kind === "invoice-archive" && output.downloadUrl) {
@@ -147,9 +136,7 @@ function ToolResultCard({
             <p className="mt-1 text-sm font-medium text-zinc-950">
               {output.count ?? 0} invoice{output.count === 1 ? "" : "s"} · ZIP
             </p>
-            <p className="mt-0.5 truncate text-xs text-zinc-500">
-              {output.filename}
-            </p>
+            <p className="mt-0.5 truncate text-xs text-zinc-500">{output.filename}</p>
           </div>
         </div>
         <Button asChild className="mt-3 w-full" size="sm">
@@ -162,10 +149,7 @@ function ToolResultCard({
     );
   }
 
-  if (
-    (output.kind === "invoice-analysis" || output.kind === "client-insights") &&
-    output.summary
-  ) {
+  if ((output.kind === "invoice-analysis" || output.kind === "client-insights") && output.summary) {
     const currencies = output.summary.currencies ?? [];
     return (
       <div className="rounded-2xl border border-zinc-200/80 bg-white px-3 py-3 shadow-sm">
@@ -188,22 +172,15 @@ function ToolResultCard({
             {currencies.slice(0, 2).map((currency) => (
               <div className="py-3" key={currency.currency ?? "currency"}>
                 <div className="mb-2 flex items-center justify-between">
-                  <span className="text-xs font-semibold text-zinc-900">
-                    {currency.currency}
-                  </span>
-                  {currency.averageDaysToPay !== null &&
-                  currency.averageDaysToPay !== undefined ? (
+                  <span className="text-xs font-semibold text-zinc-900">{currency.currency}</span>
+                  {currency.averageDaysToPay !== null && currency.averageDaysToPay !== undefined ? (
                     <span className="text-[11px] text-zinc-500">
                       Paid in {currency.averageDaysToPay} days avg.
                     </span>
                   ) : null}
                 </div>
                 <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-xs">
-                  <Metric
-                    currency={currency.currency}
-                    label="Issued"
-                    value={currency.issued}
-                  />
+                  <Metric currency={currency.currency} label="Issued" value={currency.issued} />
                   <Metric
                     currency={currency.currency}
                     label="Collected"
@@ -214,11 +191,7 @@ function ToolResultCard({
                     label="Outstanding"
                     value={currency.outstanding}
                   />
-                  <Metric
-                    currency={currency.currency}
-                    label="Overdue"
-                    value={currency.overdue}
-                  />
+                  <Metric currency={currency.currency} label="Overdue" value={currency.overdue} />
                 </dl>
                 {currency.topClients?.[0] ? (
                   <p className="mt-2 text-[11px] text-zinc-500">
@@ -254,16 +227,12 @@ function ToolResultCard({
             {output.invoice.status ?? "draft"}
           </span>
         </div>
-        <p className="font-mono text-sm font-semibold text-zinc-950">
-          {output.invoice.number}
-        </p>
+        <p className="font-mono text-sm font-semibold text-zinc-950">{output.invoice.number}</p>
         <p className="mt-1 text-sm text-zinc-600">
           {output.invoice.clientName ?? "Unknown client"}
         </p>
         <div className="mt-3 flex items-center justify-between text-sm text-zinc-700">
-          <span>
-            {formatInvoiceAmount(output.invoice.total, output.invoice.currency)}
-          </span>
+          <span>{formatInvoiceAmount(output.invoice.total, output.invoice.currency)}</span>
           <span>{output.invoice.dueAt ?? "No due date"}</span>
         </div>
         {output.downloadUrl ? (
@@ -274,9 +243,7 @@ function ToolResultCard({
             </a>
           </Button>
         ) : null}
-        {output.warning ? (
-          <p className="mt-2 text-xs text-amber-700">{output.warning}</p>
-        ) : null}
+        {output.warning ? <p className="mt-2 text-xs text-amber-700">{output.warning}</p> : null}
       </div>
     );
   }
@@ -284,15 +251,9 @@ function ToolResultCard({
   if (output.client?.name) {
     return (
       <div className="rounded-2xl border border-zinc-200/80 bg-white px-3 py-3 shadow-sm">
-        <p className="text-[11px] font-medium tracking-[0.2em] text-zinc-500 uppercase">
-          {label}
-        </p>
-        <p className="mt-1 text-sm font-semibold text-zinc-950">
-          {output.client.name}
-        </p>
-        <p className="text-sm text-zinc-600">
-          {output.client.email ?? "No email"}
-        </p>
+        <p className="text-[11px] font-medium tracking-[0.2em] text-zinc-500 uppercase">{label}</p>
+        <p className="mt-1 text-sm font-semibold text-zinc-950">{output.client.name}</p>
+        <p className="text-sm text-zinc-600">{output.client.email ?? "No email"}</p>
         {output.client.company ? (
           <p className="text-xs text-zinc-500">{output.client.company}</p>
         ) : null}
@@ -319,17 +280,13 @@ function ToolResultCard({
             >
               <div>
                 <p className="font-mono text-zinc-950">{invoice.number}</p>
-                <p className="text-xs text-zinc-500">
-                  {invoice.clientName ?? "Unknown client"}
-                </p>
+                <p className="text-xs text-zinc-500">{invoice.clientName ?? "Unknown client"}</p>
               </div>
               <div className="text-right">
                 <p className="text-zinc-800">
                   {formatInvoiceAmount(invoice.total, invoice.currency)}
                 </p>
-                <p className="text-xs text-zinc-500 uppercase">
-                  {invoice.status}
-                </p>
+                <p className="text-xs text-zinc-500 uppercase">{invoice.status}</p>
               </div>
             </div>
           ))}
@@ -352,12 +309,8 @@ function ToolResultCard({
         <div className="space-y-2">
           {output.clients.slice(0, 3).map((client) => (
             <div key={client.id ?? client.email}>
-              <p className="text-sm font-medium text-zinc-950">
-                {client.name ?? "Unnamed client"}
-              </p>
-              <p className="text-xs text-zinc-500">
-                {client.email ?? "No email"}
-              </p>
+              <p className="text-sm font-medium text-zinc-950">{client.name ?? "Unnamed client"}</p>
+              <p className="text-xs text-zinc-500">{client.email ?? "No email"}</p>
             </div>
           ))}
         </div>
@@ -368,9 +321,7 @@ function ToolResultCard({
   if (output.kind === "dashboard" && output.counts) {
     return (
       <div className="rounded-2xl border border-zinc-200/80 bg-white px-3 py-3 shadow-sm">
-        <p className="text-[11px] font-medium tracking-[0.2em] text-zinc-500 uppercase">
-          {label}
-        </p>
+        <p className="text-[11px] font-medium tracking-[0.2em] text-zinc-500 uppercase">{label}</p>
         <div className="mt-2 grid grid-cols-3 gap-2 text-sm">
           {Object.entries(output.counts).map(([key, value]) => (
             <div className="rounded-xl bg-zinc-50 px-2 py-2" key={key}>
@@ -385,25 +336,13 @@ function ToolResultCard({
 
   return (
     <div className="rounded-2xl border border-zinc-200/80 bg-white px-3 py-3 shadow-sm">
-      <p className="text-[11px] font-medium tracking-[0.2em] text-zinc-500 uppercase">
-        {label}
-      </p>
-      <p className="mt-1 text-sm text-zinc-700">
-        {output.message ?? "Tool completed."}
-      </p>
+      <p className="text-[11px] font-medium tracking-[0.2em] text-zinc-500 uppercase">{label}</p>
+      <p className="mt-1 text-sm text-zinc-700">{output.message ?? "Tool completed."}</p>
     </div>
   );
 }
 
-function Metric({
-  currency,
-  label,
-  value,
-}: {
-  currency?: string;
-  label: string;
-  value?: number;
-}) {
+function Metric({ currency, label, value }: { currency?: string; label: string; value?: number }) {
   return (
     <div>
       <dt className="text-zinc-500">{label}</dt>
@@ -414,18 +353,12 @@ function Metric({
   );
 }
 
-function ToolPart({
-  part,
-}: {
-  part: Extract<UIMessage["parts"][number], { type: string }>;
-}) {
+function ToolPart({ part }: { part: Extract<UIMessage["parts"][number], { type: string }> }) {
   if (!isToolOrDynamicToolUIPart(part)) {
     return null;
   }
 
-  const label = getToolLabel(
-    part.type === "dynamic-tool" ? part.toolName : part.type,
-  );
+  const label = getToolLabel(part.type === "dynamic-tool" ? part.toolName : part.type);
 
   if (part.state === "output-error") {
     return (
@@ -460,9 +393,7 @@ function ToolPart({
 function MessageBubble({ message }: { message: UIMessage }) {
   const isUser = message.role === "user";
   const hasText = message.parts.some((part) => isTextUIPart(part));
-  const hasTools = message.parts.some((part) =>
-    isToolOrDynamicToolUIPart(part),
-  );
+  const hasTools = message.parts.some((part) => isToolOrDynamicToolUIPart(part));
 
   return (
     <div className={cn("flex", isUser ? "justify-end" : "justify-start")}>
@@ -478,7 +409,13 @@ function MessageBubble({ message }: { message: UIMessage }) {
           <div className="space-y-2 text-sm leading-6">
             {message.parts.map((part, index) =>
               isTextUIPart(part) ? (
-                <p key={`${message.id}-text-${index}`}>{part.text}</p>
+                isUser ? (
+                  <p className="whitespace-pre-wrap" key={`${message.id}-text-${index}`}>
+                    {part.text}
+                  </p>
+                ) : (
+                  <ChatMarkdown key={`${message.id}-text-${index}`}>{part.text}</ChatMarkdown>
+                )
               ) : null,
             )}
           </div>
@@ -502,14 +439,17 @@ export function ChatPanel() {
   const router = useRouter();
   const [input, setInput] = useState("");
   const [open, setOpen] = useState(false);
+  const [csvFile, setCsvFile] = useState<File | null>(null);
+  const [importBusy, setImportBusy] = useState(false);
+  const fileInput = useRef<HTMLInputElement>(null);
   const refreshedMessages = useRef<Set<string>>(new Set());
 
-  const { clearError, error, messages, sendMessage, status } = useChat({
+  const { clearError, error, messages, sendMessage, setMessages, status } = useChat({
     experimental_throttle: 50,
     transport,
   });
 
-  const isBusy = status === "submitted" || status === "streaming";
+  const isBusy = status === "submitted" || status === "streaming" || importBusy;
 
   useEffect(() => {
     const latestToolMessage = [...messages]
@@ -518,16 +458,11 @@ export function ChatPanel() {
         (message) =>
           message.role === "assistant" &&
           message.parts.some(
-            (part) =>
-              isToolOrDynamicToolUIPart(part) &&
-              part.state === "output-available",
+            (part) => isToolOrDynamicToolUIPart(part) && part.state === "output-available",
           ),
       );
 
-    if (
-      !latestToolMessage ||
-      refreshedMessages.current.has(latestToolMessage.id)
-    ) {
+    if (!latestToolMessage || refreshedMessages.current.has(latestToolMessage.id)) {
       return;
     }
 
@@ -538,9 +473,7 @@ export function ChatPanel() {
   const hasConversation = messages.length > 0;
   const headerLabel = useMemo(
     () =>
-      hasConversation
-        ? "Working with live Nota data"
-        : "Ask Nota to manage invoices, clients, and dashboard stats.",
+      hasConversation ? "Working with live Nota data" : "Clients, invoices, and getting paid.",
     [hasConversation],
   );
 
@@ -580,10 +513,15 @@ export function ChatPanel() {
       <div
         className={cn(
           "fixed inset-x-4 bottom-40 z-30 flex max-h-[72vh] w-auto flex-col overflow-hidden rounded-[28px] border border-zinc-200 bg-[#f5f3ef] shadow-[0_30px_80px_rgba(15,23,42,0.18)] transition-all duration-300 sm:right-6 sm:bottom-44 sm:left-auto sm:w-[420px]",
-          open
-            ? "translate-y-0 opacity-100"
-            : "pointer-events-none translate-y-6 opacity-0",
+          open ? "translate-y-0 opacity-100" : "pointer-events-none translate-y-6 opacity-0",
         )}
+        onDragOver={(event) => event.preventDefault()}
+        onDrop={(event) => {
+          event.preventDefault();
+          if (!isBusy && !csvFile) {
+            setCsvFile(event.dataTransfer.files[0] ?? null);
+          }
+        }}
       >
         <div className="border-b border-zinc-200 bg-white/80 px-5 py-4 backdrop-blur">
           <div className="flex items-start justify-between gap-4">
@@ -593,19 +531,12 @@ export function ChatPanel() {
                   <Bot className="size-4" />
                 </div>
                 <div>
-                  <p className="text-sm font-semibold tracking-tight">
-                    Nota Chat
-                  </p>
+                  <p className="text-sm font-semibold tracking-tight">Nota Chat</p>
                   <p className="text-xs text-zinc-500">{headerLabel}</p>
                 </div>
               </div>
             </div>
-            <Button
-              onClick={() => setOpen(false)}
-              size="icon-sm"
-              type="button"
-              variant="ghost"
-            >
+            <Button onClick={() => setOpen(false)} size="icon-sm" type="button" variant="ghost">
               <X className="size-4" />
             </Button>
           </div>
@@ -615,6 +546,9 @@ export function ChatPanel() {
           {messages.length === 0 ? (
             <div className="space-y-4 rounded-[24px] border border-dashed border-zinc-300 bg-white/80 p-4 text-sm text-zinc-600">
               <p className="font-medium text-zinc-900">Put Nota to work</p>
+              <p className="text-xs leading-5">
+                Moving from FreshBooks? Drop your client CSV here or use the paperclip.
+              </p>
               <div className="divide-y divide-zinc-100 border-y border-zinc-100">
                 {STARTER_PROMPTS.map((prompt) => (
                   <button
@@ -633,10 +567,39 @@ export function ChatPanel() {
               </div>
             </div>
           ) : (
-            messages.map((message) => (
-              <MessageBubble key={message.id} message={message} />
-            ))
+            messages.map((message) => <MessageBubble key={message.id} message={message} />)
           )}
+
+          {csvFile ? (
+            <ChatClientImport
+              file={csvFile}
+              key={`${csvFile.name}-${csvFile.lastModified}`}
+              onBusyChange={setImportBusy}
+              onComplete={(result) => {
+                router.refresh();
+                setMessages((previous) => [
+                  ...previous,
+                  {
+                    id: crypto.randomUUID(),
+                    parts: [{ text: "Import my client CSV.", type: "text" }],
+                    role: "user",
+                  },
+                  {
+                    id: crypto.randomUUID(),
+                    parts: [
+                      {
+                        text: `Added **${result.added} client${result.added === 1 ? "" : "s"}** from your CSV. Skipped ${result.counts.duplicate} duplicates and ${result.counts.invalid} rows needing attention. No invoices were created or sent.`,
+                        type: "text",
+                      },
+                    ],
+                    role: "assistant",
+                  },
+                ]);
+                setCsvFile(null);
+              }}
+              onDismiss={() => setCsvFile(null)}
+            />
+          ) : null}
 
           {isBusy ? (
             <div className="flex items-center gap-2 px-2 text-sm text-zinc-500">
@@ -652,44 +615,59 @@ export function ChatPanel() {
           ) : null}
         </div>
 
-        <form
-          className="border-t border-zinc-200 bg-white/85 px-4 py-4 backdrop-blur"
-          onSubmit={handleSubmit}
-        >
-          <div className="rounded-[22px] border border-zinc-200 bg-white p-2 shadow-sm">
-            <textarea
-              className="min-h-[88px] w-full resize-none border-0 bg-transparent px-2 py-2 text-sm leading-6 text-zinc-900 outline-none placeholder:text-zinc-400"
-              data-testid="chat-panel-input"
-              onChange={(event) => setInput(event.target.value)}
-              onKeyDown={(event) => {
-                if (
-                  event.key === "Enter" &&
-                  !event.shiftKey &&
-                  input.trim() &&
-                  !isBusy
-                ) {
-                  event.preventDefault();
-                  void submitInput(input);
-                }
-              }}
-              placeholder="Ask Nota to create invoices, send them, or summarize your dashboard..."
-              value={input}
-            />
-            <div className="flex items-center justify-between gap-3 px-2 pb-1">
-              <p className="text-[11px] text-zinc-400">
-                Enter to send, Shift+Enter for a new line.
-              </p>
-              <Button
-                disabled={!input.trim() || isBusy}
-                size="sm"
-                type="submit"
-              >
-                <Send className="size-4" />
-                Send
-              </Button>
+        {!csvFile ? (
+          <form
+            className="border-t border-zinc-200 bg-white/85 px-4 py-4 backdrop-blur"
+            onSubmit={handleSubmit}
+          >
+            <div className="rounded-[22px] border border-zinc-200 bg-white p-2 shadow-sm">
+              <textarea
+                className="min-h-[88px] w-full resize-none border-0 bg-transparent px-2 py-2 text-sm leading-6 text-zinc-900 outline-none placeholder:text-zinc-400"
+                data-testid="chat-panel-input"
+                onChange={(event) => setInput(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" && !event.shiftKey && input.trim() && !isBusy) {
+                    event.preventDefault();
+                    void submitInput(input);
+                  }
+                }}
+                placeholder="Describe the work, ask about an invoice, or attach a client CSV…"
+                value={input}
+              />
+              <div className="flex items-center justify-between gap-3 px-2 pb-1">
+                <input
+                  accept=".csv,text/csv"
+                  aria-label="Client CSV file"
+                  className="hidden"
+                  data-testid="client-csv-input"
+                  onChange={(event) => {
+                    setCsvFile(event.target.files?.[0] ?? null);
+                    event.target.value = "";
+                  }}
+                  ref={fileInput}
+                  type="file"
+                />
+                <Button
+                  aria-label="Attach client CSV"
+                  disabled={isBusy || csvFile !== null}
+                  onClick={() => fileInput.current?.click()}
+                  size="icon-sm"
+                  type="button"
+                  variant="ghost"
+                >
+                  <Paperclip className="size-4" />
+                </Button>
+                <p className="text-[11px] text-zinc-400">
+                  Enter to send, Shift+Enter for a new line.
+                </p>
+                <Button disabled={!input.trim() || isBusy} size="sm" type="submit">
+                  <Send className="size-4" />
+                  Send
+                </Button>
+              </div>
             </div>
-          </div>
-        </form>
+          </form>
+        ) : null}
       </div>
     </>
   );

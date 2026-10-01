@@ -11,6 +11,7 @@ import {
   lineItems,
   orgs,
 } from "@/lib/db/schema";
+import { resolveDueDateChange } from "@/lib/invoice-due-date";
 import {
   canCancelInvoice as canCancelInvoiceStatus,
   canDeleteInvoice as canDeleteInvoiceStatus,
@@ -111,7 +112,7 @@ export async function createNextInvoiceNumber(tx: DbTransaction, orgId: string) 
   let number: string;
 
   // Skip over numbers that already exist (e.g. cancelled invoices)
-  do {
+  for (;;) {
     number = formatInvoiceNumber({
       digits: organization.invoiceDigits,
       number: sequenceNumber,
@@ -125,9 +126,11 @@ export async function createNextInvoiceNumber(tx: DbTransaction, orgId: string) 
       .where(and(eq(invoices.orgId, orgId), eq(invoices.number, number)))
       .limit(1);
 
-    if (!existing) break;
+    if (!existing) {
+      break;
+    }
     sequenceNumber++;
-  } while (true);
+  }
 
   await tx
     .update(orgs)
@@ -324,6 +327,55 @@ export async function updateInvoice(
     invoiceId,
     success: true,
   };
+}
+
+export async function changeInvoiceDueDate(
+  context: InvoiceServiceContext,
+  invoiceId: string,
+  dueAt: string,
+): Promise<InvoiceMutationResult> {
+  const invoice = await getOwnedInvoice(context.orgId, invoiceId);
+  if (!invoice) {
+    return { error: "Invoice not found" };
+  }
+  let update: ReturnType<typeof resolveDueDateChange>;
+  try {
+    update = resolveDueDateChange({
+      dueAt,
+      issuedAt: invoice.issuedAt,
+      role: context.role,
+      status: invoice.status,
+    });
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : "Invalid due date" };
+  }
+  if (invoice.dueAt === dueAt) {
+    return { invoiceId, success: true };
+  }
+  return db.transaction(async (tx) => {
+    const [changed] = await tx
+      .update(invoices)
+      .set({ ...update, updatedAt: new Date() })
+      .where(
+        and(
+          eq(invoices.id, invoiceId),
+          eq(invoices.orgId, context.orgId),
+          eq(invoices.status, invoice.status ?? "draft"),
+          eq(invoices.dueAt, invoice.dueAt),
+          eq(invoices.issuedAt, invoice.issuedAt),
+        ),
+      )
+      .returning({ id: invoices.id });
+    if (!changed) {
+      return { error: "Invoice changed. Refresh and try again." };
+    }
+    await tx.insert(activityLog).values({
+      action: "due_date_changed",
+      invoiceId,
+      metadata: { dueAt, previousDueAt: invoice.dueAt, userId: context.userId },
+    });
+    return { invoiceId, success: true };
+  });
 }
 
 export async function deleteInvoice(

@@ -1,11 +1,12 @@
 import { input } from "@inquirer/prompts";
+import { readFile } from "node:fs/promises";
 import type { Command } from "commander";
 
 import type { ClientCreateInput } from "@nota-app/sdk";
 
 import { requireClient, resolveClientReference } from "../helpers.js";
 import { printClientDetail, printClientList } from "../output/clients.js";
-import { printSuccess } from "../output/shared.js";
+import { printSuccess, printTable } from "../output/shared.js";
 
 async function buildClientInput(options: {
   address?: string;
@@ -69,9 +70,43 @@ async function listClientsCommand(options: { search?: string }) {
 export function registerClientCommands(program: Command) {
   const clients = program.command("clients").description("Manage clients");
 
-  clients.option("--search <query>", "Filter by name, email, or company").action(async (...args) => {
-    await listClientsCommand(getCommandOptions(args));
-  });
+  clients
+    .command("import")
+    .argument("<file>", "UTF-8 client CSV")
+    .description("Preview a client CSV; import only with the reviewed preview hash")
+    .option("--confirm <hash>", "Import the exact reviewed preview")
+    .action(async (file: string, options: { confirm?: string }) => {
+      const client = await requireClient();
+      const csv = await readFile(file, "utf8");
+      if (options.confirm) {
+        const result = await client.importClientsCsv(csv, options.confirm);
+        printSuccess(
+          `Added ${result.added} clients; skipped ${result.counts.duplicate} duplicates and ${result.counts.invalid} invalid rows.`,
+        );
+        return;
+      }
+      const preview = await client.previewClientsCsv(csv);
+      printTable(
+        ["Line", "Name", "Email", "Action", "Reason"],
+        preview.rows.map((row) => [
+          String(row.line),
+          row.client.name ?? "",
+          row.client.email ?? "",
+          row.status,
+          row.reason ?? "",
+        ]),
+      );
+      printSuccess(`${preview.counts.ready} clients ready. Preview hash: ${preview.hash}`);
+      printSuccess(
+        "After reviewing, rerun with --confirm <hash> to add them. Existing clients stay intact.",
+      );
+    });
+
+  clients
+    .option("--search <query>", "Filter by name, email, or company")
+    .action(async (...args) => {
+      await listClientsCommand(getCommandOptions(args));
+    });
 
   clients
     .command("list")

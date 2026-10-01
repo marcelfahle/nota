@@ -1,6 +1,8 @@
 .env
+.vercel/
 .DS_Store
 node_modules
+.nota/
 apps/*/node_modules
 apps/*/.next
 apps/*/.vercel
@@ -9,6 +11,7 @@ apps/*/dist
 apps/*/build
 apps/*/coverage
 apps/*/playwright-report
+.playwright-mcp/
 apps/*/test-results
 apps/*/*.tsbuildinfo
 apps/*/next-env.d.ts

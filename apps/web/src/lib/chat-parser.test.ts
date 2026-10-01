@@ -7,6 +7,47 @@ import {
 } from "@/lib/chat-parser";
 
 describe("resolveChatInvoiceLineItems", () => {
+  test("updates the copied service month without changing the work or price", () => {
+    expect(
+      resolveChatInvoiceLineItems({
+        serviceMonth: "2026-09",
+        templateLineItems: [
+          {
+            description: "Video Streaming & Server Betreuung - July 2026",
+            quantity: 1,
+            unitPrice: 1000,
+          },
+        ],
+      }),
+    ).toEqual([
+      {
+        description: "Video Streaming & Server Betreuung - September 2026",
+        quantity: 1,
+        unitPrice: 1000,
+      },
+    ]);
+  });
+
+  test("keeps German billing language and infers the year from the issue date", () => {
+    expect(
+      resolveChatInvoiceLineItems({
+        issuedAt: "2027-02-01",
+        serviceMonth: "January",
+        templateLineItems: [
+          { description: "Server Betreuung – Dezember 2026", quantity: 1, unitPrice: 1000 },
+        ],
+      })[0].description,
+    ).toBe("Server Betreuung – Januar 2027");
+  });
+
+  test("adds the requested period to work with no period and leaves explicit work intact", () => {
+    expect(
+      resolveChatInvoiceLineItems({
+        lineItems: [{ description: "Consulting", quantity: 2, unitPrice: 100 }],
+        serviceMonth: "2026-09",
+      })[0].description,
+    ).toBe("Consulting – September 2026");
+  });
   test("parses description-first hour notation", () => {
     expect(
       resolveChatInvoiceLineItems({
@@ -41,9 +82,7 @@ describe("resolveChatInvoiceLineItems", () => {
   });
 
   test("handles EU thousands and decimals", () => {
-    expect(
-      resolveChatInvoiceLineItems({ lineItemsText: "Advisory @ 1.200,50" }),
-    ).toEqual([
+    expect(resolveChatInvoiceLineItems({ lineItemsText: "Advisory @ 1.200,50" })).toEqual([
       {
         description: "Advisory",
         quantity: 1,
@@ -119,9 +158,7 @@ describe("resolveChatInvoiceLineItems", () => {
   });
 
   test("treats a flat total as the invoice total when tax is present", () => {
-    expect(
-      resolveChatInvoiceLineItems({ taxRate: 19, totalAmount: 119 }),
-    ).toEqual([
+    expect(resolveChatInvoiceLineItems({ taxRate: 19, totalAmount: 119 })).toEqual([
       {
         description: "Services",
         quantity: 1,

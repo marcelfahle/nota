@@ -1,7 +1,4 @@
-import {
-  normalizeInvoiceStatus,
-  type InvoiceLifecycleStatus,
-} from "@/lib/invoice-lifecycle";
+import { normalizeInvoiceStatus, type InvoiceLifecycleStatus } from "@/lib/invoice-lifecycle";
 
 export type InvoiceInsightRow = {
   clientId: string | null;
@@ -52,10 +49,7 @@ function daysBetween(from: string, to: Date | string) {
     return null;
   }
 
-  return Math.max(
-    0,
-    Math.round((toDate.getTime() - fromDate.getTime()) / 86_400_000),
-  );
+  return Math.max(0, Math.round((toDate.getTime() - fromDate.getTime()) / 86_400_000));
 }
 
 function createStatusCounts(): Record<InvoiceLifecycleStatus, number> {
@@ -89,8 +83,7 @@ export function summarizeInvoiceRows(
     const status = normalizeInvoiceStatus(row.status);
     const amount = getAmount(row.total);
     const currency = (row.currency || "EUR").toUpperCase();
-    const bucket =
-      currencies.get(currency) ?? createCurrencyAccumulator(currency);
+    const bucket = currencies.get(currency) ?? createCurrencyAccumulator(currency);
     currencies.set(currency, bucket);
     statusCounts[status] += 1;
 
@@ -151,8 +144,7 @@ export function summarizeInvoiceRows(
 
     const amount = getAmount(row.total);
     const currency = (row.currency || "EUR").toUpperCase();
-    const bucket =
-      currencies.get(currency) ?? createCurrencyAccumulator(currency);
+    const bucket = currencies.get(currency) ?? createCurrencyAccumulator(currency);
     currencies.set(currency, bucket);
     bucket.collected += amount;
 
@@ -168,31 +160,22 @@ export function summarizeInvoiceRows(
         averageDaysToPay:
           bucket.averageDaysToPayValues.length > 0
             ? round(
-                bucket.averageDaysToPayValues.reduce(
-                  (sum, value) => sum + value,
-                  0,
-                ) / bucket.averageDaysToPayValues.length,
+                bucket.averageDaysToPayValues.reduce((sum, value) => sum + value, 0) /
+                  bucket.averageDaysToPayValues.length,
               )
             : null,
         averageIssuedInvoice:
-          bucket.issuedInvoiceCount > 0
-            ? round(bucket.issued / bucket.issuedInvoiceCount)
-            : 0,
+          bucket.issuedInvoiceCount > 0 ? round(bucket.issued / bucket.issuedInvoiceCount) : 0,
         collected: round(bucket.collected),
         collectionRate:
-          bucket.issued > 0
-            ? round((bucket.cohortCollected / bucket.issued) * 100)
-            : 0,
+          bucket.issued > 0 ? round((bucket.cohortCollected / bucket.issued) * 100) : 0,
         currency: bucket.currency,
         draft: round(bucket.draft),
         issued: round(bucket.issued),
         outstanding: round(bucket.outstanding),
         overdue: round(bucket.overdue),
         topClients: [...bucket.clients.values()]
-          .sort(
-            (a, b) =>
-              b.issued - a.issued || a.clientName.localeCompare(b.clientName),
-          )
+          .sort((a, b) => b.issued - a.issued || a.clientName.localeCompare(b.clientName))
           .slice(0, 5)
           .map((client) => ({
             ...client,

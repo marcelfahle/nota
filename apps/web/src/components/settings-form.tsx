@@ -404,7 +404,10 @@ function BankAccountFormFields({
       return;
     }
     const result = validateIban(formState.iban);
-    setFormState((s) => ({ ...s, ibanError: result.valid ? null : (result.error ?? "Invalid IBAN") }));
+    setFormState((s) => ({
+      ...s,
+      ibanError: result.valid ? null : (result.error ?? "Invalid IBAN"),
+    }));
   };
 
   return (
@@ -438,7 +441,9 @@ function BankAccountFormFields({
             <input
               checked={formState.accountType === "freeform"}
               name="accountType"
-              onChange={() => setFormState((s) => ({ ...s, accountType: "freeform", ibanError: null }))}
+              onChange={() =>
+                setFormState((s) => ({ ...s, accountType: "freeform", ibanError: null }))
+              }
               type="radio"
               value="freeform"
             />
@@ -455,7 +460,9 @@ function BankAccountFormFields({
               id={`${idPrefix}-iban`}
               name="iban"
               onBlur={handleIbanBlur}
-              onChange={(e) => setFormState((s) => ({ ...s, iban: e.target.value, ibanError: null }))}
+              onChange={(e) =>
+                setFormState((s) => ({ ...s, iban: e.target.value, ibanError: null }))
+              }
               placeholder="DE89 3704 0044 0532 0130 00"
               required
               value={formState.iban}

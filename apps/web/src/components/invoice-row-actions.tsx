@@ -14,12 +14,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
-import {
-  duplicateInvoice,
-  markInvoicePaid,
-  sendInvoice,
-  sendReminder,
-} from "@/actions/invoices";
+import { duplicateInvoice, markInvoicePaid, sendInvoice, sendReminder } from "@/actions/invoices";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -118,16 +113,13 @@ function runInvoiceAction(action: ConfirmAction, invoiceId: string) {
 
 export function InvoiceRowActions({ invoice, role }: InvoiceRowActionsProps) {
   const router = useRouter();
-  const [confirmAction, setConfirmAction] = useState<ConfirmAction | null>(
-    null,
-  );
+  const [confirmAction, setConfirmAction] = useState<ConfirmAction | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pendingAction, setPendingAction] = useState<string | null>(null);
   const status = normalizeInvoiceStatus(invoice.status);
 
   const canSend = status === "draft" && canSendInvoiceRole(role);
-  const canMarkPaid =
-    canMarkInvoicePaidRole(role) && canMarkInvoicePaidStatus(status);
+  const canMarkPaid = canMarkInvoicePaidRole(role) && canMarkInvoicePaidStatus(status);
   const canRemind =
     canSendInvoiceReminderRole(role) &&
     canSendInvoiceReminderStatus(status, Boolean(invoice.stripePaymentLinkUrl));
@@ -183,12 +175,7 @@ export function InvoiceRowActions({ invoice, role }: InvoiceRowActionsProps) {
           data-testid={`invoice-actions-${invoice.id}`}
         >
           {primaryAction === "edit" ? (
-            <Button
-              asChild
-              className="min-h-11 sm:min-h-8"
-              size="sm"
-              variant="ghost"
-            >
+            <Button asChild className="min-h-11 sm:min-h-8" size="sm" variant="ghost">
               <Link href={`/invoices/${invoice.id}/edit`}>
                 <Pencil />
                 Edit
@@ -267,9 +254,7 @@ export function InvoiceRowActions({ invoice, role }: InvoiceRowActionsProps) {
                 </DropdownMenuItem>
               )}
               {canMarkPaid && primaryAction !== "mark-paid" && (
-                <DropdownMenuItem
-                  onSelect={() => setConfirmAction("mark-paid")}
-                >
+                <DropdownMenuItem onSelect={() => setConfirmAction("mark-paid")}>
                   <CheckCircle2 />
                   Mark as paid
                 </DropdownMenuItem>
@@ -307,10 +292,7 @@ export function InvoiceRowActions({ invoice, role }: InvoiceRowActionsProps) {
                 </DialogDescription>
               </DialogHeader>
               {error ? (
-                <p
-                  className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700"
-                  role="alert"
-                >
+                <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700" role="alert">
                   {error}
                 </p>
               ) : null}
@@ -322,10 +304,7 @@ export function InvoiceRowActions({ invoice, role }: InvoiceRowActionsProps) {
                 >
                   Review invoice
                 </Button>
-                <Button
-                  disabled={pendingAction !== null}
-                  onClick={runConfirmedAction}
-                >
+                <Button disabled={pendingAction !== null} onClick={runConfirmedAction}>
                   {pendingAction === confirmAction
                     ? "Working…"
                     : CONFIRM_COPY[confirmAction].confirmLabel}

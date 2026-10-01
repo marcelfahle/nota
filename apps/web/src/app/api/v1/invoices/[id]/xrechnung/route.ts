@@ -3,6 +3,7 @@ import { and, asc, eq } from "drizzle-orm";
 import { error, requireAuth } from "@/lib/api-response";
 import { db } from "@/lib/db";
 import { bankAccounts, clients, invoices, lineItems } from "@/lib/db/schema";
+import { buildInvoiceFilename } from "@/lib/invoice-filename";
 import { generateXRechnung } from "@/lib/xrechnung";
 
 export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -96,11 +97,19 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     },
   });
 
-  const safeFilename = invoice.number.replaceAll("/", "-");
+  const filename = buildInvoiceFilename(
+    {
+      clientName: client.name,
+      issuedAt: invoice.issuedAt,
+      lineItems: items,
+      number: invoice.number,
+    },
+    "xml",
+  );
 
   return new Response(xml, {
     headers: {
-      "Content-Disposition": `attachment; filename="${safeFilename}.xml"`,
+      "Content-Disposition": `attachment; filename="${filename}"`,
       "Content-Type": "application/xml",
     },
   });

@@ -6,14 +6,8 @@ import { getInvoiceList } from "@/lib/api-invoices";
 import type { AuthenticatedUserContext } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { clients, invoices, invoiceStatusEnum } from "@/lib/db/schema";
-import {
-  listInvoicesForExport,
-  MAX_INVOICE_ARCHIVE_SIZE,
-} from "@/lib/invoice-export";
-import {
-  summarizeInvoiceRows,
-  type InvoiceInsightRow,
-} from "@/lib/invoice-insights";
+import { listInvoicesForExport, MAX_INVOICE_ARCHIVE_SIZE } from "@/lib/invoice-export";
+import { summarizeInvoiceRows, type InvoiceInsightRow } from "@/lib/invoice-insights";
 import {
   buildInvoiceArchiveFilename,
   buildInvoiceArchiveUrl,
@@ -76,8 +70,7 @@ async function loadInvoiceInsightRows(
     period: InvoicePeriod;
   },
 ) {
-  const dateColumn =
-    input.dateBasis === "paid" ? invoices.paidAt : invoices.issuedAt;
+  const dateColumn = input.dateBasis === "paid" ? invoices.paidAt : invoices.issuedAt;
   const clauses = [eq(invoices.orgId, orgId)];
   if (input.clientId) {
     clauses.push(eq(invoices.clientId, input.clientId));
@@ -104,18 +97,11 @@ async function loadInvoiceInsightRows(
       total: invoices.total,
     })
     .from(invoices)
-    .leftJoin(
-      clients,
-      and(eq(clients.id, invoices.clientId), eq(clients.orgId, orgId)),
-    )
+    .leftJoin(clients, and(eq(clients.id, invoices.clientId), eq(clients.orgId, orgId)))
     .where(and(...clauses));
 }
 
-async function loadPeriodSummary(
-  orgId: string,
-  period: InvoicePeriod,
-  clientId?: string,
-) {
+async function loadPeriodSummary(orgId: string, period: InvoicePeriod, clientId?: string) {
   const [issuedRows, collectionRows] = await Promise.all([
     loadInvoiceInsightRows(orgId, { clientId, period }),
     loadInvoiceInsightRows(orgId, {
@@ -137,12 +123,7 @@ export function createInvoiceInsightTools(
   auth: ChatToolContext,
   dependencies: InsightToolDependencies,
 ) {
-  const {
-    isClientResolutionError,
-    listClientsForOrg,
-    resolveClient,
-    withRetry,
-  } = dependencies;
+  const { isClientResolutionError, listClientsForOrg, resolveClient, withRetry } = dependencies;
 
   /* eslint-disable perfectionist/sort-objects -- Keep the export and related financial read tools in task order. */
   return {
@@ -172,10 +153,7 @@ export function createInvoiceInsightTools(
               if (isClientResolutionError(error)) {
                 return {
                   kind: "needs-input",
-                  message:
-                    error instanceof Error
-                      ? error.message
-                      : "Which client do you mean?",
+                  message: error instanceof Error ? error.message : "Which client do you mean?",
                 };
               }
               throw error;
@@ -234,34 +212,33 @@ export function createInvoiceInsightTools(
       description: "Get current invoice and client stats for the workspace.",
       execute: () =>
         withRetry(async () => {
-          const [statusRows, recentInvoices, clientList, [clientCount]] =
-            await Promise.all([
-              db
-                .select({
-                  count: sql<number>`count(*)::int`,
-                  status: invoices.status,
-                })
-                .from(invoices)
-                .where(eq(invoices.orgId, auth.org.id))
-                .groupBy(invoices.status),
-              db
-                .select({
-                  currency: invoices.currency,
-                  id: invoices.id,
-                  number: invoices.number,
-                  status: invoices.status,
-                  total: invoices.total,
-                })
-                .from(invoices)
-                .where(eq(invoices.orgId, auth.org.id))
-                .orderBy(desc(invoices.createdAt))
-                .limit(5),
-              listClientsForOrg(auth.org.id, undefined, 5),
-              db
-                .select({ count: sql<number>`count(*)::int` })
-                .from(clients)
-                .where(eq(clients.orgId, auth.org.id)),
-            ]);
+          const [statusRows, recentInvoices, clientList, [clientCount]] = await Promise.all([
+            db
+              .select({
+                count: sql<number>`count(*)::int`,
+                status: invoices.status,
+              })
+              .from(invoices)
+              .where(eq(invoices.orgId, auth.org.id))
+              .groupBy(invoices.status),
+            db
+              .select({
+                currency: invoices.currency,
+                id: invoices.id,
+                number: invoices.number,
+                status: invoices.status,
+                total: invoices.total,
+              })
+              .from(invoices)
+              .where(eq(invoices.orgId, auth.org.id))
+              .orderBy(desc(invoices.createdAt))
+              .limit(5),
+            listClientsForOrg(auth.org.id, undefined, 5),
+            db
+              .select({ count: sql<number>`count(*)::int` })
+              .from(clients)
+              .where(eq(clients.orgId, auth.org.id)),
+          ]);
 
           const counts = {
             cancelled: 0,
@@ -299,10 +276,7 @@ export function createInvoiceInsightTools(
             if (isClientResolutionError(error)) {
               return {
                 kind: "needs-input",
-                message:
-                  error instanceof Error
-                    ? error.message
-                    : "Which client do you mean?",
+                message: error instanceof Error ? error.message : "Which client do you mean?",
               };
             }
             throw error;
@@ -314,10 +288,7 @@ export function createInvoiceInsightTools(
           } catch (error) {
             return {
               kind: "needs-input",
-              message:
-                error instanceof Error
-                  ? error.message
-                  : "I need a valid date range.",
+              message: error instanceof Error ? error.message : "I need a valid date range.",
             };
           }
 
@@ -370,10 +341,7 @@ export function createInvoiceInsightTools(
           } catch (error) {
             return {
               kind: "needs-input",
-              message:
-                error instanceof Error
-                  ? error.message
-                  : "I need a valid date range.",
+              message: error instanceof Error ? error.message : "I need a valid date range.",
             };
           }
 
@@ -385,19 +353,14 @@ export function createInvoiceInsightTools(
               if (isClientResolutionError(error)) {
                 return {
                   kind: "needs-input",
-                  message:
-                    error instanceof Error
-                      ? error.message
-                      : "Which client do you mean?",
+                  message: error instanceof Error ? error.message : "Which client do you mean?",
                 };
               }
               throw error;
             }
           }
 
-          const previousPeriod = input.comparePrevious
-            ? getPreviousInvoicePeriod(period)
-            : null;
+          const previousPeriod = input.comparePrevious ? getPreviousInvoicePeriod(period) : null;
           const [current, previous] = await Promise.all([
             loadPeriodSummary(auth.org.id, period, client?.id),
             previousPeriod
@@ -406,9 +369,7 @@ export function createInvoiceInsightTools(
           ]);
 
           return {
-            client: client
-              ? { email: client.email, id: client.id, name: client.name }
-              : undefined,
+            client: client ? { email: client.email, id: client.id, name: client.name } : undefined,
             comparison:
               previousPeriod && previous
                 ? { period: previousPeriod, summary: previous.summary }

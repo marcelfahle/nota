@@ -5,7 +5,7 @@ import { InvoicePdf } from "@/components/invoice-pdf";
 import { getPdfLogoSrc } from "@/lib/branding";
 import { db } from "@/lib/db";
 import { bankAccounts, clients, invoices, lineItems } from "@/lib/db/schema";
-import { buildInvoicePdfFilename } from "@/lib/invoice-period";
+import { buildInvoiceFilename } from "@/lib/invoice-filename";
 
 export type InvoicePdfOrg = {
   businessAddress: string | null;
@@ -69,12 +69,7 @@ export async function renderInvoicePdfForOrg(
         iban: bankAccounts.iban,
       })
       .from(bankAccounts)
-      .where(
-        and(
-          eq(bankAccounts.id, client.bankAccountId),
-          eq(bankAccounts.orgId, org.id),
-        ),
-      )
+      .where(and(eq(bankAccounts.id, client.bankAccountId), eq(bankAccounts.orgId, org.id)))
       .limit(1);
     bankAccount = assignedAccount ?? null;
   }
@@ -87,17 +82,13 @@ export async function renderInvoicePdfForOrg(
         iban: bankAccounts.iban,
       })
       .from(bankAccounts)
-      .where(
-        and(eq(bankAccounts.orgId, org.id), eq(bankAccounts.isDefault, true)),
-      )
+      .where(and(eq(bankAccounts.orgId, org.id), eq(bankAccounts.isDefault, true)))
       .limit(1);
     bankAccount = defaultAccount ?? null;
   }
 
   const logoSrc =
-    options.logoSrc === undefined
-      ? await getPdfLogoSrc(org.logoUrl)
-      : options.logoSrc;
+    options.logoSrc === undefined ? await getPdfLogoSrc(org.logoUrl) : options.logoSrc;
   const buffer = await renderToBuffer(
     InvoicePdf({
       business: {
@@ -141,11 +132,15 @@ export async function renderInvoicePdfForOrg(
   return {
     buffer: new Uint8Array(buffer),
     clientName: client.name,
-    filename: buildInvoicePdfFilename({
-      clientName: client.name,
-      issuedAt: invoice.issuedAt,
-      number: invoice.number,
-    }),
+    filename: buildInvoiceFilename(
+      {
+        clientName: client.name,
+        issuedAt: invoice.issuedAt,
+        lineItems: items,
+        number: invoice.number,
+      },
+      "pdf",
+    ),
     invoiceNumber: invoice.number,
   };
 }

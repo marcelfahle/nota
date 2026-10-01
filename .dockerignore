@@ -1,0 +1,11 @@
+.git
+**/node_modules
+**/.next
+**/.vercel
+**/dist
+**/.env*
+**/.nota
+**/test-results
+**/playwright-report
+.playwright-mcp
+thoughts

@@ -46,5 +46,18 @@ jobs:
       - name: MCP tests
         run: bun run test:mcp
 
+      - name: Install browser for fixture tests
+        working-directory: apps/web
+        run: bunx playwright install --with-deps chromium
+
+      - name: CSV and OAuth browser regressions
+        run: bun run test:e2e:web client-import.e2e.ts oauth-connect.e2e.ts
+        env:
+          # All HTTP is intercepted or served by local fixtures; no Next server or live secrets.
+          PLAYWRIGHT_BASE_URL: http://127.0.0.1:3001
+
       - name: Web build
         run: bun run build:web
+        env:
+          # Build-time database initialization only; no live credentials.
+          DATABASE_URL: postgresql://ci:ci@127.0.0.1:5432/nota_ci

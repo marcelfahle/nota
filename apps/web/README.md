@@ -84,7 +84,7 @@ Open `http://localhost:3000/login`.
 ### Recommended
 
 - `RESEND_FROM_EMAIL`: branded sender, for example `Your Business <billing@example.com>`
-- `NOTA_CHAT_MODEL`: override the default Anthropic model used by `/api/chat`
+- `NOTA_CHAT_MODEL`: override the default `claude-sonnet-5-5` model used by `/api/chat` (adaptive thinking, low effort)
 
 ## Branding assets
 
@@ -107,6 +107,14 @@ Open `http://localhost:3000/login`.
 - the current auth model assumes one active workspace per user and uses the first membership returned by `org_members`
 
 ## API
+
+### Client CSV migration
+
+Open Nota Chat and attach or drop a UTF-8 `.csv` client export. Nota matches common billing columns, shows the new clients, duplicates, and rows needing attention, then saves only when you click **Add clients**. Existing records remain intact. The import does not create invoices or send emails, and parsing does not call a model.
+
+Supports comma, semicolon, and tab separators; company/contact names, email, billing address, currency, VAT number, and notes. Email plus a name/company is required. Duplicate emails are skipped. Unused columns are listed for review. Files are limited to 250 KB and 1,000 rows per batch. Invoice-history exports are a separate future import.
+
+The same service is available through `POST /api/v1/clients/import`, the SDK, MCP's `preview_clients_csv`/`import_clients_csv`, and `nota clients import clients.csv`. A changed client list requires a refreshed preview before committing.
 
 - create API keys in Settings
 - REST API reference: [docs/api.md](./docs/api.md)

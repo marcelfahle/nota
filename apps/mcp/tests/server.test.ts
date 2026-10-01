@@ -131,7 +131,7 @@ function getInvoiceSummaryRows(status?: string | null, search?: string | null) {
 
 beforeAll(() => {
   server = Bun.serve({
-    fetch(request) {
+    async fetch(request) {
       if (!requireBearer(request)) {
         return json({ error: "Unauthorized" }, 401);
       }
@@ -141,6 +141,35 @@ beforeAll(() => {
 
       if (path === "/api/v1/me") {
         return json({ data: { org, role: "owner", user } });
+      }
+
+      if (path === "/api/v1/clients/import" && request.method === "POST") {
+        const body = await request.json();
+        if (body.mode === "preview") {
+          return json({
+            data: {
+              columns: [{ field: "email", header: "Email" }],
+              counts: { duplicate: 0, invalid: 0, ready: 1, total: 1 },
+              hash: "f".repeat(64),
+              ignoredColumns: [],
+              rows: [
+                {
+                  client: { email: "new@client.test", name: "New Client" },
+                  line: 2,
+                  status: "ready",
+                },
+              ],
+            },
+          });
+        }
+        if (body.previewHash !== "f".repeat(64)) return json({ error: "Preview changed" }, 409);
+        return json({
+          data: {
+            added: 1,
+            counts: { duplicate: 0, invalid: 0, ready: 1, total: 1 },
+            stale: false,
+          },
+        });
       }
 
       if (path === "/api/v1/clients" && request.method === "GET") {
@@ -155,7 +184,10 @@ beforeAll(() => {
             .some((value) => value.toLowerCase().includes(search));
         });
 
-        return json({ data, pagination: { page: 1, perPage: data.length || 1, total: data.length } });
+        return json({
+          data,
+          pagination: { page: 1, perPage: data.length || 1, total: data.length },
+        });
       }
 
       if (path === "/api/v1/clients" && request.method === "POST") {
@@ -181,7 +213,10 @@ beforeAll(() => {
         const status = url.searchParams.get("status");
         const search = url.searchParams.get("search");
         const data = getInvoiceSummaryRows(status, search);
-        return json({ data, pagination: { page: 1, perPage: data.length || 1, total: data.length } });
+        return json({
+          data,
+          pagination: { page: 1, perPage: data.length || 1, total: data.length },
+        });
       }
 
       if (path === "/api/v1/invoices" && request.method === "POST") {
@@ -216,12 +251,14 @@ beforeAll(() => {
               email: "billing@acme.test",
               defaultCurrency: "EUR",
             },
-            lineItems: (body.lineItems as Array<Record<string, number | string>>).map((lineItem) => ({
-              amount: String((Number(lineItem.quantity) * Number(lineItem.unitPrice)).toFixed(2)),
-              description: String(lineItem.description),
-              quantity: Number(lineItem.quantity).toFixed(2),
-              unitPrice: Number(lineItem.unitPrice).toFixed(2),
-            })),
+            lineItems: (body.lineItems as Array<Record<string, number | string>>).map(
+              (lineItem) => ({
+                amount: String((Number(lineItem.quantity) * Number(lineItem.unitPrice)).toFixed(2)),
+                description: String(lineItem.description),
+                quantity: Number(lineItem.quantity).toFixed(2),
+                unitPrice: Number(lineItem.unitPrice).toFixed(2),
+              }),
+            ),
             activityLog: [],
           };
           invoiceDetails.set(invoiceId, detail);
@@ -229,12 +266,36 @@ beforeAll(() => {
         });
       }
 
-      if (path.startsWith("/api/v1/invoices/") && request.method === "GET" && path.endsWith("/pdf")) {
+      if (
+        path.startsWith("/api/v1/invoices/") &&
+        request.method === "GET" &&
+        path.endsWith("/pdf")
+      ) {
         return new Response(new Uint8Array([1, 2, 3, 4]), {
           headers: {
-            "content-disposition": 'attachment; filename="INV-0001.pdf"',
+            "content-disposition": 'attachment; filename="inv-0001-acme-2026-03-06.pdf"',
             "content-type": "application/pdf",
           },
+        });
+      }
+
+      if (path.endsWith("/xrechnung") && request.method === "GET") {
+        return new Response("<Invoice/>", {
+          headers: {
+            "content-disposition": 'attachment; filename="inv-0001-acme-2026-03-06.xml"',
+            "content-type": "application/xml",
+          },
+        });
+      }
+
+      if (path.endsWith("/due-date") && request.method === "PATCH") {
+        return request.json().then((body) => {
+          const invoiceId = path.split("/").at(-2)!;
+          const invoice = invoiceDetails.get(invoiceId);
+          if (!invoice) return json({ error: "Invoice not found" }, 404);
+          const updated = { ...invoice, dueAt: body.dueAt };
+          invoiceDetails.set(invoiceId, updated);
+          return json({ data: updated });
         });
       }
 
@@ -244,7 +305,10 @@ beforeAll(() => {
         return invoice ? json({ data: invoice }) : json({ error: "Invoice not found" }, 404);
       }
 
-      if (path.match(/^\/api\/v1\/invoices\/[^/]+\/(send|remind|mark-paid|cancel|duplicate)$/) && request.method === "POST") {
+      if (
+        path.match(/^\/api\/v1\/invoices\/[^/]+\/(send|remind|mark-paid|cancel|duplicate)$/) &&
+        request.method === "POST"
+      ) {
         const [, , , , invoiceId, action] = path.split("/");
         const invoice = invoiceDetails.get(invoiceId);
         if (!invoice) {
@@ -266,7 +330,11 @@ beforeAll(() => {
 
         if (action === "duplicate") {
           const duplicatedId = `inv_${++latestInvoiceId}`;
-          invoiceDetails.set(duplicatedId, { ...updated, id: duplicatedId, number: `INV-000${latestInvoiceId}` });
+          invoiceDetails.set(duplicatedId, {
+            ...updated,
+            id: duplicatedId,
+            number: `INV-000${latestInvoiceId}`,
+          });
           return json({ data: invoiceDetails.get(duplicatedId) }, 201);
         }
 
@@ -308,6 +376,8 @@ describe("nota MCP server", () => {
       expect.arrayContaining([
         "list_clients",
         "create_client",
+        "preview_clients_csv",
+        "import_clients_csv",
         "list_invoices",
         "create_invoice",
         "get_invoice",
@@ -321,7 +391,38 @@ describe("nota MCP server", () => {
     );
 
     const resources = await client.listResources();
-    expect(resources.resources.some((resource) => resource.uri === "nota://invoices/summary")).toBe(true);
+    const csvPreview = await client.callTool({
+      name: "preview_clients_csv",
+      arguments: { csv: "Name,Email\nNew Client,new@client.test" },
+    });
+    expect(csvPreview.structuredContent?.hash).toBe("f".repeat(64));
+    const missingHash = await client.callTool({
+      name: "import_clients_csv",
+      arguments: { csv: "Name,Email\nNew Client,new@client.test" },
+    });
+    expect(missingHash.isError).toBe(true);
+    const imported = await client.callTool({
+      name: "import_clients_csv",
+      arguments: { csv: "Name,Email\nNew Client,new@client.test", previewHash: "f".repeat(64) },
+    });
+    expect(imported.structuredContent?.added).toBe(1);
+    const stale = await client.callTool({
+      name: "import_clients_csv",
+      arguments: { csv: "Name,Email\nNew Client,new@client.test", previewHash: "a".repeat(64) },
+    });
+    expect(stale.isError).toBe(true);
+    expect(resources.resources.some((resource) => resource.uri === "nota://invoices/summary")).toBe(
+      true,
+    );
+    const invoiceTool = tools.tools.find((tool) => tool.name === "get_invoice");
+    expect(invoiceTool?._meta?.ui).toEqual({ resourceUri: "ui://nota/invoices.html" });
+    expect(invoiceTool?.annotations?.readOnlyHint).toBe(true);
+    expect(
+      tools.tools.find((tool) => tool.name === "send_invoice")?.annotations?.openWorldHint,
+    ).toBe(true);
+    const card = await client.readResource({ uri: "ui://nota/invoices.html" });
+    expect(card.contents[0]?.mimeType).toBe("text/html;profile=mcp-app");
+    expect(card.contents[0]?.text).toContain("Invoice workspace");
 
     const templates = await client.listResourceTemplates();
     expect(templates.resourceTemplates.map((template) => template.uriTemplate)).toEqual(
@@ -365,6 +466,28 @@ describe("nota MCP server", () => {
     });
     expect(getInvoiceResult.isError).toBeFalsy();
     expect(JSON.stringify(getInvoiceResult.structuredContent)).toContain("INV-0001");
+    const shortReference = await client.callTool({
+      name: "get_invoice",
+      arguments: { invoiceNumber: "1" },
+    });
+    expect(shortReference.isError).toBeFalsy();
+    expect(JSON.stringify(shortReference.structuredContent)).toContain("INV-0001");
+
+    const dueDate = await client.callTool({
+      name: "change_invoice_due_date",
+      arguments: { invoiceNumber: "1", dueAt: "2026-10-08" },
+    });
+    expect(dueDate.isError).toBeFalsy();
+    expect((dueDate.structuredContent?.invoice as { dueAt: string }).dueAt).toBe("2026-10-08");
+    expect(invoiceDetails.get("inv_1")?.lineItems[0]?.description).toBe("Design work");
+    expect(invoiceDetails.get("inv_1")?.total).toBe("1500.00");
+
+    const history = await client.callTool({
+      name: "get_client_billing_history",
+      arguments: { clientName: "Acme" },
+    });
+    expect(history.isError).toBeFalsy();
+    expect(JSON.stringify(history.structuredContent)).toContain("Design work");
 
     const readSummary = await client.readResource({ uri: "nota://invoices/summary" });
     expect(readSummary.contents[0]?.text).toContain('"totalInvoices"');
@@ -378,6 +501,14 @@ describe("nota MCP server", () => {
     });
     expect(downloadResult.isError).toBeFalsy();
     expect(JSON.stringify(downloadResult.structuredContent)).toContain("pdfBase64");
+    const xml = await client.callTool({ name: "download_xml", arguments: { invoiceNumber: "1" } });
+    expect(xml.isError).toBeFalsy();
+    expect(xml.structuredContent?.filename).toBe("inv-0001-acme-2026-03-06.xml");
+    expect(xml.structuredContent?.xmlBase64).toBe(Buffer.from("<Invoice/>").toString("base64"));
+
+    const overviewResult = await client.callTool({ name: "invoice_overview", arguments: {} });
+    expect(overviewResult.isError).toBeFalsy();
+    expect(JSON.stringify(overviewResult.structuredContent)).toContain("totalInvoices");
 
     await client.close();
   });
@@ -403,7 +534,9 @@ describe("nota MCP server", () => {
       arguments: {},
     });
     expect(unauthorizedResult.isError).toBe(true);
-    expect(JSON.stringify(unauthorizedResult.content)).toContain("Nota API error (401): Unauthorized");
+    expect(JSON.stringify(unauthorizedResult.content)).toContain(
+      "Nota API error (401): Unauthorized",
+    );
 
     await client.close();
 
