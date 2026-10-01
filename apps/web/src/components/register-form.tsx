@@ -20,21 +20,25 @@ export function RegisterForm({ invite }: { invite?: RegisterInvite | null }) {
   const [pending, setPending] = useState(false);
   const isInviteFlow = Boolean(invite);
 
-  // The new user joins an open invite for their email, or gets their own
-  // workspace (see joinOrCreateWorkspace in better-auth.ts).
+  // With an invite token the user joins that workspace; otherwise they get
+  // their own (see joinOrCreateWorkspace in better-auth.ts).
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
     setPending(true);
     setError(null);
 
-    const { data, error: signUpError } = await authClient.signUp.email({
+    // Better Auth's sign-up accepts extra fields. The invite link's token is the
+    // proof of access to that workspace.
+    const signUp = {
       email: String(form.get("email") ?? "")
         .trim()
         .toLowerCase(),
+      inviteToken: invite?.token,
       name: String(form.get("name") ?? "").trim(),
       password: String(form.get("password") ?? ""),
-    });
+    };
+    const { data, error: signUpError } = await authClient.signUp.email(signUp);
 
     if (signUpError) {
       setPending(false);
@@ -42,9 +46,11 @@ export function RegisterForm({ invite }: { invite?: RegisterInvite | null }) {
         signUpError.code === "USER_ALREADY_EXISTS" ||
           signUpError.code === "USER_ALREADY_EXISTS_USE_ANOTHER_EMAIL"
           ? "An account already exists for that email"
-          : signUpError.code === "PASSWORD_TOO_SHORT"
-            ? "Password must be at least 8 characters"
-            : (signUpError.message ?? "Could not create your account"),
+          : signUpError.status === 400 && invite
+            ? "This invite link is invalid, expired, or for a different email"
+            : signUpError.code === "PASSWORD_TOO_SHORT"
+              ? "Password must be at least 8 characters"
+              : (signUpError.message ?? "Could not create your account"),
       );
       return;
     }

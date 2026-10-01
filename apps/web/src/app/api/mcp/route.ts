@@ -11,10 +11,23 @@ import { auth } from "@/lib/better-auth";
 // (rewritten here) and on mcp.withnota.com. Stateless: one server per request.
 const handleMcp = requireMcpAuth(
   auth,
-  async (request) => {
-    // The REST API accepts the same audience-bound access token, so tools act
-    // with exactly this user's workspace and role.
-    const token = request.headers.get("authorization")?.replace(/^Bearer\s+/i, "") ?? "";
+  async (request, claims) => {
+    if (typeof claims.sub !== "string") {
+      return new Response(null, { status: 401 });
+    }
+    // Never forward the client's credential (a DPoP proof binds to this request
+    // only). Tools call the REST API with a short-lived token for the verified
+    // user, so they act with exactly that user's workspace and role.
+    const { token } = await auth.api.signJWT({
+      body: {
+        payload: {
+          aud: getMcpResource(),
+          exp: Math.floor(Date.now() / 1000) + 5 * 60,
+          scope: typeof claims.scope === "string" ? claims.scope : undefined,
+          sub: claims.sub,
+        },
+      },
+    });
     const server = createNotaMcpServer(createRemoteNotaClient(getAuthIssuer(), token), {
       invoiceAppHtml,
     });

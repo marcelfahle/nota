@@ -3,9 +3,10 @@ import { fetchClientMetadataResource } from "@better-auth/cimd/node";
 import { mcp } from "@better-auth/mcp";
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
+import { APIError } from "better-auth/api";
 import { nextCookies } from "better-auth/next-js";
 import { jwt } from "better-auth/plugins";
-import { and, desc, eq, gt, isNull } from "drizzle-orm";
+import { and, eq, gt, isNull } from "drizzle-orm";
 
 import { PasswordResetEmail } from "@/emails/password-reset";
 import { DEFAULT_FROM_EMAIL } from "@/lib/app-brand";
@@ -35,20 +36,32 @@ import { hashPassword, verifyPassword } from "@/lib/password";
 const env = getBetterAuthEnv();
 const appUrl = getAuthIssuer();
 
-async function joinOrCreateWorkspace(user: { email: string; id: string; name: string }) {
-  // An open invite for this email wins; otherwise the user gets their own workspace.
+/** The invite token from the sign-up body; the invite link is the proof of access. */
+export function inviteTokenFrom(context: { body?: unknown } | null | undefined) {
+  const body = context?.body;
+  if (body && typeof body === "object" && "inviteToken" in body) {
+    const token = body.inviteToken;
+    return typeof token === "string" && token.length > 0 ? token : undefined;
+  }
+  return undefined;
+}
+
+async function findInviteFor(email: string, token: string) {
   const [invite] = await db
     .select()
     .from(invites)
     .where(
-      and(
-        eq(invites.email, user.email.toLowerCase()),
-        isNull(invites.acceptedAt),
-        gt(invites.expiresAt, new Date()),
-      ),
+      and(eq(invites.token, token), isNull(invites.acceptedAt), gt(invites.expiresAt, new Date())),
     )
-    .orderBy(desc(invites.createdAt))
     .limit(1);
+  return invite && invite.email === email.toLowerCase() ? invite : null;
+}
+
+async function joinOrCreateWorkspace(
+  user: { email: string; id: string; name: string },
+  inviteToken?: string,
+) {
+  const invite = inviteToken ? await findInviteFor(user.email, inviteToken) : null;
 
   await db.transaction(async (tx) => {
     if (invite) {
@@ -93,8 +106,17 @@ export const auth = betterAuth({
   databaseHooks: {
     user: {
       create: {
-        after: async (user) => {
-          await joinOrCreateWorkspace(user);
+        after: async (user, context) => {
+          await joinOrCreateWorkspace(user, inviteTokenFrom(context));
+        },
+        // Reject a bad invite before the account exists, as the old sign-up did.
+        before: async (user, context) => {
+          const token = inviteTokenFrom(context);
+          if (token && !(await findInviteFor(user.email, token))) {
+            throw new APIError("BAD_REQUEST", {
+              message: "This invite link is invalid, expired, or for a different email.",
+            });
+          }
         },
       },
     },
@@ -134,7 +156,7 @@ export const auth = betterAuth({
     cimd({ fetchClientMetadataResource, metadataProfile: "mcp-2026-07-28" }),
     nextCookies(),
   ],
-  secret: env.BETTER_AUTH_SECRET ?? env.SESSION_SECRET,
+  secret: env.BETTER_AUTH_SECRET ?? env.AUTH_SECRET ?? env.SESSION_SECRET,
   session: {
     expiresIn: 60 * 60 * 24 * 30,
     updateAge: 60 * 60 * 24,

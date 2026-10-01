@@ -29,13 +29,19 @@ export const getAuthEnv = createEnvGetter(
 );
 
 export const getBetterAuthEnv = createEnvGetter(
-  nodeEnvSchema.extend({
-    APP_URL: z.url("APP_URL must be a valid absolute URL"),
-    // Falls back to SESSION_SECRET so existing deployments need no new secret.
-    BETTER_AUTH_SECRET: z.string().min(32).optional(),
-    MCP_RESOURCE_URL: z.url("MCP_RESOURCE_URL must be a valid absolute URL").optional(),
-    SESSION_SECRET: z.string().min(32).optional(),
-  }),
+  nodeEnvSchema
+    .extend({
+      APP_URL: z.url("APP_URL must be a valid absolute URL"),
+      AUTH_SECRET: z.string().min(32).optional(),
+      BETTER_AUTH_SECRET: z.string().min(32).optional(),
+      MCP_RESOURCE_URL: z.url("MCP_RESOURCE_URL must be a valid absolute URL").optional(),
+      // Existing deployments reuse SESSION_SECRET; no new secret needed.
+      SESSION_SECRET: z.string().min(32).optional(),
+    })
+    // Never fall back to Better Auth's built-in default secret.
+    .refine((env) => env.BETTER_AUTH_SECRET || env.AUTH_SECRET || env.SESSION_SECRET, {
+      message: "Set BETTER_AUTH_SECRET, AUTH_SECRET or SESSION_SECRET (32+ characters)",
+    }),
 );
 
 export const getEmailEnv = createEnvGetter(
