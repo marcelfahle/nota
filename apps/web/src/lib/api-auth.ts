@@ -1,10 +1,12 @@
 import { createHash, randomBytes } from "node:crypto";
 
+import { verifyBearerToken } from "better-auth/oauth2";
 import { and, eq } from "drizzle-orm";
 
-import type { AuthenticatedRole } from "@/lib/auth";
+import { getAuthIssuer, getMcpResource } from "@/lib/auth-config";
 import { db } from "@/lib/db";
 import { apiKeys, orgMembers, orgs, users } from "@/lib/db/schema";
+import { getUserContextById, type AuthenticatedRole } from "@/lib/user-context";
 
 const API_KEY_PREFIX = "nota_";
 const API_KEY_PREFIX_LENGTH = 8;
@@ -15,7 +17,8 @@ type OrgRecord = typeof orgs.$inferSelect;
 type UserRecord = typeof users.$inferSelect;
 
 export type ApiRequestAuthContext = {
-  apiKey: ApiKeyRecord;
+  /** The `nota_` key used, or null for an OAuth access token (ChatGPT, Claude). */
+  apiKey: ApiKeyRecord | null;
   org: OrgRecord;
   role: AuthenticatedRole;
   user: UserRecord;
@@ -81,12 +84,42 @@ export async function createApiKey(orgId: string, userId: string, name: string) 
   };
 }
 
+/**
+ * OAuth access tokens are JWTs that Better Auth issues to MCP clients, bound to
+ * the MCP resource. The MCP route forwards them here unchanged.
+ */
+async function authenticateOAuthToken(token: string): Promise<ApiRequestAuthContext | null> {
+  let userId: string | undefined;
+  try {
+    const claims = await verifyBearerToken(token, {
+      jwksUrl: `${getAuthIssuer()}/api/auth/jwks`,
+      verifyOptions: { audience: getMcpResource(), issuer: getAuthIssuer() },
+    });
+    userId = typeof claims.sub === "string" ? claims.sub : undefined;
+  } catch {
+    return null;
+  }
+  if (!userId) {
+    return null;
+  }
+
+  const context = await getUserContextById(userId);
+  if (!context) {
+    return null;
+  }
+
+  return { apiKey: null, org: context.org, role: context.role, user: context.user };
+}
+
 export async function authenticateApiRequest(
   request: Request,
 ): Promise<ApiRequestAuthContext | null> {
   const token = getBearerToken(request);
-  if (!token || !token.startsWith(API_KEY_PREFIX)) {
+  if (!token) {
     return null;
+  }
+  if (!token.startsWith(API_KEY_PREFIX)) {
+    return authenticateOAuthToken(token);
   }
 
   const keyHash = hashApiKey(token);

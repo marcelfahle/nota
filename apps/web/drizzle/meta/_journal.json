@@ -57,6 +57,13 @@
       "when": 1773637713149,
       "tag": "0007_structured_bank_accounts",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1790826230577,
+      "tag": "0008_better-auth-oauth",
+      "breakpoints": true
     }
   ]
 }

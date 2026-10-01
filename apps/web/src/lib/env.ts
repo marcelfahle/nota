@@ -28,6 +28,16 @@ export const getAuthEnv = createEnvGetter(
   }),
 );
 
+export const getBetterAuthEnv = createEnvGetter(
+  nodeEnvSchema.extend({
+    APP_URL: z.url("APP_URL must be a valid absolute URL"),
+    // Falls back to SESSION_SECRET so existing deployments need no new secret.
+    BETTER_AUTH_SECRET: z.string().min(32).optional(),
+    MCP_RESOURCE_URL: z.url("MCP_RESOURCE_URL must be a valid absolute URL").optional(),
+    SESSION_SECRET: z.string().min(32).optional(),
+  }),
+);
+
 export const getEmailEnv = createEnvGetter(
   z.object({
     RESEND_API_KEY: z.string().min(1, "RESEND_API_KEY is required"),

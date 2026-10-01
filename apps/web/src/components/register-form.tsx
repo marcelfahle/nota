@@ -1,11 +1,12 @@
 "use client";
 
-import { useActionState } from "react";
+import { useState, type FormEvent } from "react";
 
-import { register } from "@/actions/auth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { authClient } from "@/lib/auth-client";
+import { continueAfterAuth } from "@/lib/auth-redirect";
 
 type RegisterInvite = {
   email: string;
@@ -15,11 +16,44 @@ type RegisterInvite = {
 };
 
 export function RegisterForm({ invite }: { invite?: RegisterInvite | null }) {
-  const [state, action, pending] = useActionState(register, null);
+  const [error, setError] = useState<string | null>(null);
+  const [pending, setPending] = useState(false);
   const isInviteFlow = Boolean(invite);
 
+  // The new user joins an open invite for their email, or gets their own
+  // workspace (see joinOrCreateWorkspace in better-auth.ts).
+  async function onSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    setPending(true);
+    setError(null);
+
+    const { data, error: signUpError } = await authClient.signUp.email({
+      email: String(form.get("email") ?? "")
+        .trim()
+        .toLowerCase(),
+      name: String(form.get("name") ?? "").trim(),
+      password: String(form.get("password") ?? ""),
+    });
+
+    if (signUpError) {
+      setPending(false);
+      setError(
+        signUpError.code === "USER_ALREADY_EXISTS" ||
+          signUpError.code === "USER_ALREADY_EXISTS_USE_ANOTHER_EMAIL"
+          ? "An account already exists for that email"
+          : signUpError.code === "PASSWORD_TOO_SHORT"
+            ? "Password must be at least 8 characters"
+            : (signUpError.message ?? "Could not create your account"),
+      );
+      return;
+    }
+
+    continueAfterAuth(data);
+  }
+
   return (
-    <form action={action} className="space-y-4" data-testid="register-form">
+    <form className="space-y-4" data-testid="register-form" onSubmit={onSubmit}>
       {invite ? (
         <div
           className="rounded-xl border border-zinc-200 bg-zinc-50 px-4 py-3 text-left"
@@ -32,8 +66,6 @@ export function RegisterForm({ invite }: { invite?: RegisterInvite | null }) {
           </p>
         </div>
       ) : null}
-
-      {invite ? <input name="invite" type="hidden" value={invite.token} /> : null}
 
       <div className="space-y-2">
         <Label htmlFor="name">Name</Label>
@@ -70,13 +102,14 @@ export function RegisterForm({ invite }: { invite?: RegisterInvite | null }) {
           autoComplete="new-password"
           data-testid="register-password"
           id="password"
+          minLength={8}
           name="password"
           required
           type="password"
         />
       </div>
 
-      {state?.error ? <p className="text-sm text-red-500">{state.error}</p> : null}
+      {error ? <p className="text-sm text-red-500">{error}</p> : null}
 
       <Button className="w-full" data-testid="register-submit" disabled={pending} type="submit">
         {pending ? "Creating..." : invite ? "Accept Invite" : "Create account"}

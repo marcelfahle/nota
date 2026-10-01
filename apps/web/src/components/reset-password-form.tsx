@@ -1,32 +1,57 @@
 "use client";
 
-import { useActionState } from "react";
+import { useState, type FormEvent } from "react";
 
-import { resetPassword } from "@/actions/auth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { authClient } from "@/lib/auth-client";
 
 export function ResetPasswordForm({ token }: { token: string }) {
-  const [state, action, pending] = useActionState(resetPassword, null);
+  const [error, setError] = useState<string | null>(null);
+  const [pending, setPending] = useState(false);
+
+  async function onSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    setPending(true);
+    setError(null);
+
+    // Resetting also signs out every other session for this account.
+    const { error: resetError } = await authClient.resetPassword({
+      newPassword: String(form.get("password") ?? ""),
+      token,
+    });
+
+    if (resetError) {
+      setPending(false);
+      setError(
+        resetError.code === "PASSWORD_TOO_SHORT"
+          ? "Password must be at least 8 characters"
+          : "Reset link is invalid or expired",
+      );
+      return;
+    }
+
+    window.location.assign("/login?reset=1");
+  }
 
   return (
-    <form action={action} className="space-y-4">
-      <input name="token" type="hidden" value={token} />
-
+    <form className="space-y-4" onSubmit={onSubmit}>
       <div className="space-y-2">
         <Label htmlFor="password">New password</Label>
         <Input
           autoComplete="new-password"
           autoFocus
           id="password"
+          minLength={8}
           name="password"
           required
           type="password"
         />
       </div>
 
-      {state?.error ? <p className="text-sm text-red-500">{state.error}</p> : null}
+      {error ? <p className="text-sm text-red-500">{error}</p> : null}
 
       <Button className="w-full" disabled={pending} type="submit">
         {pending ? "Updating..." : "Update password"}

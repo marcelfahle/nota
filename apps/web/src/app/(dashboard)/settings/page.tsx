@@ -3,12 +3,13 @@ import { asc, desc, eq } from "drizzle-orm";
 import { logout } from "@/actions/auth";
 import { listMembers } from "@/actions/members";
 import { ApiKeysSettings } from "@/components/api-keys-settings";
+import { ConnectedAppsSettings } from "@/components/connected-apps-settings";
 import { SettingsForm } from "@/components/settings-form";
 import { TeamSettings } from "@/components/team-settings";
 import { Button } from "@/components/ui/button";
 import { getCurrentUser } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { apiKeys, bankAccounts, invoices } from "@/lib/db/schema";
+import { apiKeys, bankAccounts, invoices, oauthClients, oauthConsents } from "@/lib/db/schema";
 import { getInviteLink } from "@/lib/invites";
 import {
   canManageApiKeys,
@@ -47,6 +48,17 @@ export default async function SettingsPage() {
         .orderBy(desc(apiKeys.createdAt))
     : [];
 
+  const connectedApps = await db
+    .select({
+      clientId: oauthConsents.clientId,
+      connectedAt: oauthConsents.createdAt,
+      name: oauthClients.name,
+    })
+    .from(oauthConsents)
+    .innerJoin(oauthClients, eq(oauthClients.clientId, oauthConsents.clientId))
+    .where(eq(oauthConsents.userId, user.id))
+    .orderBy(desc(oauthConsents.createdAt));
+
   const teamData = canManageMembers(role) ? await listMembers() : null;
 
   const settings = {
@@ -80,6 +92,8 @@ export default async function SettingsPage() {
           lastIssuedNumber={lastInvoice?.number ?? null}
           settings={settings}
         />
+
+        <ConnectedAppsSettings apps={connectedApps} />
 
         {canManageApiKeys(role) ? <ApiKeysSettings apiKeys={apiKeyRecords} /> : null}
 

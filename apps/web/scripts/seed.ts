@@ -2,12 +2,10 @@
 import { randomBytes, scrypt } from "node:crypto";
 import { promisify } from "node:util";
 
-import { Pool } from "@neondatabase/serverless";
-import { eq } from "drizzle-orm";
-import { drizzle } from "drizzle-orm/neon-serverless";
+import { and, eq } from "drizzle-orm";
 
-import { orgMembers, orgs, users } from "../src/lib/db/schema";
-import { getDbEnv } from "../src/lib/env";
+import { db } from "../src/lib/db";
+import { accounts, orgMembers, orgs, users } from "../src/lib/db/schema";
 
 const scryptAsync = promisify(scrypt);
 
@@ -20,9 +18,6 @@ async function hashPassword(password: string): Promise<string> {
 function getWorkspaceName(name: string) {
   return `${name}'s Workspace`;
 }
-
-const pool = new Pool({ connectionString: getDbEnv().DATABASE_URL });
-const db = drizzle({ client: pool });
 
 const email = process.env.SEED_EMAIL || "admin@nota.app";
 const name = process.env.SEED_NAME || "Admin";
@@ -52,6 +47,17 @@ const [user] = await db.transaction(async (tx) => {
         })
         .returning({ id: users.id });
 
+  // Better Auth reads the password from the credential account.
+  await tx
+    .delete(accounts)
+    .where(and(eq(accounts.userId, savedUser.id), eq(accounts.providerId, "credential")));
+  await tx.insert(accounts).values({
+    accountId: savedUser.id,
+    password: passwordHash,
+    providerId: "credential",
+    userId: savedUser.id,
+  });
+
   const [existingMembership] = await tx
     .select({ id: orgMembers.id })
     .from(orgMembers)
@@ -76,8 +82,7 @@ const [user] = await db.transaction(async (tx) => {
   return [savedUser];
 });
 
-await pool.end();
-
 console.log(`Seeded login email: ${email}`);
 console.log(`Seeded user id: ${user.id}`);
 console.log("Seeded password from SEED_PASSWORD or default value.");
+process.exit(0);

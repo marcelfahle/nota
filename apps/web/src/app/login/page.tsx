@@ -1,30 +1,76 @@
 "use client";
 
 import Link from "next/link";
-import { useActionState } from "react";
+import { useSearchParams } from "next/navigation";
+import { Suspense, useState, type FormEvent } from "react";
 
-import { login } from "@/actions/auth";
 import { AuthShell } from "@/components/auth-shell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { authClient } from "@/lib/auth-client";
+import { continueAfterAuth } from "@/lib/auth-redirect";
 
 export default function LoginPage() {
-  const [state, action, pending] = useActionState(login, null);
+  return (
+    <Suspense>
+      <LoginForm />
+    </Suspense>
+  );
+}
+
+function LoginForm() {
+  const searchParams = useSearchParams();
+  const [error, setError] = useState<string | null>(null);
+  const [pending, setPending] = useState(false);
+  // Keep a pending ChatGPT/Claude authorization when switching to sign-up.
+  const query = searchParams.toString();
+  const registerHref = query ? `/register?${query}` : "/register";
+  const notice =
+    searchParams.get("reset") === "1" ? "Password updated. Sign in with your new password." : null;
+
+  async function onSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    setPending(true);
+    setError(null);
+
+    const { data, error: signInError } = await authClient.signIn.email({
+      email: String(form.get("email") ?? "")
+        .trim()
+        .toLowerCase(),
+      password: String(form.get("password") ?? ""),
+    });
+
+    if (signInError) {
+      setPending(false);
+      setError(
+        signInError.status === 429
+          ? "Too many attempts. Try again in a minute."
+          : "Invalid email or password",
+      );
+      return;
+    }
+
+    continueAfterAuth(data);
+  }
 
   return (
     <AuthShell
       subtitle={
         <>
           New here?{" "}
-          <Link className="font-medium text-zinc-900 underline underline-offset-4" href="/register">
+          <Link
+            className="font-medium text-zinc-900 underline underline-offset-4"
+            href={registerHref}
+          >
             Create an account
           </Link>
         </>
       }
       title="Sign in"
     >
-      <form action={action} className="space-y-4" data-testid="login-form">
+      <form className="space-y-4" data-testid="login-form" onSubmit={onSubmit}>
         <div className="space-y-2">
           <Label htmlFor="email">Email</Label>
           <Input
@@ -50,7 +96,8 @@ export default function LoginPage() {
           />
         </div>
 
-        {state?.error && <p className="text-sm text-red-500">{state.error}</p>}
+        {notice && <p className="text-sm text-emerald-600">{notice}</p>}
+        {error && <p className="text-sm text-red-500">{error}</p>}
 
         <Button className="w-full" data-testid="login-submit" disabled={pending} type="submit">
           {pending ? "Signing in..." : "Sign in"}

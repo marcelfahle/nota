@@ -25,6 +25,20 @@
   "bin": {
     "nota-mcp": "dist/index.js"
   },
+  "exports": {
+    "./client": {
+      "types": "./dist/client.d.ts",
+      "import": "./dist/client.js"
+    },
+    "./invoice-app-html": {
+      "types": "./dist/invoice-app-html.d.ts",
+      "import": "./dist/invoice-app-html.js"
+    },
+    "./server": {
+      "types": "./dist/server.d.ts",
+      "import": "./dist/server.js"
+    }
+  },
   "scripts": {
     "dev": "bun run build && bun run src/index.ts",
     "build": "bun run --cwd ../../packages/sdk build && rm -rf dist && tsc -p tsconfig.json && node scripts/build-ui.mjs && chmod +x dist/index.js",
