@@ -59,5 +59,7 @@ jobs:
       - name: Web build
         run: bun run build:web
         env:
-          # Build-time database initialization only; no live credentials.
+          # Build-time module initialization (database, auth config) only; no live credentials.
+          APP_URL: http://localhost:3000
           DATABASE_URL: postgresql://ci:ci@127.0.0.1:5432/nota_ci
+          SESSION_SECRET: ci-build-only-secret-not-used-at-runtime

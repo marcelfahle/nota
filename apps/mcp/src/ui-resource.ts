@@ -4,7 +4,7 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 
 export const invoiceUiMeta = { ui: { resourceUri: "ui://nota/invoices.html" } };
 
-export function registerInvoiceUi(server: McpServer) {
+export function registerInvoiceUi(server: McpServer, html?: string) {
   registerAppResource(
     server,
     "invoice-workspace",
@@ -18,7 +18,7 @@ export function registerInvoiceUi(server: McpServer) {
         {
           uri: uri.href,
           mimeType: RESOURCE_MIME_TYPE,
-          text: readFileSync(new URL("../dist/invoice-app.html", import.meta.url), "utf8"),
+          text: html ?? readFileSync(new URL("../dist/invoice-app.html", import.meta.url), "utf8"),
           _meta: { ui: { csp: { connectDomains: [], resourceDomains: [] }, prefersBorder: true } },
         },
       ],

@@ -1,16 +1,44 @@
 "use client";
 
 import Link from "next/link";
-import { useActionState } from "react";
+import { useState, type FormEvent } from "react";
 
-import { requestPasswordReset } from "@/actions/auth";
 import { AuthShell } from "@/components/auth-shell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { authClient } from "@/lib/auth-client";
 
 export default function ForgotPasswordPage() {
-  const [state, action, pending] = useActionState(requestPasswordReset, null);
+  const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
+  const [pending, setPending] = useState(false);
+
+  async function onSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    setPending(true);
+    setError(null);
+
+    const { error: requestError } = await authClient.requestPasswordReset({
+      email: String(form.get("email") ?? "")
+        .trim()
+        .toLowerCase(),
+      redirectTo: "/reset-password",
+    });
+
+    setPending(false);
+    if (requestError) {
+      setError(
+        requestError.status === 429
+          ? "Too many attempts. Try again in a minute."
+          : "Could not send a reset link. Try again.",
+      );
+      return;
+    }
+
+    setSuccess("If that account exists, a password reset link has been sent.");
+  }
 
   return (
     <AuthShell
@@ -21,14 +49,14 @@ export default function ForgotPasswordPage() {
       }
       title="Reset password"
     >
-      <form action={action} className="space-y-4">
+      <form className="space-y-4" onSubmit={onSubmit}>
         <div className="space-y-2">
           <Label htmlFor="email">Email</Label>
           <Input autoComplete="email" autoFocus id="email" name="email" required type="email" />
         </div>
 
-        {state?.error ? <p className="text-sm text-red-500">{state.error}</p> : null}
-        {state?.success ? <p className="text-sm text-emerald-600">{state.success}</p> : null}
+        {error ? <p className="text-sm text-red-500">{error}</p> : null}
+        {success ? <p className="text-sm text-emerald-600">{success}</p> : null}
 
         <Button className="w-full" disabled={pending} type="submit">
           {pending ? "Sending..." : "Send reset link"}

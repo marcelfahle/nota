@@ -1,11 +1,17 @@
+import { getSessionCookie } from "better-auth/cookies";
 import { NextRequest, NextResponse } from "next/server";
 
 const PUBLIC_PATHS = [
+  "/.well-known",
+  "/api/auth",
   "/api/cron",
+  "/api/mcp",
   "/api/v1",
   "/api/webhooks",
   "/forgot-password",
   "/login",
+  "/mcp",
+  "/oauth",
   "/register",
   "/reset-password",
 ];
@@ -17,11 +23,9 @@ export function proxy(request: NextRequest) {
     return NextResponse.next();
   }
 
-  const session = request.cookies.get("session")?.value;
-
-  if (!session || !session.includes(".")) {
-    const loginUrl = new URL("/login", request.url);
-    return NextResponse.redirect(loginUrl);
+  // Optimistic cookie check only; pages verify the session against the database.
+  if (!getSessionCookie(request)) {
+    return NextResponse.redirect(new URL("/login", request.url));
   }
 
   return NextResponse.next();
