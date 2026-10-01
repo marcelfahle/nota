@@ -28,6 +28,8 @@ node apps/mcp/dist/http.js
 
 Use your own URLs. `NOTA_MCP_PUBLIC_URL` is the public origin, without `/mcp`; connect your AI client to `https://mcp.your-domain.example/mcp`. The reverse proxy must preserve the public Host header and forward requests to port 3100. Health check: `/health`. OAuth discovery, registration, PKCE, token refresh, and revocation are included.
 
+For a single trusted reverse proxy, set `NOTA_TRUST_PROXY_HOPS=1` so rate limits use the client IP. The default is `0` for direct connections. Keep port 3100 private and match this count to your deployment's proxy chain; the supplied Compose configuration sets it for Caddy.
+
 Run **one server process** with a persistent volume. This encrypted file store does not support multiple replicas or ephemeral serverless storage. Keep the encryption secret stable across restarts and back it up separately from the encrypted file. Losing it requires reconnecting users. Never put keys or this state file in source control.
 
 In Claude, add that URL as a custom connector. In ChatGPT, enable Developer Mode where available and add the remote MCP URL as an app. The OAuth browser page asks for a dedicated Nota API key created in Nota Settings → API Keys. The assistant receives OAuth tokens; the underlying Nota key stays encrypted on the MCP server. Delete the dedicated Nota key to revoke the connection. Workspace and role permissions remain enforced by Nota.

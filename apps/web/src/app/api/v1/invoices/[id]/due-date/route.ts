@@ -2,6 +2,7 @@ import { z } from "zod";
 
 import { error, json, requireAuth } from "@/lib/api-response";
 import { changeInvoiceDueDate, getInvoiceDetail } from "@/lib/invoice-service";
+import { getInsufficientPermissionsError } from "@/lib/roles";
 
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const authResult = await requireAuth(request);
@@ -23,7 +24,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   );
   if ("error" in result) {
     const statuses: Record<string, number> = {
-      "Insufficient permissions": 403,
+      [getInsufficientPermissionsError()]: 403,
       "Invoice changed. Refresh and try again.": 409,
       "Invoice not found": 404,
     };

@@ -5,6 +5,8 @@ services:
       dockerfile: apps/mcp/Dockerfile
     container_name: nota-mcp
     env_file: .env
+    environment:
+      NOTA_TRUST_PROXY_HOPS: "1"
     restart: unless-stopped
     expose:
       - "3100"

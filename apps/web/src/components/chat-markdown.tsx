@@ -22,6 +22,7 @@ export function ChatMarkdown({ children }: { children: string }) {
             </div>
           ),
         }}
+        disallowedElements={["img"]}
         remarkPlugins={[remarkGfm]}
         skipHtml
       >

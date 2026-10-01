@@ -1,5 +1,7 @@
 import { expect, mock, test } from "bun:test";
 
+import { getInsufficientPermissionsError } from "@/lib/roles";
+
 let serviceResult: { error: string } | { invoiceId: string; success: true } = {
   invoiceId: "inv_1",
   success: true,
@@ -45,7 +47,7 @@ test("due date API passes workspace and role to the shared service", async () =>
 });
 test("due date API distinguishes forbidden, missing, and concurrent changes", async () => {
   for (const [error, status] of [
-    ["Insufficient permissions", 403],
+    [getInsufficientPermissionsError(), 403],
     ["Invoice not found", 404],
     ["Invoice changed. Refresh and try again.", 409],
   ] as const) {

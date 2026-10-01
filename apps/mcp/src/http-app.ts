@@ -16,7 +16,11 @@ export function createNotaHttpApp(options: {
   publicUrl: string;
   storeFile: string;
   secret: string;
+  trustProxyHops?: number;
 }) {
+  const trustProxyHops = options.trustProxyHops ?? 0;
+  if (!Number.isInteger(trustProxyHops) || trustProxyHops < 0)
+    throw new Error("NOTA_TRUST_PROXY_HOPS must be a non-negative integer.");
   const issuer = new URL(options.publicUrl);
   if (issuer.pathname !== "/" || issuer.search || issuer.hash || issuer.username || issuer.password)
     throw new Error("NOTA_MCP_PUBLIC_URL must be an origin without a path or credentials.");
@@ -33,6 +37,7 @@ export function createNotaHttpApp(options: {
     options.secret,
   );
   const app = createMcpExpressApp({ host: "0.0.0.0", allowedHosts: [issuer.hostname] });
+  app.set("trust proxy", trustProxyHops);
   app.disable("x-powered-by");
   app.use((_req, res, next) => {
     res.setHeader("Cache-Control", "no-store");

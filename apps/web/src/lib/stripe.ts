@@ -2,7 +2,12 @@ import Stripe from "stripe";
 
 import { getStripeEnv } from "@/lib/env";
 
-export const stripe = new Stripe(getStripeEnv().STRIPE_SECRET_KEY);
+let client: Stripe | undefined;
+
+function getStripe() {
+  client ??= new Stripe(getStripeEnv().STRIPE_SECRET_KEY);
+  return client;
+}
 
 export async function createPaymentLink(invoice: {
   currency: string | null;
@@ -10,6 +15,7 @@ export async function createPaymentLink(invoice: {
   number: string;
   total: string | null;
 }) {
+  const stripe = getStripe();
   const amount = Math.round(Number.parseFloat(invoice.total || "0") * 100);
 
   const price = await stripe.prices.create(
@@ -37,5 +43,5 @@ export async function createPaymentLink(invoice: {
 }
 
 export async function deactivatePaymentLink(paymentLinkId: string) {
-  return stripe.paymentLinks.update(paymentLinkId, { active: false });
+  return getStripe().paymentLinks.update(paymentLinkId, { active: false });
 }

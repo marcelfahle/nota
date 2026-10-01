@@ -119,15 +119,25 @@ export class NotaOAuthProvider implements OAuthServerProvider {
     this.checkResource(params.resource);
     if (params.scopes?.some((scope) => scope !== "nota"))
       throw new InvalidRequestError("Unsupported scope.");
+    const redirect = new URL(params.redirectUri);
+    // The SDK validates the registered URI before calling authorize. CSP must
+    // also allow the destination of the consent form's 303 redirect.
+    const redirectSource = ["http:", "https:"].includes(redirect.protocol)
+      ? redirect.origin
+      : redirect.protocol;
+    if (/[\s;'"<>]/u.test(redirectSource))
+      throw new InvalidRequestError("Invalid redirect origin.");
     for (const [key, entry] of this.pending) if (entry.expiresAt <= now()) this.pending.delete(key);
     if (this.pending.size >= 1000) throw new InvalidRequestError("Too many pending connections.");
     const nonce = randomToken();
     this.pending.set(nonce, { client, params, expiresAt: now() + 600 });
     res.setHeader(
       "Content-Security-Policy",
-      "default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'",
+      `default-src 'none'; style-src 'unsafe-inline'; form-action 'self' ${redirectSource}; frame-ancestors 'none'; base-uri 'none'`,
     );
-    res.setHeader("Referrer-Policy", "no-referrer");
+    // Preserve Origin on the same-origin consent POST; omit the referrer when
+    // redirecting to the assistant. no-referrer makes Chromium send Origin: null.
+    res.setHeader("Referrer-Policy", "same-origin");
     res
       .type("html")
       .send(
