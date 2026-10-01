@@ -9,7 +9,7 @@
     "test": "bun test ./src",
     "test:e2e": "playwright test",
     "eval:chat": "bun scripts/eval-invoice-chat.mjs",
-    "tsc": "tsgo",
+    "tsc": "bun run --cwd ../mcp build && tsgo",
     "lint": "oxlint",
     "format": "oxfmt --write .",
     "format:check": "oxfmt --check .",
