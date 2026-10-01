@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# No installs or migrations on wake. Systemd normally restores this already.
+sudo systemctl start postgresql@15-nota
+pg_isready -h 127.0.0.1 -p 5433 -U postgres -d nota_orb

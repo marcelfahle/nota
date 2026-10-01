@@ -1,4 +1,5 @@
 .env
+.amp/portals/*
 .vercel/
 .DS_Store
 node_modules

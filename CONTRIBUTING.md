@@ -24,6 +24,29 @@ bun run db:seed
 bun run dev
 ```
 
+## Amp orbs
+
+`.agents/setup` prepares Bun (from `packageManager`), Node 22 LTS, locked workspace
+dependencies, SDK/MCP build outputs, Playwright Chromium, and a disposable Postgres
+15 database. Amp can snapshot this environment; repeated setup reuses installed
+tools and caches. `.agents/resume` only checks/starts the local database.
+Setup also enables Linux memory overcommit inside the orb so Oxlint's JS plugins
+can reserve their large virtual-memory blocks on small machines without swap.
+
+The local database is `nota_orb` on loopback port 5433, managed by the
+`postgresql@15-nota` systemd service. Setup always migrates this database, never an
+inherited `DATABASE_URL`. It seeds `admin@nota.app` with the development password
+`changeme` only when that user is absent. Local database authentication trusts
+loopback connections, and durability is disabled; never expose it or use it for
+non-disposable data.
+
+Setup creates `apps/web/.env` with local database/auth defaults only if neither
+`.env` nor `.env.local` exists. Existing configuration and injected environment
+variables still control the app, so check the database target before running
+database-backed browser tests. Stripe, Resend, Anthropic, and Blob integrations
+require separate development secrets; setup does not copy credentials into the
+snapshot. After changing dependencies, rerun `.agents/setup`.
+
 ## Before opening a PR
 
 Run the shared checks from the repository root:
