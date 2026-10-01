@@ -52,7 +52,7 @@ test.beforeAll(async () => {
   html = `<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1"><style>${styles.css}</style><style>body{font-family:Arial,sans-serif;background:#fafafa}</style><div id="root"></div><script>${bundle.outputFiles[0].text.replaceAll("</script", String.raw`<\/script`)}</script>`;
 });
 
-async function openChat(page: Page, stale = false) {
+async function openChat(page: Page, stale = false, nonJson?: "preview" | "commit") {
   const requests: Array<{ csv: string; mode: string; previewHash?: string }> = [];
   let existing = [{ email: "billing@acme.test", name: "Acme" }];
   await page.route("**/*", async (route) => {
@@ -60,6 +60,14 @@ async function openChat(page: Page, stale = false) {
     if (request.url().endsWith("/api/clients/import")) {
       const body = request.postDataJSON();
       requests.push(body);
+      if (body.mode === nonJson) {
+        await route.fulfill({
+          body: "<html>Upstream unavailable</html>",
+          contentType: "text/html",
+          status: 503,
+        });
+        return;
+      }
       if (stale && body.mode === "commit") {
         existing = [...existing, { email: "invoice@ranger.test", name: "Ranger GmbH" }];
         await route.fulfill({
@@ -142,6 +150,36 @@ test("chat CSV preview, billing details, explicit import, and receipt work on de
   expect(requests.filter((request) => request.mode === "commit").length).toBe(1);
   await expect(page.getByRole("button", { name: "Attach client CSV" })).toBeEnabled();
 });
+
+for (const mode of ["preview", "commit"] as const) {
+  test(`chat explains a non-JSON ${mode} failure and allows recovery`, async ({ page }) => {
+    const requests = await openChat(page, false, mode);
+    await page.getByTestId("client-csv-input").setInputFiles({
+      buffer: Buffer.from(csv),
+      mimeType: "text/csv",
+      name: "clients.csv",
+    });
+    if (mode === "commit") {
+      await page.getByRole("button", { exact: true, name: "Add 1 client" }).click();
+    }
+    await expect(page.getByRole("alert")).toHaveText(
+      mode === "preview"
+        ? "This file could not be read."
+        : "The import could not finish. Try again.",
+    );
+    if (mode === "commit") {
+      await expect(page.getByRole("button", { exact: true, name: "Add 1 client" })).toBeEnabled();
+    }
+    expect(requests.filter((request) => request.mode === "commit")).toHaveLength(
+      mode === "commit" ? 1 : 0,
+    );
+    await expect(
+      page.getByText("Added", { exact: false }).filter({ has: page.locator("strong") }),
+    ).toHaveCount(0);
+    await page.getByRole("button", { name: "Dismiss CSV import" }).click();
+    await expect(page.getByRole("button", { name: "Attach client CSV" })).toBeEnabled();
+  });
+}
 
 test("chat refreshes a stale import preview without saving and explains invalid files", async ({
   page,

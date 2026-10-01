@@ -15,6 +15,7 @@ const app = createNotaHttpApp({
   notaUrl,
   publicUrl,
   secret,
+  trustProxyHops: Number(process.env.NOTA_TRUST_PROXY_HOPS ?? "0"),
   storeFile: resolve(process.env.NOTA_OAUTH_STORE ?? ".nota/oauth.enc"),
 });
 const listener = app.listen(port, process.env.NOTA_MCP_HOST ?? "127.0.0.1", () => {

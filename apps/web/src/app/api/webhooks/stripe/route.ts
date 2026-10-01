@@ -1,11 +1,11 @@
 import { and, eq, isNull, ne, or } from "drizzle-orm";
 import { NextResponse } from "next/server";
+import Stripe from "stripe";
 
 import { db } from "@/lib/db";
 import { activityLog, invoices, jobs } from "@/lib/db/schema";
 import { getStripeWebhookEnv } from "@/lib/env";
 import { processPendingEmailJobs } from "@/lib/jobs";
-import { stripe } from "@/lib/stripe";
 
 export async function POST(request: Request) {
   const body = await request.text();
@@ -17,7 +17,7 @@ export async function POST(request: Request) {
 
   let event;
   try {
-    event = stripe.webhooks.constructEvent(
+    event = await Stripe.webhooks.constructEventAsync(
       body,
       signature,
       getStripeWebhookEnv().STRIPE_WEBHOOK_SECRET,

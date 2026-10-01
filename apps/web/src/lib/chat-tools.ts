@@ -665,7 +665,7 @@ export function createChatTools(auth: ChatToolContext) {
           try {
             resolvedLineItems = resolveChatInvoiceLineItems({
               issuedAt: dates.issuedAt,
-              serviceMonth: input.serviceMonth ?? input.invoiceMonth,
+              serviceMonth: input.serviceMonth,
               fallbackDescription: input.lineItemDescription,
               lineItems: input.lineItems,
               lineItemsText: input.lineItemsText,

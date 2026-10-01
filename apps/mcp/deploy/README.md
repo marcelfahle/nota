@@ -28,6 +28,8 @@ ssh -i ~/.ssh/id_ed25519_mf2024 -o IdentitiesOnly=yes root@91.99.49.152 \
 
 The Dockerfile uses the root workspace as its build context and installs only the MCP and SDK workspaces. The runtime uses the existing `deploy_default` network. It exposes port 3100 internally; Caddy owns public ports 80 and 443. No schema migration is needed for this release.
 
+Compose sets `NOTA_TRUST_PROXY_HOPS=1` for the single Caddy hop. Caddy supplies the client IP through `X-Forwarded-For`, so OAuth rate limits remain per client. Do not publish port 3100 directly with this setting.
+
 ## Shared Caddy edge
 
 The live file is `/opt/bold_mcp/deploy/Caddyfile`; its source is `~/code/BOLD/code/_lab/bold-mcp/deploy/Caddyfile`. The Nota site was added to both. Preserve every existing Bold/importer/control-panel site. The pre-Nota backup is `/opt/bold_mcp/deploy/Caddyfile.before-nota-20260930`.

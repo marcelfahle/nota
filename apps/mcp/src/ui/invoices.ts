@@ -296,7 +296,7 @@ function detail(invoice: InvoiceDetail) {
   if (invoice.notes) content.append(el("h2", "Notes"), el("p", invoice.notes, "notes"));
   if (invoice.activityLog?.length) {
     const activity = el("ul", undefined, "activity");
-    for (const entry of invoice.activityLog.slice(-5))
+    for (const entry of invoice.activityLog.slice(0, 5))
       activity.append(el("li", `${entry.action.replaceAll("_", " ")} · ${date(entry.createdAt)}`));
     content.append(el("h2", "Activity"), activity);
   }

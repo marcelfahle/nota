@@ -107,6 +107,9 @@ async function connect(apiKey: string) {
   });
   const authorization = await fetch(`${baseUrl}/authorize?${params}`);
   expect(authorization.status).toBe(200);
+  expect(authorization.headers.get("content-security-policy")).toContain(
+    "form-action 'self' http://127.0.0.1;",
+  );
   const nonce = (await authorization.text()).match(/name="nonce" value="([^"]+)"/)?.[1];
   expect(nonce).toBeTruthy();
   const blocked = await form(
@@ -208,4 +211,28 @@ test("remote OAuth provides discovery, PKCE, tenant isolation, refresh rotation,
       })
     ).status,
   ).toBe(401);
+});
+
+test("consent rate limits distinguish client IPs behind one trusted proxy", async () => {
+  const proxyListener = createNotaHttpApp({
+    notaUrl: `http://127.0.0.1:${api.port}`,
+    publicUrl: "http://127.0.0.1",
+    secret,
+    storeFile: join(dir, "proxy-oauth.enc"),
+    trustProxyHops: 1,
+  }).listen(0, "127.0.0.1");
+  await new Promise<void>((resolve) => proxyListener.once("listening", resolve));
+  const address = proxyListener.address() as { port: number };
+  try {
+    const request = (ip: string) => fetch(`http://127.0.0.1:${address.port}/connect`, {
+      method: "POST",
+      headers: { Origin: "http://127.0.0.1", "X-Forwarded-For": ip },
+      body: new URLSearchParams({ nonce: "fixture", apiKey: "invalid" }),
+    });
+    for (let i = 0; i < 30; i++) expect((await request("192.0.2.1")).status).toBe(400);
+    expect((await request("192.0.2.1")).status).toBe(429);
+    expect((await request("192.0.2.2")).status).toBe(400);
+  } finally {
+    await new Promise<void>((resolve) => proxyListener.close(() => resolve()));
+  }
 });

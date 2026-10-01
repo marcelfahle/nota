@@ -47,9 +47,9 @@ export function ChatClientImport({ file, onBusyChange, onComplete, onDismiss }: 
           method: "POST",
           signal: AbortSignal.any([controller.signal, AbortSignal.timeout(30_000)]),
         });
-        const result = await response.json();
-        if (!response.ok) {
-          throw new Error(result.error ?? "This file could not be read.");
+        const result = await response.json().catch(() => null);
+        if (!response.ok || !result?.data) {
+          throw new Error(result?.error ?? "This file could not be read.");
         }
         if (controller.signal.aborted) {
           return;
@@ -89,12 +89,12 @@ export function ChatClientImport({ file, onBusyChange, onComplete, onDismiss }: 
         method: "POST",
         signal: AbortSignal.timeout(30_000),
       });
-      const result = await response.json();
-      if (response.status === 409 && result.data) {
+      const result = await response.json().catch(() => null);
+      if (response.status === 409 && result?.data) {
         setPreview(result.data);
       }
-      if (!response.ok) {
-        throw new Error(result.error ?? "The import could not finish. Try again.");
+      if (!response.ok || !result?.data) {
+        throw new Error(result?.error ?? "The import could not finish. Try again.");
       }
       onComplete(result.data);
     } catch (error) {
