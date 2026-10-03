@@ -25,8 +25,8 @@ describe("invoice lifecycle", () => {
   });
 
   test("sent invoices can be reminded or cancelled", () => {
-    expect(canSendInvoiceReminder("sent", true)).toBe(true);
-    expect(canSendInvoiceReminder("sent", false)).toBe(false);
+    expect(canSendInvoiceReminder("sent")).toBe(true);
+    expect(canSendInvoiceReminder("overdue")).toBe(true);
     expect(canCancelInvoice("sent")).toBe(true);
     expect(canMarkInvoicePaid("sent")).toBe(true);
   });
@@ -45,10 +45,9 @@ describe("invoice lifecycle", () => {
     expect(canDeleteInvoice("overdue")).toBe(false);
   });
 
-  test("send finalization requires a sent status, activity, and payment link", () => {
-    expect(isInvoiceSendFinalized("sent", true, true)).toBe(true);
-    expect(isInvoiceSendFinalized("sent", false, true)).toBe(false);
-    expect(isInvoiceSendFinalized("sent", true, false)).toBe(false);
-    expect(isInvoiceSendFinalized("draft", true, true)).toBe(false);
+  test("bank-transfer invoices finalize after sent activity", () => {
+    expect(isInvoiceSendFinalized("sent", true)).toBe(true);
+    expect(isInvoiceSendFinalized("sent", false)).toBe(false);
+    expect(isInvoiceSendFinalized("draft", true)).toBe(false);
   });
 });

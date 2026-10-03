@@ -81,3 +81,23 @@ export const getAiEnv = createEnvGetter(
     NOTA_CHAT_MODEL: z.string().min(1).default("claude-sonnet-5-5"),
   }),
 );
+
+// Hosted installs must opt into single-account payments explicitly.
+export const getStripeMode = createEnvGetter(
+  z.object({ STRIPE_MODE: z.enum(["connect", "direct"]).default("connect") }),
+);
+
+export const getStripeConnectEnv = createEnvGetter(
+  z.object({ STRIPE_CONNECT_CLIENT_ID: z.string().min(1) }),
+);
+
+export const getStripeConnectWebhookEnv = createEnvGetter(
+  z.object({ STRIPE_CONNECT_WEBHOOK_SECRET: z.string().min(1) }),
+);
+
+export const getStripeBillingEnv = createEnvGetter(
+  z.object({
+    STRIPE_PRICE_MONTHLY: z.string().startsWith("price_"),
+    STRIPE_PRICE_YEARLY: z.string().startsWith("price_"),
+  }),
+);

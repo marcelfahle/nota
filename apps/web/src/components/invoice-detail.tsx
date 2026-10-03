@@ -123,9 +123,7 @@ export function InvoiceDetailView({ activities, invoice, role }: InvoiceDetailPr
   const canManageCancel = canCancelInvoiceRole(role);
   const canManageMarkPaid = canMarkInvoicePaidRole(role);
   const canManageReminders = canSendInvoiceReminderRole(role);
-  const canSendReminder =
-    canManageReminders &&
-    canSendInvoiceReminderStatus(status, Boolean(invoice.stripePaymentLinkUrl));
+  const canSendReminder = canManageReminders && canSendInvoiceReminderStatus(status);
   const canCancel = canManageCancel && canCancelInvoiceStatus(status);
   const canMarkPaid = canManageMarkPaid && canMarkInvoicePaidStatus(status);
 

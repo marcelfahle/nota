@@ -1,6 +1,6 @@
 import Stripe from "stripe";
 
-import { getStripeWebhookEnv } from "@/lib/env";
+import { getStripeConnectWebhookEnv } from "@/lib/env";
 import { handleStripeEvent } from "@/lib/stripe-webhooks";
 
 export async function POST(request: Request) {
@@ -13,13 +13,13 @@ export async function POST(request: Request) {
     event = await Stripe.webhooks.constructEventAsync(
       await request.text(),
       signature,
-      getStripeWebhookEnv().STRIPE_WEBHOOK_SECRET,
+      getStripeConnectWebhookEnv().STRIPE_CONNECT_WEBHOOK_SECRET,
     );
   } catch {
     return Response.json({ error: "Invalid signature" }, { status: 400 });
   }
   try {
-    await handleStripeEvent(event, false);
+    await handleStripeEvent(event, true);
     return Response.json({ received: true });
   } catch {
     return Response.json({ error: "Event processing failed" }, { status: 500 });

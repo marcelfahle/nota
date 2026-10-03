@@ -64,6 +64,27 @@
       "when": 1790826230577,
       "tag": "0008_better-auth-oauth",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1790998158061,
+      "tag": "0009_stripe-connect-billing",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1790998422168,
+      "tag": "0010_billing-checkout-session",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1790998716038,
+      "tag": "0011_invoice-send-usage",
+      "breakpoints": true
     }
   ]
 }

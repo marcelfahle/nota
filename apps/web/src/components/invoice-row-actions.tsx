@@ -120,9 +120,7 @@ export function InvoiceRowActions({ invoice, role }: InvoiceRowActionsProps) {
 
   const canSend = status === "draft" && canSendInvoiceRole(role);
   const canMarkPaid = canMarkInvoicePaidRole(role) && canMarkInvoicePaidStatus(status);
-  const canRemind =
-    canSendInvoiceReminderRole(role) &&
-    canSendInvoiceReminderStatus(status, Boolean(invoice.stripePaymentLinkUrl));
+  const canRemind = canSendInvoiceReminderRole(role) && canSendInvoiceReminderStatus(status);
   const primaryAction = getPrimaryAction(status, canSend, canMarkPaid);
 
   async function runConfirmedAction() {
