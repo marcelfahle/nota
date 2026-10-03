@@ -20,15 +20,24 @@ export type NotaUser = {
 export type NotaOrg = {
   id: string;
   name: string;
+  brandColor?: string | null;
   businessName?: string | null;
   businessAddress?: string | null;
-  vatNumber?: string | null;
-  logoUrl?: string | null;
+  city?: string | null;
+  contactEmail?: string | null;
+  country?: string | null;
   defaultCurrency?: string | null;
+  legalName?: string | null;
+  logoUrl?: string | null;
   invoicePrefix?: string | null;
   invoiceSeparator?: string | null;
   invoiceDigits?: number | null;
   nextInvoiceNumber?: number | null;
+  postalCode?: string | null;
+  region?: string | null;
+  street?: string | null;
+  vatNumber?: string | null;
+  website?: string | null;
 };
 
 export type MeResponse = {
@@ -52,6 +61,10 @@ export type ClientRecord = {
   userId?: string;
   createdAt?: string;
   updatedAt?: string;
+  vatRegistryAddress?: string | null;
+  vatRegistryName?: string | null;
+  vatStatus?: "invalid" | "unavailable" | "valid" | null;
+  vatVerifiedAt?: string | null;
 };
 
 export type ClientCreateInput = {
@@ -88,8 +101,12 @@ export type ClientImportResult = {
 export type InvoiceStatus = "draft" | "sent" | "paid" | "overdue" | "cancelled";
 
 export type InvoiceSummary = {
+  balance: string;
   id: string;
   number: string;
+  paidAmount: string;
+  source?: "api" | "chat" | "cli" | "mcp" | "system" | "web";
+  sourceClient?: string | null;
   status: InvoiceStatus;
   currency: string | null;
   total: string | null;
@@ -119,14 +136,23 @@ export type InvoiceActivity = {
   action: string;
   createdAt: string;
   metadata?: Record<string, unknown> | null;
+  source: "api" | "chat" | "cli" | "mcp" | "system" | "web";
+  sourceClient?: string | null;
 };
 
 export type InvoiceDetail = {
+  balance: string;
+  creditedAmount: string;
   id: string;
+  kind: "credit_note" | "invoice";
   clientId: string;
   userId: string;
   orgId: string;
   number: string;
+  paidAmount: string;
+  settlementStatus: "paid" | "partially_paid" | "unpaid";
+  source: "api" | "chat" | "cli" | "mcp" | "system" | "web";
+  sourceClient?: string | null;
   status: InvoiceStatus;
   currency: string | null;
   subtotal: string | null;
@@ -152,7 +178,17 @@ export type InvoiceDetail = {
     defaultCurrency?: string | null;
   } | null;
   lineItems: Array<InvoiceLineItem>;
+  lastViewedAt: string | null;
   activityLog: Array<InvoiceActivity>;
+  payments: Array<{
+    amount: string;
+    currency: string;
+    id: string;
+    method: "bank_transfer" | "other" | "stripe";
+    note?: string | null;
+    receivedAt: string;
+  }>;
+  viewCount: number;
 };
 
 export type InvoiceLineItemInput = {
@@ -418,6 +454,21 @@ export class NotaClient {
       invoice: response.data,
       warning: response.warning,
     } satisfies InvoiceMutationResponse;
+  }
+
+  async createCreditNote(invoiceId: string) {
+    return this.postInvoiceAction(invoiceId, "credit-note");
+  }
+
+  async recordInvoicePayment(
+    invoiceId: string,
+    input: { amount: number; method?: "bank_transfer" | "other"; note?: string; receivedAt?: string },
+  ) {
+    const response = await this.requestJson<JsonDataResponse<InvoiceDetail>>(
+      `/invoices/${encodeURIComponent(invoiceId)}/payments`,
+      { body: JSON.stringify(input), method: "POST" },
+    );
+    return { invoice: response.data, warning: response.warning } satisfies InvoiceMutationResponse;
   }
 
   async sendInvoice(invoiceId: string) {

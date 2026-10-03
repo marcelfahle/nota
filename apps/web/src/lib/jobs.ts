@@ -15,11 +15,13 @@ import {
   jobs,
   lineItems,
   orgs,
+  proposals,
   users,
 } from "@/lib/db/schema";
 import { getResend } from "@/lib/email";
 import { getEmailEnv } from "@/lib/env";
 import { buildInvoiceFilename } from "@/lib/invoice-filename";
+import { reminderPayloadSchema } from "@/lib/proposal-service";
 
 const JOB_LOCK_TIMEOUT_MS = 1000 * 60 * 10;
 
@@ -30,6 +32,10 @@ type EmailJobType =
 
 type EmailJobPayload = {
   invoiceId: string;
+  proposalId?: string;
+  reminder?: ReturnType<typeof reminderPayloadSchema.parse>;
+  source?: "api" | "chat" | "cli" | "mcp" | "system" | "web";
+  sourceClient?: string | null;
 };
 
 function getRetryDelayMs(attempts: number) {
@@ -37,7 +43,24 @@ function getRetryDelayMs(attempts: number) {
 }
 
 function parseEmailJobPayload(payload: Record<string, unknown>): EmailJobPayload | null {
-  return typeof payload.invoiceId === "string" ? { invoiceId: payload.invoiceId } : null;
+  if (typeof payload.invoiceId !== "string") {
+    return null;
+  }
+  const reminder = reminderPayloadSchema.safeParse(payload.reminder);
+  if (typeof payload.proposalId === "string" && !reminder.success) {
+    return null;
+  }
+  return {
+    invoiceId: payload.invoiceId,
+    proposalId: typeof payload.proposalId === "string" ? payload.proposalId : undefined,
+    reminder: reminder.success ? reminder.data : undefined,
+    source:
+      typeof payload.source === "string" &&
+      ["api", "chat", "cli", "mcp", "system", "web"].includes(payload.source)
+        ? (payload.source as EmailJobPayload["source"])
+        : undefined,
+    sourceClient: typeof payload.sourceClient === "string" ? payload.sourceClient : null,
+  };
 }
 
 async function getInvoiceEmailContext(invoiceId: string) {
@@ -173,7 +196,39 @@ async function sendInvoiceEmail(invoiceId: string) {
   });
 }
 
-async function sendInvoiceReminderEmail(invoiceId: string) {
+async function sendInvoiceReminderEmail(
+  invoiceId: string,
+  stored?: ReturnType<typeof reminderPayloadSchema.parse>,
+  source: Pick<EmailJobPayload, "source" | "sourceClient"> = {},
+) {
+  if (stored) {
+    const fromEmail = getEmailEnv().RESEND_FROM_EMAIL ?? DEFAULT_FROM_EMAIL;
+    const result = await getResend().emails.send({
+      from: fromEmail,
+      react: InvoiceSentEmail({
+        businessName: stored.businessName,
+        clientName: stored.clientName,
+        currency: stored.currency,
+        dueAt: stored.dueAt,
+        invoiceNumber: stored.invoiceNumber,
+        paymentLinkUrl: stored.paymentLinkUrl,
+        reminder: true,
+        total: stored.total,
+      }),
+      subject: stored.subject,
+      to: [stored.to],
+    });
+    if (result.error) {
+      throw new Error(result.error.message);
+    }
+    await db.insert(activityLog).values({
+      action: "reminder_sent",
+      invoiceId,
+      source: source.source ?? "system",
+      sourceClient: source.sourceClient,
+    });
+    return;
+  }
   const { bankDetails, client, invoice, org } = await getInvoiceEmailContext(invoiceId);
 
   const fromEmail = getEmailEnv().RESEND_FROM_EMAIL ?? DEFAULT_FROM_EMAIL;
@@ -199,6 +254,8 @@ async function sendInvoiceReminderEmail(invoiceId: string) {
   await db.insert(activityLog).values({
     action: "reminder_sent",
     invoiceId,
+    source: source.source ?? "system",
+    sourceClient: source.sourceClient,
   });
 }
 
@@ -258,7 +315,7 @@ async function performEmailJob(type: EmailJobType, payload: EmailJobPayload) {
       await sendInvoiceEmail(payload.invoiceId);
       return;
     case "send_invoice_reminder_email":
-      await sendInvoiceReminderEmail(payload.invoiceId);
+      await sendInvoiceReminderEmail(payload.invoiceId, payload.reminder, payload);
       return;
     case "send_payment_received_email":
       await sendPaymentReceivedEmail(payload.invoiceId);
@@ -343,6 +400,12 @@ export async function processPendingEmailJobs(limit = 10) {
           updatedAt: new Date(),
         })
         .where(eq(jobs.id, job.id));
+      if (payload.proposalId) {
+        await db
+          .update(proposals)
+          .set({ status: "executed" })
+          .where(and(eq(proposals.id, payload.proposalId), eq(proposals.status, "approved")));
+      }
       completed += 1;
     } catch (error) {
       const nextAttempts = job.attempts + 1;

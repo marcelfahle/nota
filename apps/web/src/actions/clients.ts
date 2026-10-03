@@ -7,6 +7,7 @@ import { z } from "zod";
 import { getCurrentUser } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { bankAccounts, clients } from "@/lib/db/schema";
+import { clientVatFields } from "@/lib/vat";
 
 const clientSchema = z.object({
   address: z.string().nullable().optional(),
@@ -59,6 +60,7 @@ export async function createClient(
 
   await db.insert(clients).values({
     ...result.data,
+    ...(await clientVatFields(result.data.vatNumber)),
     orgId: org.id,
     userId: user.id,
   });
@@ -104,7 +106,11 @@ export async function updateClient(
 
   await db
     .update(clients)
-    .set({ ...result.data, updatedAt: new Date() })
+    .set({
+      ...result.data,
+      ...(await clientVatFields(result.data.vatNumber)),
+      updatedAt: new Date(),
+    })
     .where(and(eq(clients.id, clientId), eq(clients.orgId, org.id)));
 
   revalidatePath("/clients");

@@ -9,6 +9,7 @@ import {
 import { error, json, requireAuth } from "@/lib/api-response";
 import { db } from "@/lib/db";
 import { clients, invoices } from "@/lib/db/schema";
+import { clientVatFields } from "@/lib/vat";
 
 async function getScopedClient(clientId: string, orgId: string) {
   const [client] = await db
@@ -87,6 +88,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     .update(clients)
     .set({
       ...result.data,
+      ...(await clientVatFields(result.data.vatNumber)),
       updatedAt: new Date(),
     })
     .where(and(eq(clients.id, id), eq(clients.orgId, authResult.auth.org.id)))

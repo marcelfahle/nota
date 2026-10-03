@@ -2,17 +2,23 @@ import { renderToBuffer } from "@react-pdf/renderer";
 import { and, asc, eq } from "drizzle-orm";
 
 import { InvoicePdf } from "@/components/invoice-pdf";
-import { getPdfLogoSrc } from "@/lib/branding";
+import { formatOrgAddress, getPdfLogoSrc } from "@/lib/branding";
 import { db } from "@/lib/db";
 import { bankAccounts, clients, invoices, lineItems } from "@/lib/db/schema";
 import { buildInvoiceFilename } from "@/lib/invoice-filename";
 
 export type InvoicePdfOrg = {
+  brandColor: string | null;
   businessAddress: string | null;
   businessName: string | null;
+  city: string | null;
+  country: string | null;
   id: string;
   logoUrl: string | null;
   name: string;
+  postalCode: string | null;
+  region: string | null;
+  street: string | null;
   vatNumber: string | null;
 };
 
@@ -55,6 +61,13 @@ export async function renderInvoicePdfForOrg(
     .from(lineItems)
     .where(eq(lineItems.invoiceId, invoiceId))
     .orderBy(asc(lineItems.sortOrder));
+  const [creditedInvoice] = invoice.creditsInvoiceId
+    ? await db
+        .select({ number: invoices.number })
+        .from(invoices)
+        .where(eq(invoices.id, invoice.creditsInvoiceId))
+        .limit(1)
+    : [];
 
   let bankAccount: {
     bic: string | null;
@@ -92,9 +105,10 @@ export async function renderInvoicePdfForOrg(
   const buffer = await renderToBuffer(
     InvoicePdf({
       business: {
-        address: org.businessAddress,
+        address: formatOrgAddress(org),
         bankDetails: bankAccount?.details ?? null,
         bic: bankAccount?.bic ?? null,
+        brandColor: org.brandColor,
         iban: bankAccount?.iban ?? null,
         logoSrc,
         name: org.businessName ?? org.name,
@@ -111,6 +125,7 @@ export async function renderInvoicePdfForOrg(
         currency: invoice.currency ?? "EUR",
         dueAt: invoice.dueAt,
         issuedAt: invoice.issuedAt,
+        kind: invoice.kind,
         lineItems: items.map((item) => ({
           amount: item.amount,
           description: item.description,
@@ -119,6 +134,7 @@ export async function renderInvoicePdfForOrg(
         })),
         notes: invoice.notes,
         number: invoice.number,
+        originalNumber: creditedInvoice?.number,
         paymentLinkUrl: invoice.stripePaymentLinkUrl,
         reverseCharge: invoice.reverseCharge,
         subtotal: invoice.subtotal ?? "0.00",

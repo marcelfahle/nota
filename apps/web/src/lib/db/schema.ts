@@ -1,5 +1,6 @@
-import { relations } from "drizzle-orm";
+import { relations, sql } from "drizzle-orm";
 import {
+  type AnyPgColumn,
   boolean,
   date,
   integer,
@@ -11,10 +12,34 @@ import {
   text,
   timestamp,
   unique,
+  uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
 
 export const orgRoleEnum = pgEnum("org_role", ["owner", "admin", "member"]);
+export const invoiceKindEnum = pgEnum("invoice_kind", ["invoice", "credit_note"]);
+export const invoiceSourceEnum = pgEnum("invoice_source", [
+  "web",
+  "chat",
+  "mcp",
+  "api",
+  "cli",
+  "system",
+]);
+export const paymentMethodEnum = pgEnum("payment_method", ["stripe", "bank_transfer", "other"]);
+export const proposalKindEnum = pgEnum("proposal_kind", [
+  "send_invoice",
+  "send_reminder",
+  "resend_with_bank_details",
+]);
+export const proposalStatusEnum = pgEnum("proposal_status", [
+  "pending",
+  "approved",
+  "dismissed",
+  "expired",
+  "executed",
+]);
+export const vatStatusEnum = pgEnum("vat_status", ["valid", "invalid", "unavailable"]);
 
 export const users = pgTable("users", {
   businessAddress: text("business_address"),
@@ -38,18 +63,41 @@ export const users = pgTable("users", {
 });
 
 export const orgs = pgTable("orgs", {
+  brandColor: text("brand_color"),
   businessAddress: text("business_address"),
   businessName: text("business_name"),
+  city: text(),
+  contactEmail: text("contact_email"),
+  country: text(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
+  creditNotePrefix: text("credit_note_prefix").notNull().default("CN"),
   defaultCurrency: text("default_currency").notNull().default("EUR"),
+  faviconUrl: text("favicon_url"),
   id: uuid().defaultRandom().primaryKey(),
   invoiceDigits: integer("invoice_digits").notNull().default(4),
+  invoiceLayout: text("invoice_layout").notNull().default("classic"),
   invoicePrefix: text("invoice_prefix").notNull().default("INV"),
   invoiceSeparator: text("invoice_separator").notNull().default("-"),
+  legalName: text("legal_name"),
   logoUrl: text("logo_url"),
   name: text().notNull(),
+  nextCreditNoteNumber: integer("next_credit_note_number").notNull().default(1),
   nextInvoiceNumber: integer("next_invoice_number").notNull().default(1),
   plan: text("plan").notNull().default("free"),
+  postalCode: text("postal_code"),
+  profileSources: jsonb("profile_sources").$type<
+    Record<
+      string,
+      {
+        at: string;
+        confirmed: boolean;
+        detail?: string;
+        source: "site" | "search" | "registry" | "user";
+      }
+    >
+  >(),
+  region: text(),
+  street: text(),
   stripeAccountId: text("stripe_account_id").unique(),
   stripeChargesEnabled: boolean("stripe_charges_enabled").notNull().default(false),
   stripeCheckoutSessionId: text("stripe_checkout_session_id"),
@@ -58,6 +106,11 @@ export const orgs = pgTable("orgs", {
   stripeSubscriptionId: text("stripe_subscription_id").unique(),
   stripeSubscriptionStatus: text("stripe_subscription_status"),
   vatNumber: text("vat_number"),
+  vatRegistryAddress: text("vat_registry_address"),
+  vatRegistryName: text("vat_registry_name"),
+  vatStatus: vatStatusEnum("vat_status"),
+  vatVerifiedAt: timestamp("vat_verified_at"),
+  website: text(),
 });
 
 // Keep usage after invoice deletion; a cancelled invoice still used a send.
@@ -173,6 +226,10 @@ export const clients = pgTable("clients", {
     .notNull()
     .references(() => users.id),
   vatNumber: text("vat_number"),
+  vatRegistryAddress: text("vat_registry_address"),
+  vatRegistryName: text("vat_registry_name"),
+  vatStatus: vatStatusEnum("vat_status"),
+  vatVerifiedAt: timestamp("vat_verified_at"),
 });
 
 export const invoiceStatusEnum = pgEnum("invoice_status", [
@@ -197,17 +254,23 @@ export const invoices = pgTable(
       .notNull()
       .references(() => clients.id),
     createdAt: timestamp("created_at").defaultNow(),
+    creditsInvoiceId: uuid("credits_invoice_id").references((): AnyPgColumn => invoices.id),
     currency: text().default("EUR"),
     dueAt: date("due_at").notNull(),
     id: uuid().defaultRandom().primaryKey(),
     internalNotes: text("internal_notes"),
     issuedAt: date("issued_at").notNull(),
+    kind: invoiceKindEnum().notNull().default("invoice"),
     notes: text(),
     number: text().notNull(),
     orgId: uuid("org_id").references(() => orgs.id),
     paidAt: date("paid_at"),
+    publicToken: text("public_token").unique(),
     reverseCharge: text("reverse_charge").default("false"),
+    revision: integer().notNull().default(1),
     sentAt: timestamp("sent_at"),
+    source: invoiceSourceEnum().notNull().default("web"),
+    sourceClient: text("source_client"),
     status: invoiceStatusEnum().default("draft"),
     stripeAccountId: text("stripe_account_id"),
     stripePaymentIntentId: text("stripe_payment_intent_id"),
@@ -237,13 +300,113 @@ export const lineItems = pgTable("line_items", {
   unitPrice: numeric("unit_price", { precision: 12, scale: 2 }).notNull(),
 });
 
-export const activityLog = pgTable("activity_log", {
-  action: text().notNull(),
-  createdAt: timestamp("created_at").defaultNow(),
-  id: uuid().defaultRandom().primaryKey(),
-  invoiceId: uuid("invoice_id").references(() => invoices.id),
-  metadata: jsonb(),
+export const activityLog = pgTable(
+  "activity_log",
+  {
+    action: text().notNull(),
+    createdAt: timestamp("created_at").defaultNow(),
+    id: uuid().defaultRandom().primaryKey(),
+    invoiceId: uuid("invoice_id").references(() => invoices.id),
+    metadata: jsonb(),
+    source: invoiceSourceEnum().notNull().default("web"),
+    sourceClient: text("source_client"),
+  },
+  (table) => [
+    index("activity_log_invoice_action_created_idx").on(
+      table.invoiceId,
+      table.action,
+      table.createdAt,
+    ),
+  ],
+);
+
+export const payments = pgTable(
+  "payments",
+  {
+    amount: numeric({ precision: 12, scale: 2 }).notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    currency: text().notNull(),
+    id: uuid().defaultRandom().primaryKey(),
+    invoiceId: uuid("invoice_id")
+      .notNull()
+      .references(() => invoices.id, { onDelete: "cascade" }),
+    method: paymentMethodEnum().notNull(),
+    note: text(),
+    orgId: uuid("org_id")
+      .notNull()
+      .references(() => orgs.id, { onDelete: "cascade" }),
+    receivedAt: timestamp("received_at").notNull(),
+    source: invoiceSourceEnum().notNull().default("web"),
+    stripePaymentIntentId: text("stripe_payment_intent_id").unique(),
+  },
+  (table) => [index("payments_invoice_id_idx").on(table.invoiceId)],
+);
+
+export const vatChecks = pgTable("vat_checks", {
+  address: text(),
+  checkedAt: timestamp("checked_at").notNull(),
+  name: text(),
+  status: vatStatusEnum().notNull(),
+  vatNumber: text("vat_number").primaryKey(),
 });
+
+export const chatThreads = pgTable(
+  "chat_threads",
+  {
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    id: uuid().defaultRandom().primaryKey(),
+    orgId: uuid("org_id")
+      .notNull()
+      .references(() => orgs.id, { onDelete: "cascade" }),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+  },
+  (table) => [index("chat_threads_org_user_idx").on(table.orgId, table.userId)],
+);
+
+export const chatMessages = pgTable(
+  "chat_messages",
+  {
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    id: text().primaryKey(),
+    pageContext: jsonb("page_context").$type<{ entityId?: string; route?: string }>(),
+    parts: jsonb().$type<Array<unknown>>().notNull(),
+    role: text().notNull(),
+    threadId: uuid("thread_id")
+      .notNull()
+      .references(() => chatThreads.id, { onDelete: "cascade" }),
+  },
+  (table) => [index("chat_messages_thread_created_idx").on(table.threadId, table.createdAt)],
+);
+
+export const proposals = pgTable(
+  "proposals",
+  {
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    createdBy: text("created_by").notNull(),
+    decidedAt: timestamp("decided_at"),
+    decidedBy: uuid("decided_by").references(() => users.id, { onDelete: "set null" }),
+    expiresAt: timestamp("expires_at"),
+    id: uuid().defaultRandom().primaryKey(),
+    invoiceId: uuid("invoice_id").references(() => invoices.id, { onDelete: "cascade" }),
+    invoiceRevision: integer("invoice_revision"),
+    kind: proposalKindEnum().notNull(),
+    orgId: uuid("org_id")
+      .notNull()
+      .references(() => orgs.id, { onDelete: "cascade" }),
+    payload: jsonb().$type<Record<string, unknown>>().notNull(),
+    reason: text().notNull(),
+    sourceClient: text("source_client"),
+    status: proposalStatusEnum().notNull().default("pending"),
+  },
+  (table) => [
+    uniqueIndex("proposals_pending_invoice_kind_unique")
+      .on(table.invoiceId, table.kind)
+      .where(sql`${table.status} = 'pending'`),
+  ],
+);
 
 export const jobs = pgTable("jobs", {
   attempts: integer().notNull().default(0),
@@ -274,10 +437,13 @@ export const usersRelations = relations(users, ({ many }) => ({
 export const orgsRelations = relations(orgs, ({ many }) => ({
   apiKeys: many(apiKeys),
   bankAccounts: many(bankAccounts),
+  chatThreads: many(chatThreads),
   clients: many(clients),
   invites: many(invites),
   invoices: many(invoices),
   orgMembers: many(orgMembers),
+  payments: many(payments),
+  proposals: many(proposals),
 }));
 
 export const orgMembersRelations = relations(orgMembers, ({ one }) => ({
@@ -319,6 +485,8 @@ export const invoicesRelations = relations(invoices, ({ many, one }) => ({
   jobs: many(jobs),
   lineItems: many(lineItems),
   org: one(orgs, { fields: [invoices.orgId], references: [orgs.id] }),
+  payments: many(payments),
+  proposals: many(proposals),
   user: one(users, { fields: [invoices.userId], references: [users.id] }),
 }));
 
@@ -334,6 +502,29 @@ export const activityLogRelations = relations(activityLog, ({ one }) => ({
     fields: [activityLog.invoiceId],
     references: [invoices.id],
   }),
+}));
+
+export const paymentsRelations = relations(payments, ({ one }) => ({
+  invoice: one(invoices, { fields: [payments.invoiceId], references: [invoices.id] }),
+  org: one(orgs, { fields: [payments.orgId], references: [orgs.id] }),
+}));
+
+export const chatThreadsRelations = relations(chatThreads, ({ many, one }) => ({
+  messages: many(chatMessages),
+  org: one(orgs, { fields: [chatThreads.orgId], references: [orgs.id] }),
+  user: one(users, { fields: [chatThreads.userId], references: [users.id] }),
+}));
+
+export const chatMessagesRelations = relations(chatMessages, ({ one }) => ({
+  thread: one(chatThreads, {
+    fields: [chatMessages.threadId],
+    references: [chatThreads.id],
+  }),
+}));
+
+export const proposalsRelations = relations(proposals, ({ one }) => ({
+  invoice: one(invoices, { fields: [proposals.invoiceId], references: [invoices.id] }),
+  org: one(orgs, { fields: [proposals.orgId], references: [orgs.id] }),
 }));
 
 export const jobsRelations = relations(jobs, ({ one }) => ({

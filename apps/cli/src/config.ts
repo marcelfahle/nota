@@ -19,7 +19,8 @@ function normalizeConfig(config: unknown): NotaCliConfig {
 
   const input = config as Record<string, unknown>;
   return {
-    apiKey: typeof input.apiKey === "string" && input.apiKey.trim() ? input.apiKey.trim() : undefined,
+    apiKey:
+      typeof input.apiKey === "string" && input.apiKey.trim() ? input.apiKey.trim() : undefined,
     url: typeof input.url === "string" && input.url.trim() ? input.url.trim() : undefined,
   };
 }
@@ -65,14 +66,22 @@ export async function getResolvedConfig(env: NodeJS.ProcessEnv = process.env) {
 export async function createConfiguredClient(env: NodeJS.ProcessEnv = process.env) {
   const config = await getResolvedConfig(env);
   if (!config.url) {
-    throw new Error(`Nota URL is missing. Run 'nota config set-url <url>' or set NOTA_URL. Config: ${config.path}`);
+    throw new Error(
+      `Nota URL is missing. Run 'nota config set-url <url>' or set NOTA_URL. Config: ${config.path}`,
+    );
   }
 
   if (!config.apiKey) {
-    throw new Error(`Nota API key is missing. Run 'nota config set-key <key>' or set NOTA_API_KEY. Config: ${config.path}`);
+    throw new Error(
+      `Nota API key is missing. Run 'nota config set-key <key>' or set NOTA_API_KEY. Config: ${config.path}`,
+    );
   }
 
-  return createNotaClient(config.url, config.apiKey);
+  return createNotaClient(config.url, config.apiKey, (input, init) => {
+    const headers = new Headers(init?.headers);
+    headers.set("user-agent", "nota-cli");
+    return fetch(input, { ...init, headers });
+  });
 }
 
 export function getConfigPath() {

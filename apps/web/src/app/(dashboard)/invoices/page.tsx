@@ -1,4 +1,4 @@
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, sql } from "drizzle-orm";
 import { FileText, Plus } from "lucide-react";
 import Link from "next/link";
 
@@ -24,6 +24,7 @@ export default async function InvoicesPage({
 
   const invoiceList = await db
     .select({
+      balance: sql<string>`greatest(coalesce(${invoices.total}::numeric, 0) - coalesce((select sum(p.amount) from payments p where p.invoice_id = ${invoices.id}), 0) - abs(coalesce((select sum(c.total::numeric) from invoices c where c.credits_invoice_id = ${invoices.id} and c.status = 'sent'), 0)), 0)`,
       clientEmail: clients.email,
       clientName: clients.name,
       currency: invoices.currency,
@@ -31,6 +32,7 @@ export default async function InvoicesPage({
       id: invoices.id,
       issuedAt: invoices.issuedAt,
       number: invoices.number,
+      paidAmount: sql<string>`coalesce((select sum(p.amount) from payments p where p.invoice_id = ${invoices.id}), 0)`,
       status: invoices.status,
       stripePaymentLinkUrl: invoices.stripePaymentLinkUrl,
       total: invoices.total,
@@ -53,15 +55,14 @@ export default async function InvoicesPage({
   };
 
   for (const inv of invoiceList) {
-    const amount = Number(inv.total ?? 0);
+    const amount = Number(inv.balance);
+    const paidAmount = Number(inv.paidAmount);
     const status = inv.status ?? "draft";
     statusCounts[status] += 1;
     if (inv.status === "sent" || inv.status === "overdue") {
       outstanding += amount;
     }
-    if (inv.status === "paid") {
-      totalPaid += amount;
-    }
+    totalPaid += paidAmount;
     if (inv.status === "overdue") {
       overdueAmount += amount;
       overdueCount++;
@@ -180,6 +181,12 @@ export default async function InvoicesPage({
                   >
                     {formatCurrency(Number(inv.total ?? 0), inv.currency ?? "EUR")}
                   </Link>
+                  {Number(inv.paidAmount) > 0 && Number(inv.balance) > 0 ? (
+                    <p className="mt-1 text-xs text-zinc-500">
+                      {formatCurrency(Number(inv.paidAmount), inv.currency ?? "EUR")} paid ·{" "}
+                      {formatCurrency(Number(inv.balance), inv.currency ?? "EUR")} due
+                    </p>
+                  ) : null}
                 </div>
                 <div className="hidden md:col-start-4 md:block">
                   <Link className="inline-flex" href={`/invoices/${inv.id}`}>

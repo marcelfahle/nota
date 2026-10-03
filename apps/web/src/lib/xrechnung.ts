@@ -19,6 +19,7 @@ type XRechnungData = {
     currency: string;
     dueAt: string;
     issuedAt: string;
+    kind?: "credit_note" | "invoice";
     lineItems: Array<{
       amount: string;
       description: string;
@@ -27,6 +28,7 @@ type XRechnungData = {
     }>;
     notes?: string | null;
     number: string;
+    originalNumber?: string | null;
     paymentLinkUrl?: string | null;
     reverseCharge?: string | null;
     subtotal: string;
@@ -194,13 +196,18 @@ export function generateXRechnung(data: XRechnungData): string {
   const buyerName = escapeXml(client.company || client.name);
   const iban = business.iban || extractIban(business.bankDetails);
   const bic = business.bic || null;
+  const isCreditNote = invoice.kind === "credit_note";
+  const documentName = isCreditNote ? "CreditNote" : "Invoice";
+  const lineName = isCreditNote ? "CreditNoteLine" : "InvoiceLine";
+  const quantityName = isCreditNote ? "CreditedQuantity" : "InvoicedQuantity";
+  const amount = (value: string) => fmt(isCreditNote ? String(Math.abs(Number(value))) : value);
 
   const lines = invoice.lineItems
     .map(
-      (item, i) => `<cac:InvoiceLine>
+      (item, i) => `<cac:${lineName}>
 <cbc:ID>${i + 1}</cbc:ID>
-<cbc:InvoicedQuantity unitCode="C62">${escapeXml(fmt(item.quantity))}</cbc:InvoicedQuantity>
-<cbc:LineExtensionAmount currencyID="${cur}">${escapeXml(fmt(item.amount))}</cbc:LineExtensionAmount>
+<cbc:${quantityName} unitCode="C62">${escapeXml(fmt(item.quantity))}</cbc:${quantityName}>
+<cbc:LineExtensionAmount currencyID="${cur}">${escapeXml(amount(item.amount))}</cbc:LineExtensionAmount>
 <cac:Item>
 <cbc:Name>${escapeXml(item.description)}</cbc:Name>
 <cac:ClassifiedTaxCategory>
@@ -212,9 +219,9 @@ export function generateXRechnung(data: XRechnungData): string {
 </cac:ClassifiedTaxCategory>
 </cac:Item>
 <cac:Price>
-<cbc:PriceAmount currencyID="${cur}">${escapeXml(fmt(item.unitPrice))}</cbc:PriceAmount>
+<cbc:PriceAmount currencyID="${cur}">${escapeXml(amount(item.unitPrice))}</cbc:PriceAmount>
 </cac:Price>
-</cac:InvoiceLine>`,
+</cac:${lineName}>`,
     )
     .join("\n");
 
@@ -239,16 +246,17 @@ export function generateXRechnung(data: XRechnungData): string {
 </cac:PaymentMeans>`;
 
   return `<?xml version="1.0" encoding="UTF-8"?>
-<Invoice xmlns="urn:oasis:names:specification:ubl:schema:xsd:Invoice-2" xmlns:cac="urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2" xmlns:cbc="urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2">
+<${documentName} xmlns="urn:oasis:names:specification:ubl:schema:xsd:${documentName}-2" xmlns:cac="urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2" xmlns:cbc="urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2">
 <cbc:CustomizationID>urn:cen.eu:en16931:2017#compliant#urn:xeinkauf.de:kosit:xrechnung_3.0</cbc:CustomizationID>
 <cbc:ProfileID>urn:fdc:peppol.eu:2017:poacc:billing:01:1.0</cbc:ProfileID>
 <cbc:ID>${escapeXml(invoice.number)}</cbc:ID>
 <cbc:IssueDate>${escapeXml(invoice.issuedAt)}</cbc:IssueDate>
-<cbc:DueDate>${escapeXml(invoice.dueAt)}</cbc:DueDate>
-<cbc:InvoiceTypeCode>380</cbc:InvoiceTypeCode>
+${isCreditNote ? "" : `<cbc:DueDate>${escapeXml(invoice.dueAt)}</cbc:DueDate>`}
+<cbc:${isCreditNote ? "CreditNoteTypeCode" : "InvoiceTypeCode"}>${isCreditNote ? "381" : "380"}</cbc:${isCreditNote ? "CreditNoteTypeCode" : "InvoiceTypeCode"}>
 ${invoice.notes ? `<cbc:Note>${escapeXml(invoice.notes)}</cbc:Note>` : ""}
 <cbc:DocumentCurrencyCode>${cur}</cbc:DocumentCurrencyCode>
 <cbc:BuyerReference>${escapeXml(invoice.number)}</cbc:BuyerReference>
+${isCreditNote && invoice.originalNumber ? `<cac:BillingReference>\n<cac:InvoiceDocumentReference>\n<cbc:ID>${escapeXml(invoice.originalNumber)}</cbc:ID>\n</cac:InvoiceDocumentReference>\n</cac:BillingReference>` : ""}
 <cac:AccountingSupplierParty>
 <cac:Party>
 <cbc:EndpointID schemeID="EM">${escapeXml(business.email)}</cbc:EndpointID>
@@ -281,10 +289,10 @@ ${client.vatNumber ? `<cac:PartyTaxScheme>\n<cbc:CompanyID>${escapeXml(client.va
 </cac:AccountingCustomerParty>
 ${paymentMeans}
 <cac:TaxTotal>
-<cbc:TaxAmount currencyID="${cur}">${fmt(invoice.taxAmount)}</cbc:TaxAmount>
+<cbc:TaxAmount currencyID="${cur}">${amount(invoice.taxAmount)}</cbc:TaxAmount>
 <cac:TaxSubtotal>
-<cbc:TaxableAmount currencyID="${cur}">${fmt(invoice.subtotal)}</cbc:TaxableAmount>
-<cbc:TaxAmount currencyID="${cur}">${fmt(invoice.taxAmount)}</cbc:TaxAmount>
+<cbc:TaxableAmount currencyID="${cur}">${amount(invoice.subtotal)}</cbc:TaxableAmount>
+<cbc:TaxAmount currencyID="${cur}">${amount(invoice.taxAmount)}</cbc:TaxAmount>
 <cac:TaxCategory>
 <cbc:ID>${tax.code}</cbc:ID>
 <cbc:Percent>${fmt(tax.rate)}</cbc:Percent>
@@ -296,11 +304,11 @@ ${tax.exemption}
 </cac:TaxSubtotal>
 </cac:TaxTotal>
 <cac:LegalMonetaryTotal>
-<cbc:LineExtensionAmount currencyID="${cur}">${fmt(invoice.subtotal)}</cbc:LineExtensionAmount>
-<cbc:TaxExclusiveAmount currencyID="${cur}">${fmt(invoice.subtotal)}</cbc:TaxExclusiveAmount>
-<cbc:TaxInclusiveAmount currencyID="${cur}">${fmt(invoice.total)}</cbc:TaxInclusiveAmount>
-<cbc:PayableAmount currencyID="${cur}">${fmt(invoice.total)}</cbc:PayableAmount>
+<cbc:LineExtensionAmount currencyID="${cur}">${amount(invoice.subtotal)}</cbc:LineExtensionAmount>
+<cbc:TaxExclusiveAmount currencyID="${cur}">${amount(invoice.subtotal)}</cbc:TaxExclusiveAmount>
+<cbc:TaxInclusiveAmount currencyID="${cur}">${amount(invoice.total)}</cbc:TaxInclusiveAmount>
+<cbc:PayableAmount currencyID="${cur}">${amount(invoice.total)}</cbc:PayableAmount>
 </cac:LegalMonetaryTotal>
 ${lines}
-</Invoice>`;
+</${documentName}>`;
 }

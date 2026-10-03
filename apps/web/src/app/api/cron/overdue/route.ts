@@ -31,6 +31,7 @@ export async function GET(request: Request) {
     await db.insert(activityLog).values({
       action: "marked_overdue",
       invoiceId: invoice.id,
+      source: "system",
     });
   }
 

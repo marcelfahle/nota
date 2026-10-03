@@ -2,6 +2,7 @@ import { anthropic } from "@ai-sdk/anthropic";
 import { convertToModelMessages, stepCountIs, streamText, type UIMessage } from "ai";
 
 import { getCurrentUserOrNull } from "@/lib/auth";
+import { getChatThread, loadChatMessages, saveChatMessage } from "@/lib/chat-store";
 import { buildChatSystemContext, buildChatSystemPrompt, createChatTools } from "@/lib/chat-tools";
 import { getAiEnv } from "@/lib/env";
 
@@ -10,7 +11,17 @@ const MAX_CHAT_PAYLOAD_SIZE = 50_000;
 
 type ChatRequestBody = {
   messages?: Array<UIMessage>;
+  pageContext?: { entityId?: string; route?: string };
 };
+
+export async function GET() {
+  const auth = await getCurrentUserOrNull();
+  if (!auth) {
+    return Response.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  const thread = await getChatThread({ orgId: auth.org.id, userId: auth.user.id });
+  return Response.json({ messages: await loadChatMessages(thread.id), threadId: thread.id });
+}
 
 export async function POST(request: Request) {
   const auth = await getCurrentUserOrNull();
@@ -29,7 +40,13 @@ export async function POST(request: Request) {
     return Response.json({ error: "Messages are required" }, { status: 400 });
   }
 
-  const messages = body.messages.slice(-MAX_CHAT_MESSAGES);
+  const incoming = body.messages.at(-1);
+  if (!incoming || incoming.role !== "user") {
+    return Response.json({ error: "A user message is required" }, { status: 400 });
+  }
+  const thread = await getChatThread({ orgId: auth.org.id, userId: auth.user.id });
+  await saveChatMessage(thread.id, incoming, body.pageContext);
+  const messages = await loadChatMessages(thread.id, MAX_CHAT_MESSAGES);
   if (JSON.stringify(messages).length > MAX_CHAT_PAYLOAD_SIZE) {
     return Response.json(
       { error: "Chat history is too large. Start a new chat." },
@@ -70,12 +87,17 @@ export async function POST(request: Request) {
     });
 
     return result.toUIMessageStreamResponse({
+      generateMessageId: () => crypto.randomUUID(),
       onError: (error) => {
         // eslint-disable-next-line no-console -- Preserve provider failures in server logs.
         console.error("[chat] stream error:", error);
         const message = error instanceof Error ? error.message : "Unknown error";
         return `Nota chat failed: ${message}`;
       },
+      onFinish: async ({ responseMessage }) => {
+        await saveChatMessage(thread.id, responseMessage, body.pageContext);
+      },
+      originalMessages: messages,
     });
   } catch {
     return Response.json({ error: "Nota chat is unavailable right now" }, { status: 500 });

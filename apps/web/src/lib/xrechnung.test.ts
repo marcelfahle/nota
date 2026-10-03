@@ -228,6 +228,27 @@ describe("generateXRechnung", () => {
     expect(xml).toContain("<cbc:DueDate>2025-02-28</cbc:DueDate>");
   });
 
+  test("renders a credit note with positive UBL amounts and an invoice reference", () => {
+    const data = baseData();
+    Object.assign(data.invoice, {
+      kind: "credit_note" as const,
+      number: "CN-0001",
+      originalNumber: "INV-0001",
+      subtotal: "-1000.00",
+      taxAmount: "-190.00",
+      total: "-1190.00",
+    });
+    data.invoice.lineItems[0].amount = "-1000.00";
+    data.invoice.lineItems[0].unitPrice = "-100.00";
+
+    const xml = generateXRechnung(data);
+    expect(xml).toContain("<CreditNote ");
+    expect(xml).toContain("<cbc:CreditNoteTypeCode>381</cbc:CreditNoteTypeCode>");
+    expect(xml).toContain("<cbc:ID>INV-0001</cbc:ID>");
+    expect(xml).toContain('<cbc:PayableAmount currencyID="EUR">1190.00</cbc:PayableAmount>');
+    expect(xml).not.toContain("-1190.00");
+  });
+
   test("includes invoice notes", () => {
     const xml = generateXRechnung(baseData());
     expect(xml).toContain("<cbc:Note>Thank you</cbc:Note>");
