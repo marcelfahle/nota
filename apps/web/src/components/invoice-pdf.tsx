@@ -41,6 +41,7 @@ type InvoicePdfProps = {
     address?: string | null;
     bankDetails?: string | null;
     bic?: string | null;
+    brandColor?: string | null;
     iban?: string | null;
     logoSrc?: string | null;
     name?: string | null;
@@ -57,9 +58,11 @@ type InvoicePdfProps = {
     currency: string;
     dueAt: string;
     issuedAt: string;
+    kind?: "credit_note" | "invoice";
     lineItems: Array<LineItem>;
     notes?: string | null;
     number: string;
+    originalNumber?: string | null;
     paymentLinkUrl?: string | null;
     reverseCharge?: string | null;
     subtotal: string;
@@ -367,6 +370,8 @@ export function InvoicePdf({ business, client, invoice }: InvoicePdfProps) {
   const currency = invoice.currency;
   const taxRate = Number.parseFloat(invoice.taxRate);
   const hasPaymentDetails = business.iban || business.bankDetails || invoice.paymentLinkUrl;
+  const accent = /^#[\da-f]{6}$/i.test(business.brandColor ?? "") ? business.brandColor! : c.text;
+  const isCreditNote = invoice.kind === "credit_note";
 
   return (
     <Document>
@@ -384,8 +389,11 @@ export function InvoicePdf({ business, client, invoice }: InvoicePdfProps) {
               ))}
           </View>
           <View style={styles.headerRight}>
-            <Text style={styles.invoiceNumber}>{invoice.number}</Text>
-            <Text style={styles.invoiceLabel}>Invoice</Text>
+            <Text style={[styles.invoiceNumber, { color: accent }]}>{invoice.number}</Text>
+            <Text style={styles.invoiceLabel}>{isCreditNote ? "Credit note" : "Invoice"}</Text>
+            {invoice.originalNumber ? (
+              <Text style={styles.invoiceLabel}>For invoice {invoice.originalNumber}</Text>
+            ) : null}
           </View>
         </View>
 
@@ -465,7 +473,7 @@ export function InvoicePdf({ business, client, invoice }: InvoicePdfProps) {
         )}
 
         {/* ── Payment Details ── */}
-        {hasPaymentDetails && (
+        {hasPaymentDetails && !isCreditNote && (
           <View style={styles.paymentDetails}>
             <Text style={styles.paymentSectionLabel}>Payment Details</Text>
             {invoice.paymentLinkUrl && (

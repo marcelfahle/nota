@@ -2,6 +2,7 @@ import { and, asc, eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
 
 import { getCurrentUser } from "@/lib/auth";
+import { formatOrgAddress } from "@/lib/branding";
 import { db } from "@/lib/db";
 import { bankAccounts, clients, invoices, lineItems } from "@/lib/db/schema";
 import { buildInvoiceFilename } from "@/lib/invoice-filename";
@@ -36,6 +37,13 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
     .from(lineItems)
     .where(eq(lineItems.invoiceId, id))
     .orderBy(asc(lineItems.sortOrder));
+  const [creditedInvoice] = invoice.creditsInvoiceId
+    ? await db
+        .select({ number: invoices.number })
+        .from(invoices)
+        .where(eq(invoices.id, invoice.creditsInvoiceId))
+        .limit(1)
+    : [];
 
   let bankAccount: { bic: string | null; details: string; iban: string | null } | null = null;
   if (client.bankAccountId) {
@@ -57,7 +65,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
 
   const xml = generateXRechnung({
     business: {
-      address: org.businessAddress,
+      address: formatOrgAddress(org),
       bankDetails: bankAccount?.details ?? null,
       bic: bankAccount?.bic ?? null,
       email: user.email,
@@ -76,6 +84,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
       currency: invoice.currency ?? "EUR",
       dueAt: invoice.dueAt,
       issuedAt: invoice.issuedAt,
+      kind: invoice.kind,
       lineItems: items.map((item) => ({
         amount: item.amount,
         description: item.description,
@@ -84,6 +93,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
       })),
       notes: invoice.notes,
       number: invoice.number,
+      originalNumber: creditedInvoice?.number,
       paymentLinkUrl: invoice.stripePaymentLinkUrl,
       reverseCharge: invoice.reverseCharge,
       subtotal: invoice.subtotal ?? "0.00",

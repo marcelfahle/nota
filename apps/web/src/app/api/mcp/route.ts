@@ -22,6 +22,7 @@ const handleMcp = requireMcpAuth(
       body: {
         payload: {
           aud: getMcpResource(),
+          client_id: typeof claims.client_id === "string" ? claims.client_id : undefined,
           exp: Math.floor(Date.now() / 1000) + 5 * 60,
           scope: typeof claims.scope === "string" ? claims.scope : undefined,
           sub: claims.sub,

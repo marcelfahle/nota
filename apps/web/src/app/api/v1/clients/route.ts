@@ -9,6 +9,7 @@ import {
 import { error, json, paginated, requireAuth } from "@/lib/api-response";
 import { db } from "@/lib/db";
 import { clients, invoices } from "@/lib/db/schema";
+import { clientVatFields } from "@/lib/vat";
 
 function getPagination(url: URL) {
   const page = Math.max(1, Number.parseInt(url.searchParams.get("page") ?? "1", 10) || 1);
@@ -70,6 +71,10 @@ export async function GET(request: Request) {
         totalInvoiced: sql<string>`coalesce(sum(${invoices.total}::numeric), 0)`,
         updatedAt: clients.updatedAt,
         vatNumber: clients.vatNumber,
+        vatRegistryAddress: clients.vatRegistryAddress,
+        vatRegistryName: clients.vatRegistryName,
+        vatStatus: clients.vatStatus,
+        vatVerifiedAt: clients.vatVerifiedAt,
       })
       .from(clients)
       .leftJoin(
@@ -124,6 +129,7 @@ export async function POST(request: Request) {
     .insert(clients)
     .values({
       ...result.data,
+      ...(await clientVatFields(result.data.vatNumber)),
       orgId: authResult.auth.org.id,
       userId: authResult.auth.user.id,
     })

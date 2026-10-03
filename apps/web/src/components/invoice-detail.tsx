@@ -69,17 +69,21 @@ type ActivityEntry = {
 type InvoiceDetailProps = {
   activities: Array<ActivityEntry>;
   invoice: {
+    balance: string;
     client: { email: string; name: string };
     currency: string | null;
     dueAt: string;
     id: string;
     internalNotes: string | null;
     issuedAt: string;
+    kind: "credit_note" | "invoice";
     lineItems: Array<LineItem>;
     notes: string | null;
     number: string;
+    paidAmount: string;
     paidAt: string | null;
     reverseCharge: string | null;
+    settlementStatus: "paid" | "partially_paid" | "unpaid";
     status: string | null;
     stripePaymentLinkUrl: string | null;
     subtotal: string | null;
@@ -262,6 +266,12 @@ export function InvoiceDetailView({ activities, invoice, role }: InvoiceDetailPr
           <p className="mt-2 text-3xl font-semibold">
             {formatCurrency(Number(invoice.total ?? 0), currency)}
           </p>
+          {invoice.settlementStatus === "partially_paid" ? (
+            <p className="mt-1 text-sm font-medium text-zinc-600">
+              {formatCurrency(Number(invoice.paidAmount), currency)} paid ·{" "}
+              {formatCurrency(Number(invoice.balance), currency)} due
+            </p>
+          ) : null}
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
@@ -375,7 +385,7 @@ export function InvoiceDetailView({ activities, invoice, role }: InvoiceDetailPr
               Cancel Invoice
             </Button>
           )}
-          {(isDraft || status === "cancelled") && canManageDelete && (
+          {isDraft && canManageDelete && (
             <Button
               className="text-red-600 hover:bg-red-50 hover:text-red-700"
               data-testid="invoice-delete-draft"
@@ -385,7 +395,7 @@ export function InvoiceDetailView({ activities, invoice, role }: InvoiceDetailPr
               variant="outline"
             >
               <Trash2 className="size-4" />
-              {isDraft ? "Delete Draft" : "Delete Invoice"}
+              Delete Draft
             </Button>
           )}
         </div>

@@ -1,4 +1,4 @@
-import { and, asc, desc, eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { cache } from "react";
@@ -7,7 +7,8 @@ import { InvoiceDetailView } from "@/components/invoice-detail";
 import { APP_NAME } from "@/lib/app-brand";
 import { getCurrentUser } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { activityLog, clients, invoices, lineItems } from "@/lib/db/schema";
+import { clients, invoices } from "@/lib/db/schema";
+import { getInvoiceDetail } from "@/lib/invoice-service";
 
 const loadInvoiceWithClient = cache(async (orgId: string, invoiceId: string) => {
   const [record] = await db
@@ -50,35 +51,21 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
     notFound();
   }
 
-  const invoice = record.invoice;
-
-  const items = await db
-    .select()
-    .from(lineItems)
-    .where(eq(lineItems.invoiceId, id))
-    .orderBy(asc(lineItems.sortOrder));
-
-  const activities = await db
-    .select()
-    .from(activityLog)
-    .where(eq(activityLog.invoiceId, id))
-    .orderBy(desc(activityLog.createdAt));
+  const invoice = await getInvoiceDetail(org.id, id);
+  if (!invoice) {
+    notFound();
+  }
 
   return (
     <InvoiceDetailView
-      activities={activities.map((a) => ({
+      activities={invoice.activityLog.map((a) => ({
         action: a.action,
         createdAt: a.createdAt?.toISOString() ?? "",
         id: a.id,
       }))}
       invoice={{
         ...invoice,
-        client: {
-          email: record.clientEmail ?? "",
-          name: record.clientName ?? "Unknown",
-        },
-        lineItems: items,
-        status: invoice.status ?? "draft",
+        client: invoice.client ?? { email: "", name: "Unknown" },
       }}
       role={role}
     />

@@ -5,7 +5,7 @@ import { and, eq } from "drizzle-orm";
 
 import { getAuthIssuer, getMcpResource } from "@/lib/auth-config";
 import { db } from "@/lib/db";
-import { apiKeys, orgMembers, orgs, users } from "@/lib/db/schema";
+import { apiKeys, oauthClients, orgMembers, orgs, users } from "@/lib/db/schema";
 import { getUserContextById, type AuthenticatedRole } from "@/lib/user-context";
 
 const API_KEY_PREFIX = "nota_";
@@ -21,6 +21,8 @@ export type ApiRequestAuthContext = {
   apiKey: ApiKeyRecord | null;
   org: OrgRecord;
   role: AuthenticatedRole;
+  source: "api" | "cli" | "mcp";
+  sourceClient: string | null;
   user: UserRecord;
 };
 
@@ -89,6 +91,7 @@ export async function createApiKey(orgId: string, userId: string, name: string) 
  * the MCP resource. The MCP route forwards them here unchanged.
  */
 async function authenticateOAuthToken(token: string): Promise<ApiRequestAuthContext | null> {
+  let clientId: string | undefined;
   let userId: string | undefined;
   try {
     const claims = await verifyBearerToken(token, {
@@ -96,6 +99,7 @@ async function authenticateOAuthToken(token: string): Promise<ApiRequestAuthCont
       verifyOptions: { audience: getMcpResource(), issuer: getAuthIssuer() },
     });
     userId = typeof claims.sub === "string" ? claims.sub : undefined;
+    clientId = typeof claims.client_id === "string" ? claims.client_id : undefined;
   } catch {
     return null;
   }
@@ -108,7 +112,21 @@ async function authenticateOAuthToken(token: string): Promise<ApiRequestAuthCont
     return null;
   }
 
-  return { apiKey: null, org: context.org, role: context.role, user: context.user };
+  const [client] = clientId
+    ? await db
+        .select({ name: oauthClients.name })
+        .from(oauthClients)
+        .where(eq(oauthClients.clientId, clientId))
+        .limit(1)
+    : [];
+  return {
+    apiKey: null,
+    org: context.org,
+    role: context.role,
+    source: "mcp",
+    sourceClient: client?.name ?? null,
+    user: context.user,
+  };
 }
 
 export async function authenticateApiRequest(
@@ -146,5 +164,9 @@ export async function authenticateApiRequest(
 
   await db.update(apiKeys).set({ lastUsedAt: new Date() }).where(eq(apiKeys.id, context.apiKey.id));
 
-  return context;
+  return {
+    ...context,
+    source: request.headers.get("user-agent")?.includes("nota-cli") ? "cli" : "api",
+    sourceClient: context.apiKey.name,
+  };
 }

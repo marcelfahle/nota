@@ -36,6 +36,7 @@ import {
   sendReminder,
   type InvoiceMutationInput,
 } from "@/lib/invoice-service";
+import { clientVatFields } from "@/lib/vat";
 
 type ChatToolContext = Pick<AuthenticatedUserContext, "org" | "role" | "user">;
 
@@ -92,6 +93,7 @@ function buildServiceContext(auth: ChatToolContext) {
   return {
     orgId: auth.org.id,
     role: auth.role,
+    source: "chat" as const,
     userId: auth.user.id,
   };
 }
@@ -596,7 +598,7 @@ export function createChatTools(auth: ChatToolContext) {
               notes: input.notes,
               orgId: auth.org.id,
               userId: auth.user.id,
-              vatNumber: input.vatNumber,
+              ...(await clientVatFields(input.vatNumber)),
             })
             .returning({
               company: clients.company,

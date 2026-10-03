@@ -1,0 +1,1 @@
+CREATE INDEX "activity_log_invoice_action_created_idx" ON "activity_log" USING btree ("invoice_id","action","created_at");
