@@ -31,7 +31,8 @@ test.beforeAll(async () => {
               path: "navigation",
             }));
             builder.onLoad({ filter: /.*/, namespace: "fixture" }, () => ({
-              contents: "export function useRouter() { return {refresh() {}}; }",
+              contents:
+                'export function usePathname() { return "/"; } export function useRouter() { return {refresh() {}}; }',
               loader: "js",
             }));
           },
@@ -57,6 +58,13 @@ async function openChat(page: Page, stale = false, nonJson?: "preview" | "commit
   let existing = [{ email: "billing@acme.test", name: "Acme" }];
   await page.route("**/*", async (route) => {
     const request = route.request();
+    if (request.url().endsWith("/api/chat") && request.method() === "GET") {
+      await route.fulfill({
+        body: JSON.stringify({ messages: [], threadId: "fixture-thread" }),
+        contentType: "application/json",
+      });
+      return;
+    }
     if (request.url().endsWith("/api/clients/import")) {
       const body = request.postDataJSON();
       requests.push(body);
