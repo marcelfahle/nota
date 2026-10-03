@@ -33,6 +33,24 @@ API keys are scoped to a real user and organization. Requests inherit that user'
 - PDF downloads return `application/pdf`
 - XRechnung downloads return `application/xml`
 
+## Payments and billing
+
+`GET /billing` returns the current workspace's plan, monthly send usage and limit, connected account ID, payment/payout readiness, and subscription status under `data`. `limit: null` means unlimited.
+
+Workspace owners can call `POST /billing` with `{ "action": "connect" }`. Supported actions:
+
+| Action          | Result                                                                                                     |
+| --------------- | ---------------------------------------------------------------------------------------------------------- |
+| `connect`       | `data.url` to connect a new/existing Stripe account or continue onboarding                                 |
+| `refresh`       | `data.status` with current Stripe account readiness                                                        |
+| `disconnect`    | Revokes Nota's access and returns `data.status`; old payment links remain in the merchant's Stripe account |
+| `month`, `year` | `data.url` for Nota Pro checkout at $9/month or $90/year                                                   |
+| `portal`        | `data.url` to Stripe's billing portal                                                                      |
+
+Open returned URLs in the owner's browser. Connect callbacks require the same owner signed into the same workspace. Members/admins receive `403` for these mutations. Invalid actions return `400`; unavailable billing actions return `409`.
+
+In hosted mode the sixth new invoice send in a UTC calendar month is rejected on the Free plan through every invoice interface. Retrying a successful send does not consume another send. Cancelling or deleting a sent invoice does not restore usage. The quota applies whether payment is by Stripe or bank transfer. Pro and self-hosted direct mode have unlimited sends.
+
 ## Response Format
 
 Successful JSON responses use one of these shapes.

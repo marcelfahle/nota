@@ -3,11 +3,13 @@ import { asc, desc, eq } from "drizzle-orm";
 import { logout } from "@/actions/auth";
 import { listMembers } from "@/actions/members";
 import { ApiKeysSettings } from "@/components/api-keys-settings";
+import { BillingSettings } from "@/components/billing-settings";
 import { ConnectedAppsSettings } from "@/components/connected-apps-settings";
 import { SettingsForm } from "@/components/settings-form";
 import { TeamSettings } from "@/components/team-settings";
 import { Button } from "@/components/ui/button";
 import { getCurrentUser } from "@/lib/auth";
+import { billingStatus } from "@/lib/billing";
 import { db } from "@/lib/db";
 import { apiKeys, bankAccounts, invoices, oauthClients, oauthConsents } from "@/lib/db/schema";
 import { getInviteLink } from "@/lib/invites";
@@ -18,8 +20,24 @@ import {
   canManageSettings,
 } from "@/lib/roles";
 
-export default async function SettingsPage() {
+export default async function SettingsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ billing?: string; connect?: string }>;
+}) {
   const { org, role, user } = await getCurrentUser();
+  const [billing, params] = await Promise.all([billingStatus(org.id), searchParams]);
+  const connectNotices: Record<string, string> = {
+    cancelled: "Stripe connection was cancelled.",
+    expired: "The Stripe link expired. Continue Stripe setup to get a fresh link.",
+    failed: "Stripe could not be connected. Please try again as the workspace owner.",
+    returned: "Welcome back. Refresh your Stripe status to check whether setup is complete.",
+    success: "Your Stripe account is connected.",
+  };
+  const notice =
+    params.billing === "success"
+      ? "Your payment is being confirmed. Refresh shortly to see your updated plan."
+      : connectNotices[params.connect ?? ""];
 
   const [lastInvoice] = await db
     .select({ number: invoices.number })
@@ -92,6 +110,8 @@ export default async function SettingsPage() {
           lastIssuedNumber={lastInvoice?.number ?? null}
           settings={settings}
         />
+
+        <BillingSettings canManage={canManageSettings(role)} notice={notice} status={billing} />
 
         <ConnectedAppsSettings apps={connectedApps} />
 

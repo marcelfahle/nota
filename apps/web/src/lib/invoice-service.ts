@@ -1,16 +1,19 @@
-import { and, asc, desc, eq } from "drizzle-orm";
+import { and, asc, count, desc, eq } from "drizzle-orm";
 
 import type { AuthenticatedRole } from "@/lib/auth";
+import { billingMonth, canSendOnPlan, paymentAccount, UPGRADE_MESSAGE } from "@/lib/billing-policy";
 import { db } from "@/lib/db";
 import {
   activityLog,
   bankAccounts,
   clients,
   invoices,
+  invoiceSends,
   jobs,
   lineItems,
   orgs,
 } from "@/lib/db/schema";
+import { getStripeMode } from "@/lib/env";
 import { resolveDueDateChange } from "@/lib/invoice-due-date";
 import {
   canCancelInvoice as canCancelInvoiceStatus,
@@ -418,13 +421,7 @@ export async function sendInvoice(
     return { error: "Invoice not found" };
   }
 
-  if (
-    isInvoiceSendFinalized(
-      existingInvoice.status,
-      await hasSentActivity(invoiceId),
-      Boolean(existingInvoice.stripePaymentLinkId && existingInvoice.stripePaymentLinkUrl),
-    )
-  ) {
+  if (isInvoiceSendFinalized(existingInvoice.status, await hasSentActivity(invoiceId))) {
     return { invoiceId, success: true };
   }
 
@@ -433,107 +430,107 @@ export async function sendInvoice(
   }
 
   const sentAt = new Date();
-  const [invoice] = await db
-    .update(invoices)
-    .set({
-      sentAt,
-      status: "sent",
-      updatedAt: sentAt,
-    })
-    .where(
-      and(
-        eq(invoices.id, invoiceId),
-        eq(invoices.orgId, context.orgId),
-        eq(invoices.status, "draft"),
-      ),
-    )
-    .returning();
-
-  if (!invoice) {
-    return { error: "Invoice status changed. Refresh and try again." };
-  }
-
-  const client = await getOwnedClient(context.orgId, invoice.clientId);
-  if (!client) {
-    await revertSentInvoice(context.orgId, invoiceId, sentAt);
-    return { error: "Client not found" };
-  }
-
-  if (client.bankAccountId) {
-    const [bankAccount] = await db
-      .select({ id: bankAccounts.id })
-      .from(bankAccounts)
-      .where(and(eq(bankAccounts.id, client.bankAccountId), eq(bankAccounts.orgId, context.orgId)))
-      .limit(1);
-
-    if (!bankAccount) {
-      await revertSentInvoice(context.orgId, invoiceId, sentAt);
-      return { error: "Assigned bank account not found" };
-    }
-  }
-
-  let paymentLinkId: string | null = null;
-
+  let createdLink: { accountId: string | null; id: string } | null = null;
   try {
-    const paymentLink = await createPaymentLink({
-      currency: invoice.currency,
-      id: invoice.id,
-      number: invoice.number,
-      total: invoice.total,
-    });
-    paymentLinkId = paymentLink.id;
-
-    await db.transaction(async (tx) => {
+    const result = await db.transaction(async (tx): Promise<InvoiceMutationResult> => {
+      // Keep quota, invoice state and the email job atomic, including on request interruption.
+      const [org] = await tx.select().from(orgs).where(eq(orgs.id, context.orgId)).for("update");
+      if (!org) {
+        return { error: "Organization not found" };
+      }
+      const [invoice] = await tx
+        .select()
+        .from(invoices)
+        .where(and(eq(invoices.id, invoiceId), eq(invoices.orgId, context.orgId)))
+        .for("update");
+      if (!invoice) {
+        return { error: "Invoice not found" };
+      }
+      const [sent] = await tx
+        .select({ id: activityLog.id })
+        .from(activityLog)
+        .where(and(eq(activityLog.invoiceId, invoiceId), eq(activityLog.action, "sent")))
+        .limit(1);
+      if (isInvoiceSendFinalized(invoice.status, Boolean(sent))) {
+        return { invoiceId, success: true };
+      }
+      if (!canSendInvoiceStatus(invoice.status)) {
+        return { error: "Only draft invoices can be sent" };
+      }
+      const mode = getStripeMode().STRIPE_MODE;
+      const [usage] = await tx
+        .select({ total: count() })
+        .from(invoiceSends)
+        .where(and(eq(invoiceSends.orgId, org.id), eq(invoiceSends.month, billingMonth(sentAt))));
+      if (!canSendOnPlan(mode, org.plan, usage.total)) {
+        return { error: UPGRADE_MESSAGE };
+      }
+      const [client] = await tx
+        .select()
+        .from(clients)
+        .where(and(eq(clients.id, invoice.clientId), eq(clients.orgId, context.orgId)));
+      if (!client) {
+        return { error: "Client not found" };
+      }
+      if (client.bankAccountId) {
+        const [bank] = await tx
+          .select({ id: bankAccounts.id })
+          .from(bankAccounts)
+          .where(
+            and(eq(bankAccounts.id, client.bankAccountId), eq(bankAccounts.orgId, context.orgId)),
+          );
+        if (!bank) {
+          return { error: "Assigned bank account not found" };
+        }
+      }
+      const account = paymentAccount(mode, org.stripeAccountId, org.stripeChargesEnabled);
+      const accountId = account === "platform" ? null : account;
+      const paymentLink = account
+        ? await createPaymentLink({
+            attempt: sentAt.toISOString(),
+            currency: invoice.currency,
+            id: invoice.id,
+            number: invoice.number,
+            stripeAccountId: accountId,
+            total: invoice.total,
+          })
+        : null;
+      if (paymentLink) {
+        createdLink = { accountId, id: paymentLink.id };
+      }
       await tx
         .update(invoices)
         .set({
-          stripePaymentLinkId: paymentLink.id,
-          stripePaymentLinkUrl: paymentLink.url,
-          updatedAt: new Date(),
+          sentAt,
+          status: "sent",
+          stripeAccountId: accountId,
+          stripePaymentLinkId: paymentLink?.id ?? null,
+          stripePaymentLinkUrl: paymentLink?.url ?? null,
+          updatedAt: sentAt,
         })
-        .where(and(eq(invoices.id, invoiceId), eq(invoices.orgId, context.orgId)));
-
-      await tx.insert(activityLog).values({
-        action: "sent",
-        invoiceId,
-      });
-
-      await tx.insert(jobs).values({
-        invoiceId,
-        payload: { invoiceId },
-        type: "send_invoice_email",
-      });
+        .where(eq(invoices.id, invoiceId));
+      await tx
+        .insert(invoiceSends)
+        .values({ invoiceId, month: billingMonth(sentAt), orgId: org.id });
+      await tx.insert(activityLog).values({ action: "sent", invoiceId });
+      await tx
+        .insert(jobs)
+        .values({ invoiceId, payload: { invoiceId }, type: "send_invoice_email" });
+      return { invoiceId, success: true };
     });
-  } catch {
-    if (paymentLinkId) {
-      await deactivatePaymentLink(paymentLinkId).catch(() => null);
+    if ("error" in result) {
+      return result;
     }
-
-    await revertSentInvoice(context.orgId, invoiceId, sentAt);
+  } catch {
+    // A link created before a database failure has never been sent to the client.
+    const orphan = createdLink as { accountId: string | null; id: string } | null;
+    if (orphan) {
+      await deactivatePaymentLink(orphan.id, orphan.accountId).catch(() => null);
+    }
     return { error: "Invoice could not be sent. Please try again." };
   }
-
   await processPendingEmailJobs(1).catch(() => null);
-
   return { invoiceId, success: true };
-}
-
-async function revertSentInvoice(orgId: string, invoiceId: string, sentAt: Date) {
-  await db
-    .update(invoices)
-    .set({
-      sentAt: null,
-      status: "draft",
-      updatedAt: new Date(),
-    })
-    .where(
-      and(
-        eq(invoices.id, invoiceId),
-        eq(invoices.orgId, orgId),
-        eq(invoices.status, "sent"),
-        eq(invoices.sentAt, sentAt),
-      ),
-    );
 }
 
 export async function sendReminder(
@@ -549,7 +546,7 @@ export async function sendReminder(
     return { error: "Invoice not found" };
   }
 
-  if (!canSendInvoiceReminderStatus(invoice.status, Boolean(invoice.stripePaymentLinkUrl))) {
+  if (!canSendInvoiceReminderStatus(invoice.status)) {
     return { error: "Only sent or overdue invoices can receive reminders" };
   }
 
@@ -751,7 +748,7 @@ export async function cancelInvoice(
   let warning: string | undefined;
   if (invoice.stripePaymentLinkId) {
     try {
-      await deactivatePaymentLink(invoice.stripePaymentLinkId);
+      await deactivatePaymentLink(invoice.stripePaymentLinkId, invoice.stripeAccountId);
     } catch {
       warning = "Stripe payment link is still active. Disable it in Stripe.";
     }

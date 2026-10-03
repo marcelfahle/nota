@@ -3,6 +3,7 @@ import {
   boolean,
   date,
   integer,
+  index,
   jsonb,
   numeric,
   pgEnum,
@@ -48,8 +49,44 @@ export const orgs = pgTable("orgs", {
   logoUrl: text("logo_url"),
   name: text().notNull(),
   nextInvoiceNumber: integer("next_invoice_number").notNull().default(1),
-  stripeCustomerId: text("stripe_customer_id"),
+  plan: text("plan").notNull().default("free"),
+  stripeAccountId: text("stripe_account_id").unique(),
+  stripeChargesEnabled: boolean("stripe_charges_enabled").notNull().default(false),
+  stripeCheckoutSessionId: text("stripe_checkout_session_id"),
+  stripeCustomerId: text("stripe_customer_id").unique(),
+  stripePayoutsEnabled: boolean("stripe_payouts_enabled").notNull().default(false),
+  stripeSubscriptionId: text("stripe_subscription_id").unique(),
+  stripeSubscriptionStatus: text("stripe_subscription_status"),
   vatNumber: text("vat_number"),
+});
+
+// Keep usage after invoice deletion; a cancelled invoice still used a send.
+export const invoiceSends = pgTable(
+  "invoice_sends",
+  {
+    invoiceId: uuid("invoice_id").primaryKey(),
+    month: date("month").notNull(),
+    orgId: uuid("org_id")
+      .notNull()
+      .references(() => orgs.id, { onDelete: "cascade" }),
+  },
+  (table) => [index("invoice_sends_org_month_idx").on(table.orgId, table.month)],
+);
+
+export const stripeEvents = pgTable("stripe_events", {
+  id: text().primaryKey(),
+  processedAt: timestamp("processed_at").notNull().defaultNow(),
+});
+
+export const stripeConnectStates = pgTable("stripe_connect_states", {
+  expiresAt: timestamp("expires_at").notNull(),
+  orgId: uuid("org_id")
+    .notNull()
+    .references(() => orgs.id, { onDelete: "cascade" }),
+  tokenHash: text("token_hash").primaryKey(),
+  userId: uuid("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
 });
 
 export const orgMembers = pgTable(
@@ -172,6 +209,7 @@ export const invoices = pgTable(
     reverseCharge: text("reverse_charge").default("false"),
     sentAt: timestamp("sent_at"),
     status: invoiceStatusEnum().default("draft"),
+    stripeAccountId: text("stripe_account_id"),
     stripePaymentIntentId: text("stripe_payment_intent_id"),
     stripePaymentLinkId: text("stripe_payment_link_id"),
     stripePaymentLinkUrl: text("stripe_payment_link_url"),

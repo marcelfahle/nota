@@ -8,7 +8,8 @@
 - `owner`, `admin`, and `member` roles
 - invite links and team management
 - clients, bank accounts, invoices, activity log, PDF, and XRechnung
-- Stripe payment links and Stripe webhook handling
+- Stripe Connect for payments into each workspace's own Stripe account
+- Nota Pro subscriptions and five free invoice sends per workspace per UTC month
 - API keys and bearer-token REST API under `/api/v1`
 - in-app chat powered by Vercel AI SDK
 - queued email jobs plus overdue/job crons
@@ -75,7 +76,7 @@ Open `http://localhost:3000/login`.
 - `SESSION_SECRET`: HMAC secret for signed session cookies
 - `APP_URL`: absolute app URL used in invites and password reset emails
 - `RESEND_API_KEY`: API key used to send invites, invoices, reminders, and payment emails
-- `STRIPE_SECRET_KEY`: Stripe secret key used to create payment links
+- `STRIPE_SECRET_KEY`: Nota's platform key in hosted mode, or your own key in self-hosted direct mode
 - `STRIPE_WEBHOOK_SECRET`: webhook signing secret for `/api/webhooks/stripe`
 - `CRON_SECRET`: bearer token expected by `/api/cron/overdue` and `/api/cron/jobs`
 - `ANTHROPIC_API_KEY`: provider key for the in-app AI assistant
@@ -85,6 +86,14 @@ Open `http://localhost:3000/login`.
 
 - `RESEND_FROM_EMAIL`: branded sender, for example `Your Business <billing@example.com>`
 - `NOTA_CHAT_MODEL`: override the default `claude-sonnet-5-5` model used by `/api/chat` (adaptive thinking, low effort)
+
+### Stripe
+
+Follow [the Stripe setup runbook](./docs/runbooks/stripe-connect-billing.md) for account routing, subscriptions, webhooks, and rollout checks.
+
+Hosted mode defaults to `STRIPE_MODE=connect`. Set `STRIPE_CONNECT_CLIENT_ID`, `STRIPE_CONNECT_WEBHOOK_SECRET`, `STRIPE_PRICE_MONTHLY`, and `STRIPE_PRICE_YEARLY` alongside the platform key and webhook secret. Owners connect Stripe in Settings. Invoices without an enabled connection use bank details without a payment button.
+
+A single-business self-hosted install must explicitly set `STRIPE_MODE=direct`. It uses its own Stripe key, has unlimited sends, and needs no Nota subscription or Connect credentials.
 
 ## Branding assets
 

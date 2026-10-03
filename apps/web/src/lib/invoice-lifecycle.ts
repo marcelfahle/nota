@@ -36,18 +36,14 @@ export function canMarkInvoicePaid(status: string | null | undefined) {
   return normalized !== "paid" && normalized !== "cancelled";
 }
 
-export function canSendInvoiceReminder(
-  status: string | null | undefined,
-  hasStripePaymentLink: boolean,
-) {
+export function canSendInvoiceReminder(status: string | null | undefined) {
   const normalized = normalizeInvoiceStatus(status);
-  return hasStripePaymentLink && (normalized === "sent" || normalized === "overdue");
+  return normalized === "sent" || normalized === "overdue";
 }
 
 export function isInvoiceSendFinalized(
   status: string | null | undefined,
   hasSentActivity: boolean,
-  hasStripePaymentLink: boolean,
 ) {
-  return normalizeInvoiceStatus(status) === "sent" && hasSentActivity && hasStripePaymentLink;
+  return normalizeInvoiceStatus(status) === "sent" && hasSentActivity;
 }

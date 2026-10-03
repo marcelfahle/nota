@@ -14,12 +14,13 @@ import {
 import { APP_NAME } from "@/lib/app-brand";
 
 type InvoiceSentEmailProps = {
+  bankDetails?: string | null;
   businessName: string;
   clientName: string;
   currency: string;
   dueAt: string;
   invoiceNumber: string;
-  paymentLinkUrl: string;
+  paymentLinkUrl: string | null;
   reminder?: boolean;
   total: string;
 };
@@ -40,6 +41,7 @@ function formatDateEmail(dateStr: string): string {
 }
 
 export function InvoiceSentEmail({
+  bankDetails,
   businessName,
   clientName,
   currency,
@@ -80,11 +82,19 @@ export function InvoiceSentEmail({
             <Text style={styles.invoiceDue}>Due {formatDateEmail(dueAt)}</Text>
           </Section>
 
-          <Section style={styles.buttonSection}>
-            <Button href={paymentLinkUrl} style={styles.button}>
-              Pay Now
-            </Button>
-          </Section>
+          {paymentLinkUrl ? (
+            <Section style={styles.buttonSection}>
+              <Button href={paymentLinkUrl} style={styles.button}>
+                Pay Now
+              </Button>
+            </Section>
+          ) : (
+            <Text style={{ ...styles.text, whiteSpace: "pre-line" }}>
+              {bankDetails
+                ? `Pay by bank transfer using invoice ${invoiceNumber} as the reference.\n${bankDetails}`
+                : "Please contact the sender to arrange payment."}
+            </Text>
+          )}
 
           <Hr style={styles.hr} />
 

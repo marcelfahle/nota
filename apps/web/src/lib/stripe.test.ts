@@ -11,6 +11,7 @@ test("payment helpers load without an API key and require it only when used", ()
       "-e",
       `
       delete process.env.STRIPE_SECRET_KEY;
+      process.env.STRIPE_MODE = "direct";
       const { createPaymentLink } = await import("./src/lib/stripe.ts");
       try {
         await createPaymentLink({ id: "fixture", number: "97", currency: "EUR", total: "1000" });

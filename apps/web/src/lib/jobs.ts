@@ -101,10 +101,6 @@ async function sendInvoiceEmail(invoiceId: string) {
   const { bankDetails, client, invoice, items, logoSrc, org } =
     await getInvoiceEmailContext(invoiceId);
 
-  if (!invoice.stripePaymentLinkUrl) {
-    throw new Error("Invoice has no Stripe payment link");
-  }
-
   const pdfBuffer = await renderToBuffer(
     InvoicePdf({
       business: {
@@ -163,6 +159,7 @@ async function sendInvoiceEmail(invoiceId: string) {
     ],
     from: fromEmail,
     react: InvoiceSentEmail({
+      bankDetails,
       businessName,
       clientName: client.name,
       currency: invoice.currency ?? "EUR",
@@ -177,11 +174,7 @@ async function sendInvoiceEmail(invoiceId: string) {
 }
 
 async function sendInvoiceReminderEmail(invoiceId: string) {
-  const { client, invoice, org } = await getInvoiceEmailContext(invoiceId);
-
-  if (!invoice.stripePaymentLinkUrl) {
-    throw new Error("Invoice has no Stripe payment link");
-  }
+  const { bankDetails, client, invoice, org } = await getInvoiceEmailContext(invoiceId);
 
   const fromEmail = getEmailEnv().RESEND_FROM_EMAIL ?? DEFAULT_FROM_EMAIL;
   const businessName = org.businessName ?? org.name ?? APP_NAME;
@@ -189,6 +182,7 @@ async function sendInvoiceReminderEmail(invoiceId: string) {
   await getResend().emails.send({
     from: fromEmail,
     react: InvoiceSentEmail({
+      bankDetails,
       businessName,
       clientName: client.name,
       currency: invoice.currency ?? "EUR",
