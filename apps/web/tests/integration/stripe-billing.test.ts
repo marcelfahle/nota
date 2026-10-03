@@ -360,6 +360,10 @@ test("checkout reuses a matching session, switches intervals, and prevents dupli
     );
     expect(monthly[0]).toEqual(monthly[1]);
     expect(sessions.size).toBe(1);
+    expect(create.mock.calls[0][0]).toMatchObject({
+      automatic_tax: { enabled: true },
+      tax_id_collection: { enabled: true },
+    });
     const yearly = await createBillingCheckout(orgCheckout, "test@example.com", "year");
     expect(yearly.url).not.toBe(monthly[0].url);
     expect(sessions.get("cs_fixture_0")!.status).toBe("expired");

@@ -128,8 +128,9 @@ export function BillingSettings({
         </p>
         {status.mode === "connect" ? (
           <p className="text-sm text-muted-foreground">
-            Every feature is included. Free sends reset on the first day of each month (UTC). Your
-            Nota subscription is separate from your clients’ invoice payments.
+            Prices are in USD, plus applicable tax calculated at checkout. Every feature is
+            included. Free sends reset on the first day of each month (UTC). Your Nota subscription
+            is separate from your clients’ invoice payments.
           </p>
         ) : null}
         {canManage && status.mode === "connect" ? (

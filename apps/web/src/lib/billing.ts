@@ -81,6 +81,7 @@ export async function createBillingCheckout(
       ).id;
     const session = await stripe.checkout.sessions.create(
       {
+        automatic_tax: { enabled: true },
         billing_address_collection: "required",
         cancel_url: `${getAppEnv().APP_URL}/settings?billing=cancelled`,
         client_reference_id: orgId,

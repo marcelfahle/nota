@@ -12,7 +12,7 @@ Use an isolated database and Stripe sandbox for previews. Never deploy a preview
 1. Enable Connect for a SaaS platform with direct charges, full Stripe Dashboard access, merchant-paid processing fees, and Stripe responsibility for connected-account negative balances.
 2. Enable OAuth for Standard accounts. Add the exact `${APP_URL}/api/stripe/connect/callback` redirect URI and set `STRIPE_CONNECT_CLIENT_ID`.
 3. Set `STRIPE_MODE=connect` and `STRIPE_SECRET_KEY` to that environment's Nota platform key.
-4. Create Nota Pro recurring prices: USD 900 cents monthly and USD 9000 cents annually. Set `STRIPE_PRICE_MONTHLY` and `STRIPE_PRICE_YEARLY`.
+4. Create Nota Pro recurring prices: USD 900 cents monthly and USD 9000 cents annually, with `tax_behavior=exclusive`. Set `STRIPE_PRICE_MONTHLY` and `STRIPE_PRICE_YEARLY`. Configure Stripe Tax's business origin and verified registrations, and classify Nota Pro as SaaS for business use (`txcd_10103001`).
 5. Configure the default customer portal for payment-method updates, invoice history and cancellation at period end. The app uses that default configuration.
 6. Create the webhook endpoints below and save their distinct signing secrets. Exempt those endpoints from any preview authentication using an approved deployment-protection mechanism; they must be reachable by Stripe.
 
@@ -27,7 +27,7 @@ Use snapshot events compatible with the installed Stripe SDK. Payment matching r
 
 Complete Stripe's legal-entity, representative, bank and service-agreement requirements with the account owner's verified information. Confirm the public name, support contacts, website, and statement descriptor belong to Nota.
 
-Confirm whether advertised subscription prices include tax, the business's tax registrations, and the intended Stripe Tax configuration before accepting live subscription payments. The current Checkout integration collects billing addresses and tax IDs; it does **not** enable automatic tax calculation. Tax collection needs its own verified configuration before live billing.
+Subscription prices exclude applicable tax. Checkout collects billing addresses and tax IDs and enables Stripe's automatic tax calculation. Confirm the business's tax registrations and complete Stripe Tax configuration before accepting live subscriptions: automatic tax alone does not register the business or ensure tax is collected in every jurisdiction. This setting applies to Nota subscriptions; merchant invoices keep their own existing tax amounts.
 
 ## Migration and rollback
 
