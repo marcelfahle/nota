@@ -619,13 +619,13 @@ export async function sendInvoice(
             })
             .where(eq(invoices.id, original.id));
           await expireInvoiceProposals(tx, original.id);
-          if (original.stripePaymentLinkId) {
-            creditedLink = {
-              accountId: original.stripeAccountId,
-              id: original.stripePaymentLinkId,
-              invoiceId: original.id,
-            };
-          }
+        }
+        if (original?.stripePaymentLinkId) {
+          creditedLink = {
+            accountId: original.stripeAccountId,
+            id: original.stripePaymentLinkId,
+            invoiceId: original.id,
+          };
         }
       }
       await expireInvoiceProposals(tx, invoiceId);

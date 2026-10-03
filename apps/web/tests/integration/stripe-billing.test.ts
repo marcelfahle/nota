@@ -184,6 +184,67 @@ test("two workspaces issue their payment links on separate accounts with no Nota
   ).toHaveLength(2);
 });
 
+test("partial credits retire stale links and count toward Stripe settlement", async () => {
+  const requestCount = requests.length;
+  const id = await draft(orgA, clientA);
+  expect(await sendInvoice(context(orgA), id)).toMatchObject({ success: true });
+  const [original] = await db.select().from(invoices).where(eq(invoices.id, id));
+
+  const creditId = randomUUID();
+  madeInvoices.push(creditId);
+  await db.insert(invoices).values({
+    clientId: clientA,
+    creditsInvoiceId: id,
+    currency: "EUR",
+    dueAt: "2026-10-17",
+    id: creditId,
+    issuedAt: "2026-10-03",
+    kind: "credit_note",
+    number: `CN-${creditId}`,
+    orgId: orgA,
+    subtotal: "-2.50",
+    total: "-2.50",
+    userId,
+  });
+  expect(await sendInvoice(context(orgA), creditId)).toMatchObject({ success: true });
+  expect(linkUpdateMock).toHaveBeenCalledWith(
+    original.stripePaymentLinkId,
+    { active: false },
+    { stripeAccount: "acct_a" },
+  );
+  expect((await db.select().from(invoices).where(eq(invoices.id, id)))[0]).toMatchObject({
+    status: "sent",
+    stripePaymentLinkId: null,
+  });
+
+  const replacementLink = "plink_repriced";
+  await db
+    .update(invoices)
+    .set({ stripePaymentLinkId: replacementLink, stripePaymentLinkUrl: "https://example.com" })
+    .where(eq(invoices.id, id));
+  await handleStripeEvent(
+    {
+      account: "acct_a",
+      data: {
+        object: {
+          amount_total: 1000,
+          currency: "eur",
+          metadata: { invoiceId: id },
+          mode: "payment",
+          payment_intent: `pi_${id}`,
+          payment_link: replacementLink,
+          payment_status: "paid",
+        },
+      },
+      id: `evt_${id}_credited`,
+      type: "checkout.session.completed",
+    } as unknown as Stripe.Event,
+    true,
+  );
+  expect((await db.select().from(invoices).where(eq(invoices.id, id)))[0].status).toBe("paid");
+  requests.splice(requestCount);
+});
+
 test("concurrent free sends stop at five; bank-only invoices can be sent, retried and reminded", async () => {
   const ids = await Promise.all(Array.from({ length: 7 }, () => draft(orgFree, clientFree)));
   const results = await Promise.all(ids.map((id) => sendInvoice(context(orgFree), id)));

@@ -56,6 +56,7 @@ export async function POST(request: Request) {
   if (!incoming || incoming.role !== "user") {
     return Response.json({ error: "A user message is required" }, { status: 400 });
   }
+  incoming = { ...incoming, id: crypto.randomUUID() };
   const thread = await getChatThread({ orgId: auth.org.id, userId: auth.user.id });
   const previousMessages = await loadChatMessages(thread.id, MAX_CHAT_MESSAGES - 1);
   const messages = [...previousMessages, incoming];

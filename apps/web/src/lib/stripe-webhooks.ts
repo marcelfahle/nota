@@ -123,10 +123,11 @@ export async function handleStripeEvent(event: Stripe.Event, connected: boolean)
         Math.abs(Number(creditTotal?.total ?? 0)),
     );
     const currency = (invoice.currency || "eur").toLowerCase();
+    const remainingAmount = stripeAmount(remaining.toFixed(2), currency);
     if (
       session.currency !== currency ||
       !session.amount_total ||
-      session.amount_total > stripeAmount(remaining.toFixed(2), currency)
+      session.amount_total > remainingAmount
     ) {
       throw new Error("Invoice payment amount mismatch");
     }
@@ -156,11 +157,7 @@ export async function handleStripeEvent(event: Stripe.Event, connected: boolean)
     if (!insertedPayments.length) {
       return;
     }
-    const [paymentTotal] = await tx
-      .select({ total: sql<string>`coalesce(sum(${payments.amount}::numeric), 0)` })
-      .from(payments)
-      .where(eq(payments.invoiceId, invoiceId));
-    const fullyPaid = Number(paymentTotal.total) >= Number(invoice.total ?? 0);
+    const fullyPaid = session.amount_total === remainingAmount;
     await tx
       .update(invoices)
       .set({
