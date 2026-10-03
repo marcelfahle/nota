@@ -442,6 +442,7 @@ export function ChatPanel() {
   const [input, setInput] = useState("");
   const [open, setOpen] = useState(false);
   const [csvFile, setCsvFile] = useState<File | null>(null);
+  const [historyLoaded, setHistoryLoaded] = useState(false);
   const [importBusy, setImportBusy] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
   const refreshedMessages = useRef<Set<string>>(new Set());
@@ -451,7 +452,7 @@ export function ChatPanel() {
     transport,
   });
 
-  const isBusy = status === "submitted" || status === "streaming" || importBusy;
+  const isBusy = !historyLoaded || status === "submitted" || status === "streaming" || importBusy;
 
   useEffect(() => {
     let active = true;
@@ -460,6 +461,11 @@ export function ChatPanel() {
       .then((data: { messages?: Array<UIMessage> } | null) => {
         if (active && data?.messages) {
           setMessages(data.messages);
+        }
+      })
+      .finally(() => {
+        if (active) {
+          setHistoryLoaded(true);
         }
       });
     return () => {

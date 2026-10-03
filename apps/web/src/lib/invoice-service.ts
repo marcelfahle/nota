@@ -1,6 +1,6 @@
 import { randomBytes } from "node:crypto";
 
-import { and, asc, count, desc, eq, sql } from "drizzle-orm";
+import { and, asc, count, desc, eq, inArray, sql } from "drizzle-orm";
 
 import type { AuthenticatedRole } from "@/lib/auth";
 import { billingMonth, canSendOnPlan, paymentAccount, UPGRADE_MESSAGE } from "@/lib/billing-policy";
@@ -101,6 +101,20 @@ async function expireInvoiceProposals(tx: DbTransaction, invoiceId: string) {
     .update(proposals)
     .set({ status: "expired" })
     .where(and(eq(proposals.invoiceId, invoiceId), eq(proposals.status, "pending")));
+}
+
+async function issuedCreditCents(tx: DbTransaction, invoiceId: string) {
+  const [row] = await tx
+    .select({ total: sql<string>`coalesce(sum(${invoices.total}::numeric), 0)` })
+    .from(invoices)
+    .where(
+      and(
+        eq(invoices.creditsInvoiceId, invoiceId),
+        eq(invoices.kind, "credit_note"),
+        inArray(invoices.status, ["sent", "overdue", "paid"]),
+      ),
+    );
+  return Math.abs(cents(row?.total));
 }
 
 export function calculateInvoiceTotals(
@@ -250,7 +264,7 @@ export async function getInvoiceDetail(orgId: string, invoiceId: string) {
         and(
           eq(invoices.creditsInvoiceId, invoiceId),
           eq(invoices.kind, "credit_note"),
-          eq(invoices.status, "sent"),
+          inArray(invoices.status, ["sent", "overdue", "paid"]),
         ),
       ),
     db
@@ -499,6 +513,7 @@ export async function sendInvoice(
 
   const sentAt = new Date();
   let createdLink: { accountId: string | null; id: string } | null = null;
+  let creditedLink: { accountId: string | null; id: string; invoiceId: string } | null = null;
   try {
     const result = await db.transaction(async (tx): Promise<InvoiceMutationResult> => {
       // Keep quota, invoice state and the email job atomic, including on request interruption.
@@ -588,6 +603,31 @@ export async function sendInvoice(
         invoiceId,
         ...sourceFields(context),
       });
+      if (invoice.kind === "credit_note" && invoice.creditsInvoiceId) {
+        const [original] = await tx
+          .select()
+          .from(invoices)
+          .where(eq(invoices.id, invoice.creditsInvoiceId))
+          .for("update");
+        if (original && (await issuedCreditCents(tx, original.id)) >= cents(original.total)) {
+          await tx
+            .update(invoices)
+            .set({
+              revision: sql`${invoices.revision} + 1`,
+              status: "cancelled",
+              updatedAt: sentAt,
+            })
+            .where(eq(invoices.id, original.id));
+          await expireInvoiceProposals(tx, original.id);
+          if (original.stripePaymentLinkId) {
+            creditedLink = {
+              accountId: original.stripeAccountId,
+              id: original.stripePaymentLinkId,
+              invoiceId: original.id,
+            };
+          }
+        }
+      }
       await expireInvoiceProposals(tx, invoiceId);
       await tx
         .insert(jobs)
@@ -605,8 +645,25 @@ export async function sendInvoice(
     }
     return { error: "Invoice could not be sent. Please try again." };
   }
+  let warning: string | undefined;
+  const originalLink = creditedLink as {
+    accountId: string | null;
+    id: string;
+    invoiceId: string;
+  } | null;
+  if (originalLink) {
+    try {
+      await deactivatePaymentLink(originalLink.id, originalLink.accountId);
+      await db
+        .update(invoices)
+        .set({ stripePaymentLinkId: null, stripePaymentLinkUrl: null })
+        .where(eq(invoices.id, originalLink.invoiceId));
+    } catch {
+      warning = "The original Stripe payment link is still active. Disable it in Stripe.";
+    }
+  }
   await processPendingEmailJobs(1).catch(() => null);
-  return { invoiceId, success: true };
+  return { invoiceId, success: true, warning };
 }
 
 export async function sendReminder(
@@ -827,6 +884,7 @@ export async function recordInvoicePayment(
     return { error: "Payment amount must be positive" };
   }
 
+  let paymentLink: { accountId: string | null; id: string } | null = null;
   const result = await db.transaction(async (tx): Promise<InvoiceMutationResult> => {
     const [invoice] = await tx
       .select()
@@ -843,10 +901,14 @@ export async function recordInvoicePayment(
       .select({ total: sql<string>`coalesce(sum(${payments.amount}::numeric), 0)` })
       .from(payments)
       .where(eq(payments.invoiceId, invoiceId));
-    const remaining = cents(invoice.total) - cents(row?.total);
+    const remaining =
+      cents(invoice.total) - cents(row?.total) - (await issuedCreditCents(tx, invoiceId));
     const amount = Math.round(input.amount * 100);
-    if (amount > remaining) {
+    if (amount <= 0 || amount > remaining) {
       return { error: "Payment exceeds the remaining balance" };
+    }
+    if (invoice.stripePaymentLinkId) {
+      paymentLink = { accountId: invoice.stripeAccountId, id: invoice.stripePaymentLinkId };
     }
     const receivedAt = input.receivedAt ?? new Date();
     await tx.insert(payments).values({
@@ -884,6 +946,18 @@ export async function recordInvoicePayment(
     return { invoiceId, success: true };
   });
   if ("success" in result) {
+    const link = paymentLink as { accountId: string | null; id: string } | null;
+    if (link) {
+      try {
+        await deactivatePaymentLink(link.id, link.accountId);
+        await db
+          .update(invoices)
+          .set({ stripePaymentLinkId: null, stripePaymentLinkUrl: null })
+          .where(eq(invoices.id, invoiceId));
+      } catch {
+        result.warning = "Stripe payment link is still active. Disable it in Stripe.";
+      }
+    }
     await processPendingEmailJobs(1).catch(() => null);
   }
   return result;
@@ -917,7 +991,8 @@ export async function markInvoicePaid(
       .select({ total: sql<string>`coalesce(sum(${payments.amount}::numeric), 0)` })
       .from(payments)
       .where(eq(payments.invoiceId, invoiceId));
-    const remaining = cents(invoice.total) - cents(row?.total);
+    const remaining =
+      cents(invoice.total) - cents(row?.total) - (await issuedCreditCents(tx, invoiceId));
     if (remaining <= 0) {
       return { invoiceId, success: true };
     }

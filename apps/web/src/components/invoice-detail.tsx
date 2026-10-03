@@ -385,7 +385,7 @@ export function InvoiceDetailView({ activities, invoice, role }: InvoiceDetailPr
               Cancel Invoice
             </Button>
           )}
-          {(isDraft || status === "cancelled") && canManageDelete && (
+          {isDraft && canManageDelete && (
             <Button
               className="text-red-600 hover:bg-red-50 hover:text-red-700"
               data-testid="invoice-delete-draft"
@@ -395,7 +395,7 @@ export function InvoiceDetailView({ activities, invoice, role }: InvoiceDetailPr
               variant="outline"
             >
               <Trash2 className="size-4" />
-              {isDraft ? "Delete Draft" : "Delete Invoice"}
+              Delete Draft
             </Button>
           )}
         </div>

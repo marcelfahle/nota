@@ -65,6 +65,9 @@ const linkMock = spyOn(stripe.paymentLinks, "create").mockImplementation(
     } as Stripe.Response<Stripe.PaymentLink>;
   },
 );
+const linkUpdateMock = spyOn(stripe.paymentLinks, "update").mockImplementation(
+  async (id: string) => ({ active: false, id }) as Stripe.Response<Stripe.PaymentLink>,
+);
 let clientA: string, clientB: string, clientFree: string;
 beforeAll(async () => {
   await db.insert(users).values({ email: `${userId}@example.com`, id: userId, name: "Test Owner" });
@@ -158,6 +161,9 @@ test("two workspaces issue their payment links on separate accounts with no Nota
   expect((await db.select().from(invoices).where(eq(invoices.id, a)))[0].status).toBe("sent");
   await handleStripeEvent(event("acct_a", "paid", 100, "partial"), true);
   expect((await db.select().from(invoices).where(eq(invoices.id, a)))[0].status).toBe("sent");
+  await expect(handleStripeEvent(event("acct_a", "paid", 1250, "overpay"), true)).rejects.toThrow(
+    "amount mismatch",
+  );
   await Promise.all([
     handleStripeEvent(event("acct_a", "paid", 1150, "full", "full-a"), true),
     handleStripeEvent(event("acct_a", "paid", 1150, "full", "full-b"), true),
@@ -433,6 +439,9 @@ test("partial payments derive balance, public views dedupe, and credit notes rev
   expect(
     await recordInvoicePayment(context(orgA), id, { amount: 5, method: "bank_transfer" }),
   ).toMatchObject({ success: true });
+  expect(
+    await recordInvoicePayment(context(orgA), id, { amount: 0.001, method: "other" }),
+  ).toMatchObject({ error: "Payment exceeds the remaining balance" });
   expect(await getInvoiceDetail(orgA, id)).toMatchObject({
     balance: "7.50",
     paidAmount: "5.00",
@@ -474,7 +483,11 @@ test("partial payments derive balance, public views dedupe, and credit notes rev
     balance: "0.00",
     creditedAmount: "12.50",
     settlementStatus: "paid",
+    status: "cancelled",
   });
+  expect(
+    await recordInvoicePayment(context(orgA), id, { amount: 1, method: "other" }),
+  ).toMatchObject({ error: "Only an outstanding issued invoice can receive payments" });
 });
 
 test("chat persists and reminder proposals enqueue their frozen payload", async () => {
@@ -513,6 +526,7 @@ test("chat persists and reminder proposals enqueue their frozen payload", async 
 afterAll(async () => {
   priceMock.mockRestore();
   linkMock.mockRestore();
+  linkUpdateMock.mockRestore();
   for (const id of madeInvoices.reverse()) {
     await db.delete(activityLog).where(eq(activityLog.invoiceId, id));
     await db.delete(invoices).where(eq(invoices.id, id));

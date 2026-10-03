@@ -71,6 +71,10 @@ export async function GET(request: Request) {
         totalInvoiced: sql<string>`coalesce(sum(${invoices.total}::numeric), 0)`,
         updatedAt: clients.updatedAt,
         vatNumber: clients.vatNumber,
+        vatRegistryAddress: clients.vatRegistryAddress,
+        vatRegistryName: clients.vatRegistryName,
+        vatStatus: clients.vatStatus,
+        vatVerifiedAt: clients.vatVerifiedAt,
       })
       .from(clients)
       .leftJoin(

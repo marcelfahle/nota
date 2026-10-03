@@ -28,6 +28,10 @@ async function getScopedClient(clientId: string, orgId: string) {
       updatedAt: clients.updatedAt,
       userId: clients.userId,
       vatNumber: clients.vatNumber,
+      vatRegistryAddress: clients.vatRegistryAddress,
+      vatRegistryName: clients.vatRegistryName,
+      vatStatus: clients.vatStatus,
+      vatVerifiedAt: clients.vatVerifiedAt,
     })
     .from(clients)
     .leftJoin(invoices, and(eq(invoices.clientId, clients.id), eq(invoices.orgId, orgId)))
@@ -83,12 +87,15 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   ) {
     return error("Invalid bank account");
   }
+  const vatFields = Object.hasOwn(payload, "vatNumber")
+    ? await clientVatFields(result.data.vatNumber)
+    : {};
 
   const [client] = await db
     .update(clients)
     .set({
       ...result.data,
-      ...(await clientVatFields(result.data.vatNumber)),
+      ...vatFields,
       updatedAt: new Date(),
     })
     .where(and(eq(clients.id, id), eq(clients.orgId, authResult.auth.org.id)))

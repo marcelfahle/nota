@@ -199,9 +199,37 @@ async function sendInvoiceEmail(invoiceId: string) {
 async function sendInvoiceReminderEmail(
   invoiceId: string,
   stored?: ReturnType<typeof reminderPayloadSchema.parse>,
-  source: Pick<EmailJobPayload, "source" | "sourceClient"> = {},
+  job: Pick<EmailJobPayload, "proposalId" | "source" | "sourceClient"> = {},
 ) {
   if (stored) {
+    const [[invoice], [proposal]] = await Promise.all([
+      db
+        .select({ revision: invoices.revision, status: invoices.status })
+        .from(invoices)
+        .where(eq(invoices.id, invoiceId))
+        .limit(1),
+      job.proposalId
+        ? db
+            .select({ invoiceRevision: proposals.invoiceRevision })
+            .from(proposals)
+            .where(eq(proposals.id, job.proposalId))
+            .limit(1)
+        : Promise.resolve([]),
+    ]);
+    if (
+      !invoice ||
+      !proposal ||
+      invoice.revision !== proposal.invoiceRevision ||
+      !["sent", "overdue"].includes(invoice.status ?? "")
+    ) {
+      if (job.proposalId) {
+        await db
+          .update(proposals)
+          .set({ status: "expired" })
+          .where(eq(proposals.id, job.proposalId));
+      }
+      return;
+    }
     const fromEmail = getEmailEnv().RESEND_FROM_EMAIL ?? DEFAULT_FROM_EMAIL;
     const result = await getResend().emails.send({
       from: fromEmail,
@@ -224,8 +252,8 @@ async function sendInvoiceReminderEmail(
     await db.insert(activityLog).values({
       action: "reminder_sent",
       invoiceId,
-      source: source.source ?? "system",
-      sourceClient: source.sourceClient,
+      source: job.source ?? "system",
+      sourceClient: job.sourceClient,
     });
     return;
   }
@@ -254,8 +282,8 @@ async function sendInvoiceReminderEmail(
   await db.insert(activityLog).values({
     action: "reminder_sent",
     invoiceId,
-    source: source.source ?? "system",
-    sourceClient: source.sourceClient,
+    source: job.source ?? "system",
+    sourceClient: job.sourceClient,
   });
 }
 

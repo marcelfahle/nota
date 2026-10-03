@@ -100,11 +100,33 @@ export async function handleStripeEvent(event: Stripe.Event, connected: boolean)
     ) {
       return;
     }
+    const [[existingPaymentTotal], [creditTotal]] = await Promise.all([
+      tx
+        .select({ total: sql<string>`coalesce(sum(${payments.amount}::numeric), 0)` })
+        .from(payments)
+        .where(eq(payments.invoiceId, invoiceId)),
+      tx
+        .select({ total: sql<string>`coalesce(sum(${invoices.total}::numeric), 0)` })
+        .from(invoices)
+        .where(
+          and(
+            eq(invoices.creditsInvoiceId, invoiceId),
+            eq(invoices.kind, "credit_note"),
+            inArray(invoices.status, ["sent", "overdue", "paid"]),
+          ),
+        ),
+    ]);
+    const remaining = Math.max(
+      0,
+      Number(invoice.total ?? 0) -
+        Number(existingPaymentTotal?.total ?? 0) -
+        Math.abs(Number(creditTotal?.total ?? 0)),
+    );
     const currency = (invoice.currency || "eur").toLowerCase();
     if (
       session.currency !== currency ||
       !session.amount_total ||
-      session.amount_total > stripeAmount(invoice.total, currency)
+      session.amount_total > stripeAmount(remaining.toFixed(2), currency)
     ) {
       throw new Error("Invoice payment amount mismatch");
     }

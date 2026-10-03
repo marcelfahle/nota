@@ -55,7 +55,11 @@ export async function verifyVatNumber(
   const vatNumber = normalizeVatNumber(value);
   const now = options.now ?? new Date();
   const [cached] = await db.select().from(vatChecks).where(eq(vatChecks.vatNumber, vatNumber));
-  if (cached && now.getTime() - cached.checkedAt.getTime() < CACHE_MS) {
+  if (
+    cached &&
+    cached.status !== "unavailable" &&
+    now.getTime() - cached.checkedAt.getTime() < CACHE_MS
+  ) {
     return { ...cached, vatNumber };
   }
 

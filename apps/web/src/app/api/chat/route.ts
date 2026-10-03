@@ -1,5 +1,12 @@
 import { anthropic } from "@ai-sdk/anthropic";
-import { convertToModelMessages, stepCountIs, streamText, type UIMessage } from "ai";
+import {
+  consumeStream,
+  convertToModelMessages,
+  stepCountIs,
+  streamText,
+  type UIMessage,
+  validateUIMessages,
+} from "ai";
 
 import { getCurrentUserOrNull } from "@/lib/auth";
 import { getChatThread, loadChatMessages, saveChatMessage } from "@/lib/chat-store";
@@ -10,7 +17,7 @@ const MAX_CHAT_MESSAGES = 24;
 const MAX_CHAT_PAYLOAD_SIZE = 50_000;
 
 type ChatRequestBody = {
-  messages?: Array<UIMessage>;
+  messages?: unknown;
   pageContext?: { entityId?: string; route?: string };
 };
 
@@ -40,13 +47,18 @@ export async function POST(request: Request) {
     return Response.json({ error: "Messages are required" }, { status: 400 });
   }
 
-  const incoming = body.messages.at(-1);
+  let incoming: UIMessage;
+  try {
+    [incoming] = await validateUIMessages({ messages: [body.messages.at(-1)] });
+  } catch {
+    return Response.json({ error: "Invalid chat message" }, { status: 400 });
+  }
   if (!incoming || incoming.role !== "user") {
     return Response.json({ error: "A user message is required" }, { status: 400 });
   }
   const thread = await getChatThread({ orgId: auth.org.id, userId: auth.user.id });
-  await saveChatMessage(thread.id, incoming, body.pageContext);
-  const messages = await loadChatMessages(thread.id, MAX_CHAT_MESSAGES);
+  const previousMessages = await loadChatMessages(thread.id, MAX_CHAT_MESSAGES - 1);
+  const messages = [...previousMessages, incoming];
   if (JSON.stringify(messages).length > MAX_CHAT_PAYLOAD_SIZE) {
     return Response.json(
       { error: "Chat history is too large. Start a new chat." },
@@ -69,6 +81,12 @@ export async function POST(request: Request) {
   } catch {
     return Response.json({ error: "Invalid chat history" }, { status: 400 });
   }
+  const pageContext = {
+    entityId:
+      typeof body.pageContext?.entityId === "string" ? body.pageContext.entityId : undefined,
+    route: typeof body.pageContext?.route === "string" ? body.pageContext.route : undefined,
+  };
+  await saveChatMessage(thread.id, incoming, pageContext);
 
   try {
     const context = await buildChatSystemContext(auth);
@@ -87,6 +105,7 @@ export async function POST(request: Request) {
     });
 
     return result.toUIMessageStreamResponse({
+      consumeSseStream: consumeStream,
       generateMessageId: () => crypto.randomUUID(),
       onError: (error) => {
         // eslint-disable-next-line no-console -- Preserve provider failures in server logs.
@@ -95,7 +114,7 @@ export async function POST(request: Request) {
         return `Nota chat failed: ${message}`;
       },
       onFinish: async ({ responseMessage }) => {
-        await saveChatMessage(thread.id, responseMessage, body.pageContext);
+        await saveChatMessage(thread.id, responseMessage, pageContext);
       },
       originalMessages: messages,
     });
