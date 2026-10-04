@@ -84,8 +84,22 @@ test("shell navigation, account themes, paper invoice and chat dock", async ({ b
   await expect(chat).toBeVisible();
   for (let index = 0; index < 12; index++) {
     await page.keyboard.press("Tab");
-    expect(await chat.evaluate((element) => element.contains(document.activeElement))).toBe(true);
+    expect(
+      await chat.evaluate((element) => {
+        // Native dialogs can yield focus to browser chrome (reported as BODY), never the page.
+        return (
+          element.matches(":modal") &&
+          (element.contains(document.activeElement) || document.activeElement === document.body)
+        );
+      }),
+    ).toBe(true);
   }
+  expect(
+    await page.locator("#main-content").evaluate((element) => {
+      element.focus();
+      return document.activeElement === element;
+    }),
+  ).toBe(false);
   await page.keyboard.press("Escape");
   await expect(page.getByRole("button", { name: "Close chat" })).toBeHidden();
   await expect(page.getByRole("textbox", { name: "Ask Nota" })).toBeFocused();
