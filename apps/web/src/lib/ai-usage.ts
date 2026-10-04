@@ -156,12 +156,12 @@ export function estimatedCost(input: {
   requests?: number;
 }) {
   // Parallel's list prices as read on 2026-10-04: about $0.001 per extracted
-  // URL (a read sends up to six in one request) and $0.005 per search.
+  // URL and $0.005 per search. Their rows carry the unit count as input tokens.
   if (input.feature === "parallel-extract") {
-    return 0.006 * (input.requests ?? 1);
+    return 0.001 * input.inputTokens;
   }
   if (input.feature === "parallel-search") {
-    return 0.005 * (input.requests ?? 1);
+    return 0.005 * input.inputTokens;
   }
   const price = MODEL_PRICES[input.modelId as AllowedModel];
   return price
