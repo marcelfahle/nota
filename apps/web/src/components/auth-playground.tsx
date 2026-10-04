@@ -73,27 +73,45 @@ export function AuthPlayground() {
       ripples.current = ripples.current.filter((ripple) => time - ripple.born < 1400);
 
       context.clearRect(0, 0, width, height);
+      // Resting dots go down as one path; only the lit ones near the pointer
+      // or on a ripple are drawn one by one.
+      const lit: Array<[number, number, number]> = [];
+      context.beginPath();
       for (let y = SPACING / 2; y < height; y += SPACING) {
         for (let x = SPACING / 2; x < width; x += SPACING) {
           const dx = x - eased.x;
           const dy = y - eased.y;
           const distance = Math.hypot(dx, dy);
-          let pull = Math.max(0, 1 - distance / REACH) ** 2;
+          let pull = distance < REACH ? (1 - distance / REACH) ** 2 : 0;
           for (const ripple of ripples.current) {
             const age = (time - ripple.born) / 1400;
             const ring = Math.abs(Math.hypot(x - ripple.x, y - ripple.y) - age * 520);
-            pull = Math.max(pull, Math.max(0, 1 - ring / 46) * (1 - age));
+            if (ring < 46) {
+              pull = Math.max(pull, (1 - ring / 46) * (1 - age));
+            }
+          }
+          if (pull < 0.02) {
+            context.moveTo(x + 1.05, y);
+            context.arc(x, y, 1.05, 0, Math.PI * 2);
+            continue;
           }
           // Dots lean away from the pointer as they swell.
           const push = pull * 7;
-          const px = distance > 0 ? x + (dx / distance) * push : x;
-          const py = distance > 0 ? y + (dy / distance) * push : y;
-          const mix = (from: number, to: number) => Math.round(from + (to - from) * pull);
-          context.fillStyle = `rgba(${mix(PAPER[0], LIME[0])},${mix(PAPER[1], LIME[1])},${mix(PAPER[2], LIME[2])},${0.16 + pull * 0.84})`;
-          context.beginPath();
-          context.arc(px, py, 1.05 + pull * 4.4, 0, Math.PI * 2);
-          context.fill();
+          lit.push([
+            distance > 0 ? x + (dx / distance) * push : x,
+            distance > 0 ? y + (dy / distance) * push : y,
+            pull,
+          ]);
         }
+      }
+      context.fillStyle = `rgba(${PAPER[0]},${PAPER[1]},${PAPER[2]},0.16)`;
+      context.fill();
+      for (const [x, y, pull] of lit) {
+        const mix = (from: number, to: number) => Math.round(from + (to - from) * pull);
+        context.fillStyle = `rgba(${mix(PAPER[0], LIME[0])},${mix(PAPER[1], LIME[1])},${mix(PAPER[2], LIME[2])},${0.16 + pull * 0.84})`;
+        context.beginPath();
+        context.arc(x, y, 1.05 + pull * 4.4, 0, Math.PI * 2);
+        context.fill();
       }
 
       if (paper.current) {
@@ -101,7 +119,7 @@ export function AuthPlayground() {
         const tiltY = ((eased.x - width / 2) / width) * 13;
         paper.current.style.transform = `rotateX(${tiltX.toFixed(2)}deg) rotateY(${tiltY.toFixed(2)}deg) rotate(-3deg)`;
       }
-      if (!still) {
+      if (!still && !document.hidden) {
         frame = requestAnimationFrame(draw);
       }
     };
@@ -115,8 +133,17 @@ export function AuthPlayground() {
     });
     observer.observe(host);
     frame = requestAnimationFrame(draw);
+    // A tab in the background draws nothing.
+    const resume = () => {
+      cancelAnimationFrame(frame);
+      if (!document.hidden) {
+        frame = requestAnimationFrame(draw);
+      }
+    };
+    document.addEventListener("visibilitychange", resume);
     return () => {
       cancelAnimationFrame(frame);
+      document.removeEventListener("visibilitychange", resume);
       observer.disconnect();
     };
   }, []);

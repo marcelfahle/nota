@@ -9,6 +9,7 @@ import { HalftoneShadow, HighlighterSwipe, NotaGlyph } from "@/components/nota-m
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { HOME_URL } from "@/lib/app-brand";
 import { authClient } from "@/lib/auth-client";
 import { continueAfterAuth } from "@/lib/auth-redirect";
 import type { SiteProfile } from "@/lib/site-reader/types";
@@ -217,10 +218,10 @@ export function Onboarding({ initialProfile }: { initialProfile: SiteProfile | n
       data-theme="system"
     >
       <header className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-5 py-5 sm:px-8">
-        <Link aria-label="Nota" className="flex items-center gap-2" href="/start">
+        <a aria-label="Nota home" className="flex items-center gap-2" href={HOME_URL}>
           <NotaGlyph />
           <span className="text-lg font-bold tracking-tight">Nota.</span>
-        </Link>
+        </a>
         <Trail step={step} />
         <Link
           className="inline-flex min-h-11 items-center text-sm text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"

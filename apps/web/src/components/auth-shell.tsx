@@ -1,7 +1,6 @@
-import Link from "next/link";
-
 import { AuthPlayground } from "@/components/auth-playground";
 import { NotaGlyph } from "@/components/nota-marks";
+import { HOME_URL } from "@/lib/app-brand";
 
 /**
  * Sign in, register and password pages: the form on paper to the left, the
@@ -26,10 +25,10 @@ export function AuthShell({
     >
       <div className="flex min-h-dvh flex-col px-5 py-5 sm:px-10 lg:min-h-0">
         <header className="flex items-center justify-between gap-4">
-          <Link aria-label="Nota" className="flex items-center gap-2" href="/login">
+          <a aria-label="Nota home" className="flex items-center gap-2" href={HOME_URL}>
             <NotaGlyph />
             <span className="text-lg font-bold tracking-tight">Nota.</span>
-          </Link>
+          </a>
           {subtitle ? <div className="text-sm text-muted-foreground">{subtitle}</div> : null}
         </header>
 
