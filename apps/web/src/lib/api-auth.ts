@@ -118,7 +118,8 @@ async function authenticateOAuthToken(token: string): Promise<ApiRequestAuthCont
   }
 
   const context = await getUserContextById(userId);
-  if (!context) {
+  // Connected agents stop working while a workspace is deactivated.
+  if (!context || context.org.deactivatedAt) {
     return null;
   }
 
@@ -171,7 +172,8 @@ export async function authenticateApiRequest(
     .where(eq(apiKeys.keyHash, keyHash))
     .limit(1);
 
-  if (!context) {
+  // API keys stop working while a workspace is deactivated.
+  if (!context || context.org.deactivatedAt) {
     return null;
   }
 

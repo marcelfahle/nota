@@ -3,7 +3,7 @@ import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 
 import { AuthShell } from "@/components/auth-shell";
-import { getCurrentUserOrNull } from "@/lib/auth";
+import { getActiveUserOrNull } from "@/lib/auth";
 import { auth } from "@/lib/better-auth";
 
 import { ConsentActions } from "./consent-actions";
@@ -44,7 +44,7 @@ export default async function ConsentPage({ searchParams }: { searchParams: Sear
     );
   }
 
-  const context = await getCurrentUserOrNull();
+  const context = await getActiveUserOrNull();
   if (!context) {
     redirect(`/login?${query.toString()}`);
   }

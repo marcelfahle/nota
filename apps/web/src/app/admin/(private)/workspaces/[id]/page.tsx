@@ -1,6 +1,6 @@
 import Link from "next/link";
 
-import { setWorkspaceModel } from "@/actions/admin";
+import { setWorkspaceActive, setWorkspaceModel } from "@/actions/admin";
 import { AdminDeleteWorkspace } from "@/components/admin-delete-workspace";
 import { Button } from "@/components/ui/button";
 import { getAdminWorkspace } from "@/lib/admin-data";
@@ -25,6 +25,11 @@ export default async function AdminWorkspacePage({ params }: { params: Promise<{
           ← Accounts
         </Link>
         <h1>{workspace.name}</h1>
+        {workspace.deactivatedAt ? (
+          <p className="text-sm font-medium text-destructive" data-testid="admin-deactivated">
+            Deactivated {date(workspace.deactivatedAt)}. Members cannot sign in to it.
+          </p>
+        ) : null}
         <p className="text-sm text-muted-foreground">
           {workspace.plan} plan · Stripe {workspace.stripeSubscriptionStatus ?? "not connected"} ·
           created {date(workspace.createdAt)}
@@ -101,6 +106,28 @@ export default async function AdminWorkspacePage({ params }: { params: Promise<{
           </ul>
         </section>
       </div>
+
+      <section className="space-y-3">
+        <h2 className="text-lg font-semibold">
+          {workspace.deactivatedAt ? "Reactivate workspace" : "Deactivate workspace"}
+        </h2>
+        <form
+          action={setWorkspaceActive}
+          className="space-y-4 rounded-md border p-4"
+          data-testid="admin-activation"
+        >
+          <input name="orgId" type="hidden" value={workspace.id} />
+          <input name="active" type="hidden" value={workspace.deactivatedAt ? "true" : "false"} />
+          <p className="text-sm text-muted-foreground">
+            {workspace.deactivatedAt
+              ? "Members can sign in again and their API keys and connected agents work again. Nothing was removed while it was off."
+              : "Locks members out and stops their API keys and connected agents. Nothing is deleted, invoices already sent stay viewable and payable by their clients, and Stripe billing is not changed. You can turn it back on at any time."}
+          </p>
+          <Button data-testid="admin-activation-submit" type="submit" variant="outline">
+            {workspace.deactivatedAt ? "Reactivate workspace" : "Deactivate workspace"}
+          </Button>
+        </form>
+      </section>
 
       <AdminDeleteWorkspace
         memberCount={members.length}

@@ -84,6 +84,7 @@ export default async function AdminAccountsPage({
                       href={`/admin/workspaces/${workspace.id}`}
                     >
                       {workspace.name}
+                      {workspace.deactivatedAt ? " (deactivated)" : ""}
                     </Link>
                     <span className="text-xs text-muted-foreground">
                       {workspace.ownerEmail ?? "No owner"}

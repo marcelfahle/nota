@@ -9,7 +9,7 @@ import {
 } from "ai";
 
 import { trackedModelCall } from "@/lib/ai-usage";
-import { getCurrentUserOrNull } from "@/lib/auth";
+import { getActiveUserOrNull } from "@/lib/auth";
 import {
   getChatThread,
   loadChatActivity,
@@ -27,7 +27,7 @@ type ChatRequestBody = {
 };
 
 export async function GET() {
-  const auth = await getCurrentUserOrNull();
+  const auth = await getActiveUserOrNull();
   if (!auth) {
     return Response.json({ error: "Unauthorized" }, { status: 401 });
   }
@@ -40,7 +40,7 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
-  const auth = await getCurrentUserOrNull();
+  const auth = await getActiveUserOrNull();
   if (!auth) {
     return Response.json({ error: "Unauthorized" }, { status: 401 });
   }
