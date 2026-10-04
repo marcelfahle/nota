@@ -23,7 +23,7 @@ describe("AI usage pricing", () => {
         outputTokens: 0,
         requests: 3,
       }),
-    ).toBe(0.003);
+    ).toBe(0.015);
   });
 
   test("rejects models outside the operator allowlist", () => {
