@@ -140,8 +140,8 @@ export default async function InvoicesPage({
           )}
         </div>
       ) : (
-        <div>
-          <div className="hidden grid-cols-[minmax(7rem,0.8fr)_minmax(12rem,1.5fr)_minmax(7rem,0.7fr)_minmax(6rem,0.6fr)_minmax(7.5rem,0.8fr)_auto] gap-4 border-b border-zinc-100 pb-3 text-xs font-medium tracking-wide text-zinc-400 uppercase md:grid">
+        <div className="@container">
+          <div className="hidden grid-cols-[minmax(7rem,0.8fr)_minmax(12rem,1.5fr)_minmax(7rem,0.7fr)_minmax(6rem,0.6fr)_minmax(7.5rem,0.8fr)_auto] gap-4 border-b border-zinc-100 pb-3 text-xs font-medium tracking-wide text-zinc-400 uppercase @4xl:grid">
             <span>Invoice</span>
             <span>Client</span>
             <span className="text-right">Amount</span>
@@ -152,7 +152,7 @@ export default async function InvoicesPage({
           <ul className="divide-y divide-zinc-100">
             {filtered.map((inv) => (
               <li
-                className="group grid grid-cols-[minmax(0,1fr)_auto] gap-x-4 gap-y-3 py-4 md:grid-cols-[minmax(7rem,0.8fr)_minmax(12rem,1.5fr)_minmax(7rem,0.7fr)_minmax(6rem,0.6fr)_minmax(7.5rem,0.8fr)_auto] md:items-center md:gap-4"
+                className="group grid grid-cols-[minmax(0,1fr)_auto] gap-x-4 gap-y-3 py-4 @4xl:grid-cols-[minmax(7rem,0.8fr)_minmax(12rem,1.5fr)_minmax(7rem,0.7fr)_minmax(6rem,0.6fr)_minmax(7.5rem,0.8fr)_auto] @4xl:items-center @4xl:gap-4"
                 data-testid="invoice-list-row"
                 key={inv.id}
               >
@@ -164,17 +164,17 @@ export default async function InvoicesPage({
                     {inv.number}
                   </Link>
                   <p className="mt-1 text-xs text-zinc-400">Issued {formatDate(inv.issuedAt)}</p>
-                  <div className="mt-2 md:hidden">
+                  <div className="mt-2 @4xl:hidden">
                     <StatusBadge status={inv.status ?? "draft"} />
                   </div>
                 </div>
-                <div className="min-w-0 md:col-start-2 md:row-start-1">
+                <div className="min-w-0 @4xl:col-start-2 @4xl:row-start-1">
                   <Link className="block min-w-0" href={`/invoices/${inv.id}`}>
                     <p className="truncate text-sm font-medium text-zinc-900">{inv.clientName}</p>
                     <p className="truncate text-xs text-zinc-500">{inv.clientEmail}</p>
                   </Link>
                 </div>
-                <div className="col-start-2 row-start-1 text-right md:col-start-3">
+                <div className="col-start-2 row-start-1 text-right @4xl:col-start-3">
                   <Link
                     className="text-sm font-semibold text-zinc-900 tabular-nums"
                     href={`/invoices/${inv.id}`}
@@ -188,20 +188,20 @@ export default async function InvoicesPage({
                     </p>
                   ) : null}
                 </div>
-                <div className="hidden md:col-start-4 md:block">
+                <div className="hidden @4xl:col-start-4 @4xl:block">
                   <Link className="inline-flex" href={`/invoices/${inv.id}`}>
                     <StatusBadge status={inv.status ?? "draft"} />
                   </Link>
                 </div>
-                <div className="text-sm text-zinc-500 md:col-start-5">
+                <div className="text-sm text-zinc-500 @4xl:col-start-5">
                   <Link href={`/invoices/${inv.id}`}>
-                    <span className="md:hidden">Due </span>
+                    <span className="@4xl:hidden">Due </span>
                     <span className={inv.status === "overdue" ? "font-medium text-red-700" : ""}>
                       {formatDate(inv.dueAt)}
                     </span>
                   </Link>
                 </div>
-                <div className="col-span-2 md:col-span-1 md:col-start-6">
+                <div className="col-span-2 @4xl:col-span-1 @4xl:col-start-6">
                   <InvoiceRowActions
                     invoice={{
                       id: inv.id,

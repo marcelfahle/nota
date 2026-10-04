@@ -40,7 +40,7 @@ test.beforeAll(async () => {
       ],
       stdin: {
         contents:
-          'import React from "react"; import {createRoot} from "react-dom/client"; import {ChatPanel} from "./src/components/chat-panel"; createRoot(document.getElementById("root")).render(<ChatPanel />);',
+          'import React from "react"; import {createRoot} from "react-dom/client"; import {ChatPanel} from "./src/components/chat-panel"; function Fixture() { const [open, setOpen] = React.useState(false); const input = React.useRef(null); return <div className="app-shell"><ChatPanel inputRef={input} open={open} onOpenChange={setOpen} /></div>; } createRoot(document.getElementById("root")).render(<Fixture />);',
         loader: "tsx",
         resolveDir: cwd,
       },
@@ -131,6 +131,14 @@ test("chat CSV preview, billing details, explicit import, and receipt work on de
   });
   await expect(page.getByText("1 new client ready.")).toBeVisible();
   expect(requests.filter((request) => request.mode === "commit").length).toBe(0);
+  await page.getByRole("button", { name: "Close chat" }).click();
+  const resumeImport = page.getByRole("button", {
+    name: "Continue importing freshbooks-clients.csv",
+  });
+  await expect(resumeImport).toBeFocused();
+  await resumeImport.click();
+  await expect(page.getByText("1 new client ready.")).toBeVisible();
+  expect(requests.filter((request) => request.mode === "preview").length).toBe(1);
   await page.locator("summary").click();
   await expect(page.getByText("Unused columns: Phone")).toBeVisible();
   await expect(page.getByText("Literal <img src=x onerror=alert(1)>")).toBeVisible();

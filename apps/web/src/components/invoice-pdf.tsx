@@ -231,6 +231,7 @@ const styles = StyleSheet.create({
     lineHeight: 1.6,
   },
   page: {
+    backgroundColor: "#fffefb",
     fontFamily: "Inter",
     fontSize: 9,
     fontWeight: 400,

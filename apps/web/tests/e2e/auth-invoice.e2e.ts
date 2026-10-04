@@ -27,7 +27,7 @@ test("updates organization settings and reflects branding", async ({ page }) => 
   await page.getByRole("button", { name: "Save Settings" }).click();
 
   await expect(page.getByText("Settings updated.")).toBeVisible();
-  await expect(page.locator("header").getByText(businessName)).toBeVisible();
+  await expect(page.getByRole("complementary").getByText(businessName)).toBeVisible();
 });
 
 test("creates and deletes an API key from settings", async ({ page }) => {
@@ -108,12 +108,12 @@ test("creates a client and moves an invoice through the manual lifecycle", async
   await invoiceLink.click();
 
   await expect(page).toHaveTitle(`${invoiceNumber} · ${clientName} — nota`);
-  await expect(page.getByTestId("invoice-status")).toContainText("draft");
+  await expect(page.getByTestId("invoice-status")).toContainText("Draft");
 
   await page.getByTestId("invoice-mark-sent").click();
-  await expect(page.getByTestId("invoice-status")).toContainText("sent");
+  await expect(page.getByTestId("invoice-status")).toContainText("Sent");
 
   await page.getByTestId("invoice-mark-paid").click();
-  await expect(page.getByTestId("invoice-status")).toContainText("paid");
+  await expect(page.getByTestId("invoice-status")).toContainText("Paid");
   await expect(page.getByText("Payment received")).toBeVisible();
 });

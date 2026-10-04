@@ -3,13 +3,24 @@ import { and, desc, eq, isNotNull, or, sql } from "drizzle-orm";
 import { DashboardShell } from "@/components/dashboard-shell";
 import { APP_NAME } from "@/lib/app-brand";
 import { getCurrentUser } from "@/lib/auth";
+import { billingStatus } from "@/lib/billing";
 import { db } from "@/lib/db";
 import { clients, invoices, jobs } from "@/lib/db/schema";
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
   const { org } = await getCurrentUser();
+  let domain: string | null = null;
+  if (org.website) {
+    try {
+      domain = new URL(org.website.includes("://") ? org.website : `https://${org.website}`)
+        .hostname;
+    } catch {
+      /* Older profiles can contain an incomplete website. */
+    }
+  }
 
-  const [stripeDockItems, emailJobItems, [emailJobSummary]] = await Promise.all([
+  const [usage, stripeDockItems, emailJobItems, [emailJobSummary]] = await Promise.all([
+    billingStatus(org.id),
     db
       .select({
         clientName: clients.name,
@@ -71,6 +82,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
   return (
     <DashboardShell
       brandName={org.businessName || org.name || APP_NAME}
+      domain={domain}
       emailJobItems={emailJobItems.map((item) => ({
         ...item,
         runAt: item.runAt?.toISOString() ?? null,
@@ -88,6 +100,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
         sentAt: item.sentAt?.toISOString() ?? null,
         updatedAt: item.updatedAt?.toISOString() ?? null,
       }))}
+      usage={usage}
     >
       {children}
     </DashboardShell>

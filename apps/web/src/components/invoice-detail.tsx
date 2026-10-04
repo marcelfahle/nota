@@ -448,7 +448,7 @@ export function InvoiceDetailView({ activities, invoice, role }: InvoiceDetailPr
       {/* Line Items */}
       <div className="mb-8">
         <h2 className="mb-4 text-sm font-semibold">Line Items</h2>
-        <div className="overflow-x-auto rounded-lg border border-zinc-200">
+        <div className="invoice-paper overflow-x-auto rounded-lg border border-zinc-200">
           <table className="w-full min-w-[400px]">
             <thead>
               <tr className="border-b border-zinc-100 text-left text-xs font-medium tracking-wide text-zinc-400 uppercase">

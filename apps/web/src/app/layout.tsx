@@ -1,19 +1,25 @@
 import type { Metadata } from "next";
-import { DM_Sans, DM_Mono } from "next/font/google";
+import { Archivo, Geist_Mono, Newsreader } from "next/font/google";
 
 import { APP_NAME } from "@/lib/app-brand";
+import { getCurrentUserOrNull } from "@/lib/auth";
 
 import "./globals.css";
 
-const sans = DM_Sans({
+const sans = Archivo({
+  axes: ["wdth"],
   subsets: ["latin"],
-  variable: "--font-sans",
+  variable: "--font-archivo",
 });
 
-const mono = DM_Mono({
+const mono = Geist_Mono({
   subsets: ["latin"],
-  variable: "--font-mono",
-  weight: ["400", "500"],
+  variable: "--font-geist-mono",
+});
+
+const voice = Newsreader({
+  subsets: ["latin"],
+  variable: "--font-newsreader",
 });
 
 export const metadata: Metadata = {
@@ -21,14 +27,15 @@ export const metadata: Metadata = {
   title: APP_NAME,
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const context = await getCurrentUserOrNull();
   return (
-    <html lang="en">
-      <body className={`${sans.variable} ${mono.variable} antialiased`} suppressHydrationWarning>
+    <html data-theme={context?.user.theme ?? "light"} lang="en">
+      <body className={`${sans.variable} ${mono.variable} ${voice.variable} antialiased`}>
         {children}
       </body>
     </html>
