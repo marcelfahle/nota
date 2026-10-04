@@ -26,7 +26,7 @@ export function InvoiceArchiveMenu({ status }: { status?: string }) {
       <DropdownMenuTrigger asChild>
         <Button className="min-h-11 sm:min-h-8" size="sm" variant="outline">
           <Download />
-          Download PDFs
+          Export
           <ChevronDown className="ml-0.5 size-3.5 text-zinc-400" />
         </Button>
       </DropdownMenuTrigger>

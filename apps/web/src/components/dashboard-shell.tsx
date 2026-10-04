@@ -65,6 +65,7 @@ export function DashboardShell({
   ];
   const pathname = usePathname();
   const isHome = pathname === "/home";
+  const isInvoiceList = pathname === "/invoices";
   const [menuOpen, setMenuOpen] = useState(false);
   const [panelOpen, setPanelOpen] = useState(false);
   const [opsOpen, setOpsOpen] = useState(false);
@@ -261,7 +262,12 @@ export function DashboardShell({
         </div>
       </aside>
       <div className={cn("min-w-0", !isHome && chatOpen && "xl:pr-[340px]")}>
-        <div className={cn("justify-end px-4 pt-5 sm:px-8", isHome ? "hidden" : "flex")}>
+        <div
+          className={cn(
+            "justify-end px-4 pt-5 sm:px-8",
+            isHome || isInvoiceList ? "hidden" : "flex",
+          )}
+        >
           <Button asChild size="sm">
             <Link href="/invoices/new">
               <Plus />
