@@ -1,0 +1,2 @@
+ALTER TYPE "public"."job_type" ADD VALUE 'send_invoice_test_email' BEFORE 'send_invoice_reminder_email';--> statement-breakpoint
+ALTER TABLE "orgs" ADD COLUMN "first_run_completed_at" timestamp DEFAULT now();
