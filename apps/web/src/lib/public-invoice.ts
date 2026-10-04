@@ -8,11 +8,11 @@ const VIEW_DEDUPE_MS = 30 * 60 * 1000;
 
 export async function getPublicInvoice(token: string, recordView = false) {
   const identity = await db.transaction(async (tx) => {
-    const [invoice] = await tx
+    const query = tx
       .select({ id: invoices.id, orgId: invoices.orgId, status: invoices.status })
       .from(invoices)
-      .where(eq(invoices.publicToken, token))
-      .for("update");
+      .where(eq(invoices.publicToken, token));
+    const [invoice] = recordView ? await query.for("update") : await query;
 
     if (!invoice?.orgId || invoice.status === "draft") {
       return null;

@@ -88,7 +88,7 @@ export function InvoiceSentEmail({
           {actionUrl ? (
             <Section style={styles.buttonSection}>
               <Button href={actionUrl} style={styles.button}>
-                View invoice
+                {invoiceUrl ? "View invoice" : "Pay now"}
               </Button>
             </Section>
           ) : (
