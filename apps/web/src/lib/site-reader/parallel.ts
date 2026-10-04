@@ -1,5 +1,8 @@
+/* eslint-disable no-console */
 // Parallel (parallel.ai) fetches and searches on our behalf, so page text for
 // the model never passes through our own network.
+
+import { recordAiUsage, type UsageFeature } from "@/lib/ai-usage";
 
 const API = "https://api.parallel.ai/v1";
 
@@ -9,7 +12,13 @@ export function parallelConfigured() {
   return Boolean(process.env.PARALLEL_API_KEY);
 }
 
-async function call<T>(path: string, body: unknown, timeoutMs: number, signal?: AbortSignal) {
+async function call<T>(
+  path: string,
+  body: unknown,
+  feature: Extract<UsageFeature, "parallel-extract" | "parallel-search">,
+  timeoutMs: number,
+  signal?: AbortSignal,
+) {
   const key = process.env.PARALLEL_API_KEY;
   if (!key) {
     return null;
@@ -23,7 +32,16 @@ async function call<T>(path: string, body: unknown, timeoutMs: number, signal?: 
         ? AbortSignal.any([signal, AbortSignal.timeout(timeoutMs)])
         : AbortSignal.timeout(timeoutMs),
     });
-    return response.ok ? ((await response.json()) as T) : null;
+    if (!response.ok) {
+      return null;
+    }
+    const payload = (await response.json()) as T;
+    try {
+      await recordAiUsage({ feature, modelId: `parallel/${path.slice(1)}` });
+    } catch (error) {
+      console.error("[reader] failed to record Parallel usage", error);
+    }
+    return payload;
   } catch {
     return null;
   }
@@ -54,6 +72,7 @@ export async function extractPages(
         "The company's name, legal entity, registered address, VAT ID, contact email, and what the company does.",
       urls,
     },
+    "parallel-extract",
     options.timeoutMs ?? 12_000,
     options.signal,
   );
@@ -79,6 +98,7 @@ export async function searchWeb(
       objective,
       search_queries: [query],
     },
+    "parallel-search",
     options.timeoutMs ?? 6000,
     options.signal,
   );

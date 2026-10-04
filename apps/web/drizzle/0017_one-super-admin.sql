@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX "users_one_super_admin_unique" ON "users" USING btree ("is_super_admin") WHERE "users"."is_super_admin" = true;

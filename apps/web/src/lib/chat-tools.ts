@@ -38,7 +38,7 @@ import {
 } from "@/lib/invoice-service";
 import { clientVatFields } from "@/lib/vat";
 
-type ChatToolContext = Pick<AuthenticatedUserContext, "org" | "role" | "user">;
+export type ChatToolContext = Pick<AuthenticatedUserContext, "org" | "role" | "user">;
 
 async function withRetry<T>(fn: () => Promise<T>, retries = 1): Promise<T> {
   try {
