@@ -1,11 +1,11 @@
 import { createHash, randomBytes } from "node:crypto";
 
 import { verifyBearerToken } from "better-auth/oauth2";
-import { and, eq } from "drizzle-orm";
+import { and, eq, lt } from "drizzle-orm";
 
 import { getAuthIssuer, getMcpResource } from "@/lib/auth-config";
 import { db } from "@/lib/db";
-import { apiKeys, oauthClients, orgMembers, orgs, users } from "@/lib/db/schema";
+import { apiKeys, oauthClients, oauthConsents, orgMembers, orgs, users } from "@/lib/db/schema";
 import { getUserContextById, type AuthenticatedRole } from "@/lib/user-context";
 
 const API_KEY_PREFIX = "nota_";
@@ -119,6 +119,18 @@ async function authenticateOAuthToken(token: string): Promise<ApiRequestAuthCont
         .where(eq(oauthClients.clientId, clientId))
         .limit(1)
     : [];
+  if (clientId) {
+    await db
+      .update(oauthConsents)
+      .set({ updatedAt: new Date() })
+      .where(
+        and(
+          eq(oauthConsents.clientId, clientId),
+          eq(oauthConsents.userId, userId),
+          lt(oauthConsents.updatedAt, new Date(Date.now() - 60_000)),
+        ),
+      );
+  }
   return {
     apiKey: null,
     org: context.org,

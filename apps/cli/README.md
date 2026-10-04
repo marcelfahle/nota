@@ -16,13 +16,14 @@ bun run --cwd apps/cli dev -- --help
 
 ## Setup
 
-Create an API key in Nota under `Settings -> API keys`, then configure the CLI:
+Create an API key in Nota under `Settings -> API keys`, then sign in:
 
 ```bash
-nota config set-url https://nota.example.com
-nota config set-key nota_xxxxxxxxxxxxxxxxxxxxxxxxx
-nota whoami
+nota login
 ```
+
+The command verifies the key before saving it. You can still configure the URL and key directly
+with `nota config set-url` and `nota config set-key`.
 
 The CLI stores configuration in `~/.nota/config.json`.
 

@@ -28,6 +28,6 @@ export async function disconnectAppAction(clientId: string) {
       .where(and(eq(oauthConsents.clientId, clientId), eq(oauthConsents.userId, user.id)));
   });
 
-  revalidatePath("/settings");
+  revalidatePath("/agents");
   return { success: true };
 }

@@ -203,8 +203,12 @@ export function DashboardShell({
               onClick={() => setMenuOpen(false)}
             >
               <Link
-                className="rounded-md px-3 py-2.5 text-sm hover:bg-card"
-                href="/settings#connected-apps"
+                aria-current={pathname === "/agents" ? "page" : undefined}
+                className={cn(
+                  "rounded-md border border-transparent px-3 py-2.5 text-sm hover:bg-card",
+                  pathname === "/agents" && "border-border bg-card font-semibold",
+                )}
+                href="/agents"
               >
                 Connect an agent
               </Link>

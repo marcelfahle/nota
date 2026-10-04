@@ -6,6 +6,7 @@ import { Command } from "commander";
 import { registerClientCommands } from "./commands/clients.js";
 import { registerConfigCommands } from "./commands/config.js";
 import { registerInvoiceCommands } from "./commands/invoices.js";
+import { registerLoginCommand } from "./commands/login.js";
 import { registerWhoAmICommand } from "./commands/whoami.js";
 import { getCliErrorMessage } from "./helpers.js";
 
@@ -14,6 +15,7 @@ const program = new Command();
 program.name("nota").description("CLI for Nota").showHelpAfterError().version("0.1.0");
 
 registerConfigCommands(program);
+registerLoginCommand(program);
 registerWhoAmICommand(program);
 registerInvoiceCommands(program);
 registerClientCommands(program);

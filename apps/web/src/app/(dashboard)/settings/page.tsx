@@ -5,7 +5,6 @@ import { listMembers } from "@/actions/members";
 import { ApiKeysSettings } from "@/components/api-keys-settings";
 import { BillingSettings } from "@/components/billing-settings";
 import { BrandSettings } from "@/components/brand-settings";
-import { ConnectedAppsSettings } from "@/components/connected-apps-settings";
 import { BankAccountsSettings, NumberingSettings } from "@/components/settings-form";
 import { SettingsTabs } from "@/components/settings-tabs";
 import { TeamSettings } from "@/components/team-settings";
@@ -14,7 +13,7 @@ import { Button } from "@/components/ui/button";
 import { getCurrentUser } from "@/lib/auth";
 import { billingStatus } from "@/lib/billing";
 import { db } from "@/lib/db";
-import { apiKeys, bankAccounts, invoices, oauthClients, oauthConsents } from "@/lib/db/schema";
+import { apiKeys, bankAccounts, invoices } from "@/lib/db/schema";
 import { getInviteLink } from "@/lib/invites";
 import {
   canManageApiKeys,
@@ -68,17 +67,6 @@ export default async function SettingsPage({
         .where(eq(apiKeys.orgId, org.id))
         .orderBy(desc(apiKeys.createdAt))
     : [];
-
-  const connectedApps = await db
-    .select({
-      clientId: oauthConsents.clientId,
-      connectedAt: oauthConsents.createdAt,
-      name: oauthClients.name,
-    })
-    .from(oauthConsents)
-    .innerJoin(oauthClients, eq(oauthClients.clientId, oauthConsents.clientId))
-    .where(eq(oauthConsents.userId, user.id))
-    .orderBy(desc(oauthConsents.createdAt));
 
   const teamData = canManageMembers(role) ? await listMembers() : null;
 
@@ -148,13 +136,12 @@ export default async function SettingsPage({
               </form>
             </div>
           ),
-          api: (
-            <div className="space-y-8">
-              <section className="scroll-mt-6" id="connected-apps">
-                <ConnectedAppsSettings apps={connectedApps} />
-              </section>
-              {canManageApiKeys(role) ? <ApiKeysSettings apiKeys={apiKeyRecords} /> : null}
-            </div>
+          api: canManageApiKeys(role) ? (
+            <ApiKeysSettings apiKeys={apiKeyRecords} />
+          ) : (
+            <p className="text-sm text-muted-foreground">
+              Only organization owners can manage API keys.
+            </p>
           ),
           brand: <BrandSettings canManage={canManage} settings={brandSettings} />,
           email: (
