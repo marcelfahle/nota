@@ -16,6 +16,8 @@ import {
   uuid,
 } from "drizzle-orm/pg-core";
 
+import type { SiteProfile } from "@/lib/site-reader/types";
+
 export const orgRoleEnum = pgEnum("org_role", ["owner", "admin", "member"]);
 export const invoiceKindEnum = pgEnum("invoice_kind", ["invoice", "credit_note"]);
 export const invoiceSourceEnum = pgEnum("invoice_source", [
@@ -352,6 +354,38 @@ export const vatChecks = pgTable("vat_checks", {
   status: vatStatusEnum().notNull(),
   vatNumber: text("vat_number").primaryKey(),
 });
+
+// Pre-signup onboarding. Nothing here belongs to an account: a session is a
+// preview that expires, and is copied into an org only at registration.
+export const onboardingSessions = pgTable(
+  "onboarding_sessions",
+  {
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+    expiresAt: timestamp("expires_at").notNull(),
+    id: uuid().defaultRandom().primaryKey(),
+    profile: jsonb().$type<SiteProfile>(),
+    tokenHash: text("token_hash").notNull().unique(),
+  },
+  (table) => [index("onboarding_sessions_expires_idx").on(table.expiresAt)],
+);
+
+// One read per domain per day, whoever asks.
+export const siteReads = pgTable("site_reads", {
+  domain: text().primaryKey(),
+  profile: jsonb().$type<SiteProfile>().notNull(),
+  readAt: timestamp("read_at").notNull(),
+});
+
+// Fixed-window counters for the public reader: per IP, global, daily spend.
+export const readerUsage = pgTable(
+  "reader_usage",
+  {
+    bucket: text().primaryKey(),
+    count: integer().notNull().default(0),
+    expiresAt: timestamp("expires_at").notNull(),
+  },
+  (table) => [index("reader_usage_expires_idx").on(table.expiresAt)],
+);
 
 export const chatThreads = pgTable(
   "chat_threads",
