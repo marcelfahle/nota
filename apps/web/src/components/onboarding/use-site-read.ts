@@ -55,15 +55,31 @@ export function useSiteRead(initial: SiteProfile | null) {
     if (!saved.current || !dirty.current) {
       return;
     }
+    // Send each edit once: a replayed edit would overwrite what the registry
+    // or a later edit put in its place.
+    const sent = edits.current;
+    edits.current = { confirm: new Set(), fields: {} };
     dirty.current = false;
-    const { brandColor, confirm, fields } = edits.current;
-    await fetch("/api/onboarding/session", {
-      body: JSON.stringify({ brandColor, confirm: [...confirm], fields }),
+    const ok = await fetch("/api/onboarding/session", {
+      body: JSON.stringify({
+        brandColor: sent.brandColor,
+        confirm: [...sent.confirm],
+        fields: sent.fields,
+      }),
       headers: { "content-type": "application/json" },
       method: "PATCH",
-    }).catch(() => {
+    })
+      .then((response) => response.ok)
+      .catch(() => false);
+    if (!ok) {
+      // Put them back for the next attempt; anything edited meanwhile wins.
+      edits.current = {
+        brandColor: edits.current.brandColor ?? sent.brandColor,
+        confirm: new Set([...sent.confirm, ...edits.current.confirm]),
+        fields: { ...sent.fields, ...edits.current.fields },
+      };
       dirty.current = true;
-    });
+    }
   }, []);
 
   const scheduleFlush = useCallback(() => {

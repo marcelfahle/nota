@@ -1,6 +1,8 @@
 // Deterministic signals from a homepage's HTML. No parser dependency: the few
 // tags we need are matched directly, and nothing from the page is executed.
 
+import { elementBlocks, inlineStyles, openTags, stripElements, visibleText } from "./html";
+
 export type SiteSignals = {
   address: {
     city?: string;
@@ -32,7 +34,7 @@ const ENTITIES: Record<string, string> = {
 };
 
 export function decodeEntities(value: string) {
-  return value.replaceAll(/&(#x?[\da-f]+|\w+);/gi, (match, code: string) => {
+  return value.replaceAll(/&(#x?[\da-f]{1,8}|\w{1,12});/gi, (match, code: string) => {
     if (code[0] === "#") {
       const point =
         code[1].toLowerCase() === "x"
@@ -63,9 +65,7 @@ function attributes(tag: string) {
 }
 
 function tags(html: string, name: string) {
-  return [...html.matchAll(new RegExp(`<${name}\\b[^>]*>`, "gi"))].map((match) =>
-    attributes(match[0]),
-  );
+  return openTags(html, name).map((tag) => attributes(tag));
 }
 
 function rel(tag: Record<string, string>) {
@@ -115,11 +115,12 @@ function jsonLdNodes(html: string) {
     walk(node["@graph"], depth + 1);
     walk(node.publisher, depth + 1);
   };
-  for (const match of html.matchAll(
-    /<script\b[^>]*type\s*=\s*["']?application\/ld\+json["']?[^>]*>([\s\S]*?)<\/script>/gi,
-  )) {
+  for (const block of elementBlocks(html, "script")) {
+    if (!/application\/ld\+json/i.test(block.tag)) {
+      continue;
+    }
     try {
-      walk(JSON.parse(match[1]), 0);
+      walk(JSON.parse(block.inner), 0);
     } catch {
       // Broken JSON-LD is common; the other signals carry on.
     }
@@ -189,7 +190,8 @@ export function findVatNumber(text: string) {
   return null;
 }
 
-const EMAIL = /[a-z\d][\w.+-]*@[a-z\d-]+(?:\.[a-z\d-]+)*\.[a-z]{2,}/gi;
+// Every quantifier is bounded: this runs over whole untrusted documents.
+const EMAIL = /[a-z\d][\w.+-]{0,63}@[a-z\d-]{1,63}(?:\.[a-z\d-]{1,63}){0,4}\.[a-z]{2,24}/gi;
 export const EMAIL_NOISE =
   /(example\.|your-?(company|domain|email|name)|@(domain|email|company|test)\.|sentry|wixpress|@\dx|\.(png|jpe?g|gif|webp|svg)$|^(noreply|no-reply|donotreply)@)/i;
 
@@ -215,10 +217,10 @@ export function findEmail(html: string, domain: string) {
         : 0);
     found.set(email, (found.get(email) ?? 0) + score + boost);
   };
-  for (const match of html.matchAll(/href\s*=\s*["']mailto:([^"'?]+)/gi)) {
+  for (const match of html.matchAll(/href\s{0,4}=\s{0,4}["']mailto:([^"'?]{1,120})/gi)) {
     add(decodeEntities(match[1]), 3);
   }
-  for (const match of html.replaceAll(/<script[\s\S]*?<\/script>/gi, " ").matchAll(EMAIL)) {
+  for (const match of stripElements(html, ["script"]).matchAll(EMAIL)) {
     add(match[0], 1);
   }
   return [...found].sort((left, right) => right[1] - left[1])[0]?.[0] ?? null;
@@ -273,7 +275,7 @@ export function extractSignals(html: string, pageUrl: string): SiteSignals {
   const nodes = jsonLdNodes(html);
   const organization = nodes.find((node) => isType(node, ORGANIZATION_TYPES));
   const website = nodes.find((node) => isType(node, /^WebSite$/));
-  const title = clean(html.match(/<title[^>]*>([\s\S]*?)<\/title>/i)?.[1], 300);
+  const title = clean(elementBlocks(html, "title", 1)[0]?.inner, 300);
 
   const name =
     (clean(organization?.name, 80) && {
@@ -324,8 +326,7 @@ export function extractSignals(html: string, pageUrl: string): SiteSignals {
     logos.push(organizationLogo);
   }
   logos.push(...icons.slice(0, 2));
-  for (const match of html.slice(0, 200_000).matchAll(/<img\b[^>]*>/gi)) {
-    const tag = attributes(match[0]);
+  for (const tag of tags(html.slice(0, 200_000), "img")) {
     const hint = `${tag.class ?? ""} ${tag.id ?? ""} ${tag.alt ?? ""} ${tag.src ?? ""}`;
     const url = resolve(tag.src, base);
     if (
@@ -343,16 +344,16 @@ export function extractSignals(html: string, pageUrl: string): SiteSignals {
     .map((tag) => resolve(tag.href, base))
     .filter(isString);
   const inlineCss = [
-    ...[...html.matchAll(/<style\b[^>]*>([\s\S]*?)<\/style>/gi)].map((match) => match[1]),
-    ...[...html.matchAll(/\sstyle\s*=\s*"([^"]*)"/gi)].map((match) => `x{${match[1]}}`),
+    ...elementBlocks(html, "style").map((block) => block.inner),
+    ...inlineStyles(html).map((style) => `x{${style}}`),
   ]
     .join("\n")
     .slice(0, 600_000);
 
   const legal = new Map<string, { label: string; rank: number; url: string }>();
-  for (const match of html.matchAll(/<a\b[^>]*>([\s\S]*?)<\/a>/gi)) {
-    const tag = attributes(match[0].slice(0, match[0].indexOf(">") + 1));
-    const label = clean(match[1].replaceAll(/<[^>]+>/g, " "), 60) ?? "";
+  for (const anchor of elementBlocks(html, "a", 600)) {
+    const tag = attributes(anchor.tag);
+    const label = clean(visibleText(anchor.inner), 60) ?? "";
     const url = resolve(tag.href, base)?.split("#")[0];
     if (!url || !sameSite(url, pageUrl) || new URL(url).pathname === "/") {
       continue;
@@ -385,11 +386,7 @@ export function extractSignals(html: string, pageUrl: string): SiteSignals {
       }
     : null;
 
-  const text = decodeEntities(
-    html
-      .replaceAll(/<(script|style|noscript|svg)\b[\s\S]*?<\/\1>/gi, " ")
-      .replaceAll(/<[^>]+>/g, " "),
-  ).replaceAll(/\s+/g, " ");
+  const text = decodeEntities(visibleText(html));
 
   return {
     address: address && Object.values(address).some(Boolean) ? address : null,

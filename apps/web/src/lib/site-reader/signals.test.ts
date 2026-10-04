@@ -96,3 +96,20 @@ test("brand colours: logo first, then theme colour, neutrals dropped, shades mer
   });
   expect(pickBrandColors("body { color: #222; background: #fff }")).toEqual([]);
 });
+
+test("hostile markup is scanned in linear time", () => {
+  const hostile = [
+    "<a ".repeat(300_000),
+    "<a>".repeat(300_000),
+    "<script>".repeat(150_000),
+    `${"a".repeat(1_000_000)}@`,
+    '<p style="'.repeat(150_000),
+    "<".repeat(1_000_000),
+    "<title>".repeat(200_000),
+  ];
+  for (const html of hostile) {
+    const started = performance.now();
+    extractSignals(html, "https://hostile.example/");
+    expect(performance.now() - started).toBeLessThan(1500);
+  }
+});

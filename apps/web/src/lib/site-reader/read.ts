@@ -1,4 +1,5 @@
 import { pickBrandColors } from "./colors";
+import { visibleText } from "./html";
 import { dominantColors, fetchImage, fromDataUrl } from "./logo";
 import { modelConfigured, readLocation, readSiteFacts, type SiteFacts } from "./model";
 import { extractPages, parallelConfigured, searchWeb, type ParallelPage } from "./parallel";
@@ -109,14 +110,6 @@ function decode(body: Buffer, contentType: string) {
   }
 }
 
-function htmlToText(html: string) {
-  return html
-    .replaceAll(/<(script|style|noscript|svg)\b[\s\S]*?<\/\1>/gi, " ")
-    .replaceAll(/<[^>]+>/g, " ")
-    .replaceAll(/\s+/g, " ")
-    .trim();
-}
-
 /**
  * Reads a website and yields what it finds, cheapest signal first, so the
  * screen can fill in while the slower work (legal pages, model, outside
@@ -178,7 +171,7 @@ export async function* readSite(
       const html = decode(response.body, response.contentType);
       finalUrl = response.url;
       signals = extractSignals(html, response.url);
-      homepage = { text: htmlToText(html).slice(0, 9000), title: null, url: response.url };
+      homepage = { text: visibleText(html).slice(0, 9000), title: null, url: response.url };
     }
   } catch (error) {
     if (error instanceof UnsafeUrlError) {

@@ -42,10 +42,17 @@ export async function hit(bucket: string, windowMs: number, now = new Date()) {
   return row.count;
 }
 
+/**
+ * The caller's address. Vercel sets x-vercel-forwarded-for and x-real-ip
+ * itself; a client-supplied x-forwarded-for is only the last resort.
+ */
 export function clientIp(request: Request) {
+  const forwarded = request.headers.get("x-forwarded-for")?.split(",");
   return (
-    request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
-    request.headers.get("x-real-ip") ||
+    request.headers.get("x-vercel-forwarded-for")?.split(",")[0]?.trim() ||
+    request.headers.get("x-real-ip")?.trim() ||
+    // Behind other proxies the nearest hop appends last; that one cannot be forged.
+    forwarded?.at(-1)?.trim() ||
     "unknown"
   );
 }

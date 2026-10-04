@@ -82,7 +82,8 @@ export async function POST(request: Request) {
           if (event.type === "done") {
             await saveOnboardingProfile(session.id, event.profile);
             // Fetch-only reads are not cached: tomorrow's budget may do better.
-            if (!cached && !event.profile.degraded) {
+            // Nor is a read cut short by the time budget or a closed tab.
+            if (!cached && !event.profile.degraded && !signal.aborted) {
               await cacheRead(event.profile);
             }
           }
