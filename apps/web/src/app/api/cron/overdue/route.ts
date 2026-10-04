@@ -16,7 +16,9 @@ export async function GET(request: Request) {
   const overdueInvoices = await db
     .select({ id: invoices.id })
     .from(invoices)
-    .where(and(eq(invoices.status, "sent"), lt(invoices.dueAt, today)));
+    .where(
+      and(eq(invoices.kind, "invoice"), eq(invoices.status, "sent"), lt(invoices.dueAt, today)),
+    );
 
   if (overdueInvoices.length === 0) {
     return NextResponse.json({ message: "No overdue invoices found", updated: 0 });
@@ -31,6 +33,7 @@ export async function GET(request: Request) {
     await db.insert(activityLog).values({
       action: "marked_overdue",
       invoiceId: invoice.id,
+      source: "system",
     });
   }
 

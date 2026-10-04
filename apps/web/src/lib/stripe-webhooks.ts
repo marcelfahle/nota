@@ -1,9 +1,17 @@
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import type Stripe from "stripe";
 
 import { syncSubscription } from "@/lib/billing";
 import { db } from "@/lib/db";
-import { activityLog, invoices, jobs, orgs, stripeEvents } from "@/lib/db/schema";
+import {
+  activityLog,
+  invoices,
+  jobs,
+  orgs,
+  payments,
+  proposals,
+  stripeEvents,
+} from "@/lib/db/schema";
 import { processPendingEmailJobs } from "@/lib/jobs";
 import { stripeAmount } from "@/lib/stripe-amount";
 import { refreshStripeConnect, reconcileStripeDeauthorization } from "@/lib/stripe-connect";
@@ -85,13 +93,41 @@ export async function handleStripeEvent(event: Stripe.Event, connected: boolean)
     ) {
       return;
     }
-    if (invoice.status === "paid" || !["sent", "overdue"].includes(invoice.status ?? "")) {
+    if (
+      !invoice.orgId ||
+      invoice.status === "paid" ||
+      !["sent", "overdue"].includes(invoice.status ?? "")
+    ) {
       return;
     }
+    const [[existingPaymentTotal], [creditTotal]] = await Promise.all([
+      tx
+        .select({ total: sql<string>`coalesce(sum(${payments.amount}::numeric), 0)` })
+        .from(payments)
+        .where(eq(payments.invoiceId, invoiceId)),
+      tx
+        .select({ total: sql<string>`coalesce(sum(${invoices.total}::numeric), 0)` })
+        .from(invoices)
+        .where(
+          and(
+            eq(invoices.creditsInvoiceId, invoiceId),
+            eq(invoices.kind, "credit_note"),
+            inArray(invoices.status, ["sent", "overdue", "paid"]),
+          ),
+        ),
+    ]);
+    const remaining = Math.max(
+      0,
+      Number(invoice.total ?? 0) -
+        Number(existingPaymentTotal?.total ?? 0) -
+        Math.abs(Number(creditTotal?.total ?? 0)),
+    );
     const currency = (invoice.currency || "eur").toLowerCase();
+    const remainingAmount = stripeAmount(remaining.toFixed(2), currency);
     if (
       session.currency !== currency ||
-      session.amount_total !== stripeAmount(invoice.total, currency)
+      !session.amount_total ||
+      session.amount_total > remainingAmount
     ) {
       throw new Error("Invoice payment amount mismatch");
     }
@@ -103,11 +139,31 @@ export async function handleStripeEvent(event: Stripe.Event, connected: boolean)
     if (!inserted.length) {
       return;
     }
+    const paymentAmount = (session.amount_total / 100).toFixed(2);
+    const insertedPayments = await tx
+      .insert(payments)
+      .values({
+        amount: paymentAmount,
+        currency: invoice.currency ?? "EUR",
+        invoiceId,
+        method: "stripe",
+        orgId: invoice.orgId,
+        receivedAt: new Date(),
+        source: "system",
+        stripePaymentIntentId: paymentId,
+      })
+      .onConflictDoNothing({ target: payments.stripePaymentIntentId })
+      .returning({ id: payments.id });
+    if (!insertedPayments.length) {
+      return;
+    }
+    const fullyPaid = session.amount_total === remainingAmount;
     await tx
       .update(invoices)
       .set({
-        paidAt: new Date().toISOString().slice(0, 10),
-        status: "paid",
+        paidAt: fullyPaid ? new Date().toISOString().slice(0, 10) : null,
+        revision: sql`${invoices.revision} + 1`,
+        status: fullyPaid ? "paid" : invoice.status,
         stripePaymentIntentId: paymentId,
         updatedAt: new Date(),
       })
@@ -115,8 +171,13 @@ export async function handleStripeEvent(event: Stripe.Event, connected: boolean)
     await tx.insert(activityLog).values({
       action: "paid",
       invoiceId,
-      metadata: { paymentIntentId: paymentId, stripeEventId: event.id },
+      metadata: { amount: paymentAmount, paymentIntentId: paymentId, stripeEventId: event.id },
+      source: "system",
     });
+    await tx
+      .update(proposals)
+      .set({ status: "expired" })
+      .where(and(eq(proposals.invoiceId, invoiceId), eq(proposals.status, "pending")));
     await tx
       .insert(jobs)
       .values({ invoiceId, payload: { invoiceId }, type: "send_payment_received_email" });

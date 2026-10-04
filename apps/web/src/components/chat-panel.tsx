@@ -13,6 +13,7 @@ import {
   X,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
+import { usePathname } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { ChatClientImport } from "@/components/chat-client-import";
@@ -437,9 +438,11 @@ function MessageBubble({ message }: { message: UIMessage }) {
 
 export function ChatPanel() {
   const router = useRouter();
+  const pathname = usePathname();
   const [input, setInput] = useState("");
   const [open, setOpen] = useState(false);
   const [csvFile, setCsvFile] = useState<File | null>(null);
+  const [historyLoaded, setHistoryLoaded] = useState(false);
   const [importBusy, setImportBusy] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
   const refreshedMessages = useRef<Set<string>>(new Set());
@@ -449,7 +452,26 @@ export function ChatPanel() {
     transport,
   });
 
-  const isBusy = status === "submitted" || status === "streaming" || importBusy;
+  const isBusy = !historyLoaded || status === "submitted" || status === "streaming" || importBusy;
+
+  useEffect(() => {
+    let active = true;
+    void fetch("/api/chat")
+      .then((response) => (response.ok ? response.json() : null))
+      .then((data: { messages?: Array<UIMessage> } | null) => {
+        if (active && data?.messages) {
+          setMessages(data.messages);
+        }
+      })
+      .finally(() => {
+        if (active) {
+          setHistoryLoaded(true);
+        }
+      });
+    return () => {
+      active = false;
+    };
+  }, [setMessages]);
 
   useEffect(() => {
     const latestToolMessage = [...messages]
@@ -486,7 +508,11 @@ export function ChatPanel() {
     clearError();
 
     try {
-      await sendMessage({ text: trimmedValue });
+      const entityId = pathname.match(/^\/(?:clients|invoices)\/([\da-f-]{36})(?:\/|$)/i)?.[1];
+      await sendMessage(
+        { text: trimmedValue },
+        { body: { pageContext: { entityId, route: pathname } } },
+      );
       setInput("");
     } catch {
       // useChat exposes the request failure via `error`; swallow here to avoid an unhandled rejection

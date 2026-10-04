@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, expect, mock, spyOn, test } from "bun:test";
 import { randomUUID } from "node:crypto";
 
-import { and, eq } from "drizzle-orm";
+import { and, eq, like } from "drizzle-orm";
 import Stripe from "stripe";
 
 // Explicitly invoked against a disposable local database; never use a developer's remote .env.
@@ -20,17 +20,24 @@ mock.module("@/lib/jobs", () => ({ processPendingEmailJobs: async () => ({ compl
 const { db } = await import("../../src/lib/db");
 const {
   activityLog,
+  chatThreads,
   clients,
   invoices,
   invoiceSends,
   jobs,
   orgMembers,
   orgs,
+  payments,
+  proposals,
   stripeConnectStates,
   stripeEvents,
   users,
 } = await import("../../src/lib/db/schema");
-const { sendInvoice, sendReminder } = await import("../../src/lib/invoice-service");
+const { createCreditNote, getInvoiceDetail, recordInvoicePayment, sendInvoice, sendReminder } =
+  await import("../../src/lib/invoice-service");
+const { getChatThread, loadChatMessages, saveChatMessage } =
+  await import("../../src/lib/chat-store");
+const { approveProposal, createReminderProposal } = await import("../../src/lib/proposal-service");
 const { getStripe } = await import("../../src/lib/stripe");
 const { handleStripeEvent } = await import("../../src/lib/stripe-webhooks");
 const stripe = getStripe();
@@ -57,6 +64,9 @@ const linkMock = spyOn(stripe.paymentLinks, "create").mockImplementation(
       url: "https://buy.stripe.com/test_fixture",
     } as Stripe.Response<Stripe.PaymentLink>;
   },
+);
+const linkUpdateMock = spyOn(stripe.paymentLinks, "update").mockImplementation(
+  async (id: string) => ({ active: false, id }) as Stripe.Response<Stripe.PaymentLink>,
 );
 let clientA: string, clientB: string, clientFree: string;
 beforeAll(async () => {
@@ -122,7 +132,13 @@ test("two workspaces issue their payment links on separate accounts with no Nota
   expect(requests[1].body).not.toHaveProperty("application_fee_amount");
   const [saved] = await db.select().from(invoices).where(eq(invoices.id, a));
   expect(saved.stripeAccountId).toBe("acct_a");
-  const event = (account: string, payment_status = "paid", amount_total = 1250): Stripe.Event =>
+  const event = (
+    account: string,
+    payment_status = "paid",
+    amount_total = 1250,
+    suffix = "full",
+    eventSuffix = suffix,
+  ): Stripe.Event =>
     ({
       account,
       data: {
@@ -132,37 +148,101 @@ test("two workspaces issue their payment links on separate accounts with no Nota
           id: "cs_invoice",
           metadata: { invoiceId: a },
           mode: "payment",
-          payment_intent: "pi_fixture",
+          payment_intent: `pi_${suffix}`,
           payment_link: saved.stripePaymentLinkId,
           payment_status,
         },
       },
-      id: `evt_${a}`,
+      id: `evt_${a}_${eventSuffix}`,
       type: "checkout.session.completed",
     }) as unknown as Stripe.Event;
   await handleStripeEvent(event("acct_b"), true);
   await handleStripeEvent(event("acct_a", "unpaid"), true);
   expect((await db.select().from(invoices).where(eq(invoices.id, a)))[0].status).toBe("sent");
-  await expect(handleStripeEvent(event("acct_a", "paid", 100), true)).rejects.toThrow(
+  await handleStripeEvent(event("acct_a", "paid", 100, "partial"), true);
+  expect((await db.select().from(invoices).where(eq(invoices.id, a)))[0].status).toBe("sent");
+  await expect(handleStripeEvent(event("acct_a", "paid", 1250, "overpay"), true)).rejects.toThrow(
     "amount mismatch",
   );
   await Promise.all([
-    handleStripeEvent(event("acct_a"), true),
-    handleStripeEvent(event("acct_a"), true),
+    handleStripeEvent(event("acct_a", "paid", 1150, "full", "full-a"), true),
+    handleStripeEvent(event("acct_a", "paid", 1150, "full", "full-b"), true),
   ]);
   expect((await db.select().from(invoices).where(eq(invoices.id, a)))[0].status).toBe("paid");
+  expect(await db.select().from(payments).where(eq(payments.invoiceId, a))).toHaveLength(2);
   expect(
     await db
       .select()
       .from(activityLog)
       .where(and(eq(activityLog.invoiceId, a), eq(activityLog.action, "paid"))),
-  ).toHaveLength(1);
+  ).toHaveLength(2);
   expect(
     await db
       .select()
       .from(jobs)
       .where(and(eq(jobs.invoiceId, a), eq(jobs.type, "send_payment_received_email"))),
-  ).toHaveLength(1);
+  ).toHaveLength(2);
+});
+
+test("partial credits retire stale links and count toward Stripe settlement", async () => {
+  const requestCount = requests.length;
+  const id = await draft(orgA, clientA);
+  expect(await sendInvoice(context(orgA), id)).toMatchObject({ success: true });
+  const [original] = await db.select().from(invoices).where(eq(invoices.id, id));
+
+  const creditId = randomUUID();
+  madeInvoices.push(creditId);
+  await db.insert(invoices).values({
+    clientId: clientA,
+    creditsInvoiceId: id,
+    currency: "EUR",
+    dueAt: "2026-10-17",
+    id: creditId,
+    issuedAt: "2026-10-03",
+    kind: "credit_note",
+    number: `CN-${creditId}`,
+    orgId: orgA,
+    subtotal: "-2.50",
+    total: "-2.50",
+    userId,
+  });
+  expect(await sendInvoice(context(orgA), creditId)).toMatchObject({ success: true });
+  expect(linkUpdateMock).toHaveBeenCalledWith(
+    original.stripePaymentLinkId,
+    { active: false },
+    { stripeAccount: "acct_a" },
+  );
+  expect((await db.select().from(invoices).where(eq(invoices.id, id)))[0]).toMatchObject({
+    status: "sent",
+    stripePaymentLinkId: null,
+  });
+
+  const replacementLink = "plink_repriced";
+  await db
+    .update(invoices)
+    .set({ stripePaymentLinkId: replacementLink, stripePaymentLinkUrl: "https://example.com" })
+    .where(eq(invoices.id, id));
+  await handleStripeEvent(
+    {
+      account: "acct_a",
+      data: {
+        object: {
+          amount_total: 1000,
+          currency: "eur",
+          metadata: { invoiceId: id },
+          mode: "payment",
+          payment_intent: `pi_${id}`,
+          payment_link: replacementLink,
+          payment_status: "paid",
+        },
+      },
+      id: `evt_${id}_credited`,
+      type: "checkout.session.completed",
+    } as unknown as Stripe.Event,
+    true,
+  );
+  expect((await db.select().from(invoices).where(eq(invoices.id, id)))[0].status).toBe("paid");
+  requests.splice(requestCount);
 });
 
 test("concurrent free sends stop at five; bank-only invoices can be sent, retried and reminded", async () => {
@@ -414,14 +494,106 @@ test("webhook routes require signatures from their own endpoint and account scop
   expect((await platform(await request("whsec_platform_fixture"))).status).toBe(200);
 });
 
+test("partial payments derive balance, public views dedupe, and credit notes reverse receivables", async () => {
+  const id = await draft(orgA, clientA);
+  expect(await sendInvoice(context(orgA), id)).toMatchObject({ success: true });
+  expect(
+    await recordInvoicePayment(context(orgA), id, { amount: 5, method: "bank_transfer" }),
+  ).toMatchObject({ success: true });
+  expect(
+    await recordInvoicePayment(context(orgA), id, { amount: 0.001, method: "other" }),
+  ).toMatchObject({ error: "Payment exceeds the remaining balance" });
+  expect(await getInvoiceDetail(orgA, id)).toMatchObject({
+    balance: "7.50",
+    paidAmount: "5.00",
+    settlementStatus: "partially_paid",
+  });
+
+  const [sent] = await db.select().from(invoices).where(eq(invoices.id, id));
+  const { GET } = await import("../../src/app/api/public/invoices/[token]/route");
+  expect(
+    (
+      await GET(new Request("http://localhost"), {
+        params: Promise.resolve({ token: sent.publicToken! }),
+      })
+    ).status,
+  ).toBe(200);
+  expect(
+    (
+      await GET(new Request("http://localhost"), {
+        params: Promise.resolve({ token: sent.publicToken! }),
+      })
+    ).status,
+  ).toBe(200);
+  expect(
+    await db
+      .select()
+      .from(activityLog)
+      .where(and(eq(activityLog.invoiceId, id), eq(activityLog.action, "viewed"))),
+  ).toHaveLength(1);
+
+  const creditResult = await createCreditNote(context(orgA), id);
+  expect(creditResult).toMatchObject({ success: true });
+  if (!("invoiceId" in creditResult)) {
+    throw new Error("Credit note was not created");
+  }
+  madeInvoices.push(creditResult.invoiceId);
+  expect((await getInvoiceDetail(orgA, creditResult.invoiceId))?.number).toBe("CN-0001");
+  expect(await sendInvoice(context(orgA), creditResult.invoiceId)).toMatchObject({ success: true });
+  expect(await getInvoiceDetail(orgA, id)).toMatchObject({
+    balance: "0.00",
+    creditedAmount: "12.50",
+    settlementStatus: "paid",
+    status: "cancelled",
+  });
+  expect(
+    await recordInvoicePayment(context(orgA), id, { amount: 1, method: "other" }),
+  ).toMatchObject({ error: "Only an outstanding issued invoice can receive payments" });
+});
+
+test("chat persists and reminder proposals enqueue their frozen payload", async () => {
+  const thread = await getChatThread({ orgId: orgA, userId });
+  await saveChatMessage(thread.id, {
+    id: `message-${userId}`,
+    parts: [{ text: "Hello", type: "text" }],
+    role: "user",
+  });
+  expect(await loadChatMessages(thread.id)).toMatchObject([
+    { parts: [{ text: "Hello", type: "text" }], role: "user" },
+  ]);
+
+  const id = await draft(orgA, clientA);
+  expect(await sendInvoice(context(orgA), id)).toMatchObject({ success: true });
+  const created = await createReminderProposal(context(orgA), id, "Invoice is overdue");
+  expect(created).toHaveProperty("proposal");
+  if (!("proposal" in created)) {
+    throw new Error("Proposal was not created");
+  }
+  expect(await approveProposal(context(orgA), created.proposal.id)).toMatchObject({
+    success: true,
+  });
+  const [saved] = await db.select().from(proposals).where(eq(proposals.id, created.proposal.id));
+  expect(saved.status).toBe("approved");
+  const [job] = await db
+    .select()
+    .from(jobs)
+    .where(and(eq(jobs.invoiceId, id), eq(jobs.type, "send_invoice_reminder_email")));
+  expect(job.payload).toMatchObject({
+    proposalId: created.proposal.id,
+    reminder: { invoiceNumber: id, to: "test@example.com" },
+  });
+});
+
 afterAll(async () => {
   priceMock.mockRestore();
   linkMock.mockRestore();
-  for (const id of madeInvoices) {
+  linkUpdateMock.mockRestore();
+  for (const id of madeInvoices.reverse()) {
     await db.delete(activityLog).where(eq(activityLog.invoiceId, id));
     await db.delete(invoices).where(eq(invoices.id, id));
-    await db.delete(stripeEvents).where(eq(stripeEvents.id, `evt_${id}`));
+    await db.delete(stripeEvents).where(like(stripeEvents.id, `evt_${id}%`));
   }
+  await db.delete(chatThreads).where(eq(chatThreads.userId, userId));
   for (const id of [orgA, orgB, orgFree, orgOAuth, orgCheckout]) {
     await db.delete(clients).where(eq(clients.orgId, id));
     await db.delete(orgs).where(eq(orgs.id, id));

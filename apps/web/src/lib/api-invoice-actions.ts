@@ -1,11 +1,13 @@
 import type { ApiRequestAuthContext } from "@/lib/api-auth";
 import {
   cancelInvoice as cancelInvoiceService,
+  createCreditNote,
   createInvoice as createInvoiceService,
   deleteInvoice as deleteInvoiceService,
   duplicateInvoice as duplicateInvoiceService,
   getInvoiceDetail,
   markInvoicePaid as markInvoicePaidService,
+  recordInvoicePayment,
   sendInvoice as sendInvoiceService,
   sendReminder as sendReminderService,
   type InvoiceDetail,
@@ -38,6 +40,8 @@ function buildServiceContext(auth: ApiRequestAuthContext): InvoiceServiceContext
   return {
     orgId: auth.org.id,
     role: auth.role,
+    source: auth.source,
+    sourceClient: auth.sourceClient,
     userId: auth.user.id,
   };
 }
@@ -86,6 +90,13 @@ export async function createInvoiceFromApi(
   input: InvoiceMutationInput,
 ): Promise<InvoiceActionResult> {
   return toInvoiceActionResult(auth, await createInvoiceService(buildServiceContext(auth), input));
+}
+
+export async function createCreditNoteFromApi(
+  auth: ApiRequestAuthContext,
+  invoiceId: string,
+): Promise<InvoiceActionResult> {
+  return toInvoiceActionResult(auth, await createCreditNote(buildServiceContext(auth), invoiceId));
 }
 
 export async function updateInvoiceFromApi(
@@ -138,6 +149,17 @@ export async function markInvoicePaidFromApi(
   return toInvoiceActionResult(
     auth,
     await markInvoicePaidService(buildServiceContext(auth), invoiceId),
+  );
+}
+
+export async function recordInvoicePaymentFromApi(
+  auth: ApiRequestAuthContext,
+  invoiceId: string,
+  input: Parameters<typeof recordInvoicePayment>[2],
+): Promise<InvoiceActionResult> {
+  return toInvoiceActionResult(
+    auth,
+    await recordInvoicePayment(buildServiceContext(auth), invoiceId, input),
   );
 }
 

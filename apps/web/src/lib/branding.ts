@@ -1,5 +1,22 @@
 const MAX_LOGO_BYTES = 2 * 1024 * 1024;
 
+export function formatOrgAddress(org: {
+  businessAddress?: string | null;
+  city?: string | null;
+  country?: string | null;
+  postalCode?: string | null;
+  region?: string | null;
+  street?: string | null;
+}) {
+  const structured = [
+    org.street,
+    [org.postalCode, org.city].filter(Boolean).join(" "),
+    org.region,
+    org.country,
+  ].filter(Boolean) as Array<string>;
+  return structured.length ? structured.join("\n") : (org.businessAddress ?? null);
+}
+
 export async function getPdfLogoSrc(logoUrl?: string | null) {
   if (!logoUrl) {
     return null;
