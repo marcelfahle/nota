@@ -1,24 +1,44 @@
+import { eq } from "drizzle-orm";
 import { headers } from "next/headers";
-import { redirect } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { cache } from "react";
 
 import { auth } from "@/lib/better-auth";
+import { db } from "@/lib/db";
+import { users } from "@/lib/db/schema";
 import { getUserContextById, type AuthenticatedUserContext } from "@/lib/user-context";
 
 export type { AuthenticatedRole, AuthenticatedUserContext } from "@/lib/user-context";
 
-// The root layout, the dashboard layout and the page all ask who is signed in.
-// cache() makes that one session lookup and one user query per request.
-export const getCurrentUserOrNull = cache(async (): Promise<AuthenticatedUserContext | null> => {
+export const getCurrentSessionUser = cache(async () => {
   const session = await auth.api.getSession({ headers: await headers() });
   if (!session) {
     return null;
   }
 
-  return getUserContextById(session.user.id);
+  const [user] = await db.select().from(users).where(eq(users.id, session.user.id)).limit(1);
+  return user ?? null;
+});
+
+// The root layout, dashboard layout and page all ask who is signed in.
+// cache() makes the workspace lookup run once per request.
+export const getCurrentUserOrNull = cache(async (): Promise<AuthenticatedUserContext | null> => {
+  const user = await getCurrentSessionUser();
+  if (!user || user.isSuperAdmin) {
+    return null;
+  }
+
+  return getUserContextById(user.id);
 });
 
 export async function getCurrentUser(): Promise<AuthenticatedUserContext> {
+  const sessionUser = await getCurrentSessionUser();
+  if (!sessionUser) {
+    redirect("/login");
+  }
+  if (sessionUser.isSuperAdmin) {
+    redirect(sessionUser.mustChangePassword ? "/admin/password" : "/admin");
+  }
   const user = await getCurrentUserOrNull();
   if (!user) {
     redirect("/login");
@@ -30,4 +50,15 @@ export async function getCurrentUser(): Promise<AuthenticatedUserContext> {
 export async function getCurrentOrg() {
   const user = await getCurrentUser();
   return user.org;
+}
+
+export async function requireSuperAdmin(options: { allowPasswordChange?: boolean } = {}) {
+  const user = await getCurrentSessionUser();
+  if (!user?.isSuperAdmin) {
+    notFound();
+  }
+  if (user.mustChangePassword && !options.allowPasswordChange) {
+    redirect("/admin/password");
+  }
+  return user;
 }

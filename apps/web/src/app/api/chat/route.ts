@@ -8,6 +8,7 @@ import {
   validateUIMessages,
 } from "ai";
 
+import { trackedModelCall } from "@/lib/ai-usage";
 import { getCurrentUserOrNull } from "@/lib/auth";
 import {
   getChatThread,
@@ -16,7 +17,6 @@ import {
   saveChatMessage,
 } from "@/lib/chat-store";
 import { buildChatSystemContext, buildChatSystemPrompt, createChatTools } from "@/lib/chat-tools";
-import { getAiEnv } from "@/lib/env";
 
 const MAX_CHAT_MESSAGES = 24;
 const MAX_CHAT_PAYLOAD_SIZE = 50_000;
@@ -76,10 +76,7 @@ export async function POST(request: Request) {
     );
   }
 
-  let chatModel: string;
-  try {
-    chatModel = getAiEnv().NOTA_CHAT_MODEL;
-  } catch {
+  if (!process.env.ANTHROPIC_API_KEY) {
     return Response.json({ error: "AI chat is not configured" }, { status: 503 });
   }
 
@@ -100,19 +97,23 @@ export async function POST(request: Request) {
 
   try {
     const context = await buildChatSystemContext(auth);
-    const result = streamText({
-      maxOutputTokens: 1200,
-      messages: modelMessages,
-      model: anthropic(chatModel),
-      providerOptions:
-        chatModel === "claude-sonnet-5-5"
-          ? { anthropic: { effort: "low", thinking: { type: "adaptive" } } }
-          : undefined,
-
-      stopWhen: stepCountIs(6),
-      system: buildChatSystemPrompt(auth, context),
-      tools: createChatTools(auth),
-    });
+    const result = await trackedModelCall(
+      { feature: "chat", orgId: auth.org.id, userId: auth.user.id },
+      ({ modelId, onFinish }) =>
+        streamText({
+          maxOutputTokens: 1200,
+          messages: modelMessages,
+          model: anthropic(modelId),
+          onFinish,
+          providerOptions:
+            modelId === "claude-sonnet-5-5"
+              ? { anthropic: { effort: "low", thinking: { type: "adaptive" } } }
+              : undefined,
+          stopWhen: stepCountIs(6),
+          system: buildChatSystemPrompt(auth, context),
+          tools: createChatTools(auth),
+        }),
+    );
 
     return result.toUIMessageStreamResponse({
       consumeSseStream: consumeStream,

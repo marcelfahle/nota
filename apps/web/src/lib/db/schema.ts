@@ -43,29 +43,39 @@ export const proposalStatusEnum = pgEnum("proposal_status", [
 ]);
 export const vatStatusEnum = pgEnum("vat_status", ["valid", "invalid", "unavailable"]);
 
-export const users = pgTable("users", {
-  businessAddress: text("business_address"),
-  businessName: text("business_name"),
-  createdAt: timestamp("created_at").defaultNow(),
-  defaultCurrency: text("default_currency").default("EUR"),
-  email: text().notNull().unique(),
-  emailVerified: boolean("email_verified").notNull().default(false),
-  id: uuid().defaultRandom().primaryKey(),
-  image: text(),
-  invoiceDigits: integer("invoice_digits").notNull().default(4),
-  invoicePrefix: text("invoice_prefix").default("INV"),
-  invoiceSeparator: text("invoice_separator").notNull().default("-"),
-  logoUrl: text("logo_url"),
-  name: text().notNull(),
-  nextInvoiceNumber: integer("next_invoice_number").default(1),
-  // Legacy: passwords live in accounts.password now. Kept nullable for rollback.
-  passwordHash: text("password_hash"),
-  theme: text("theme", { enum: ["system", "light", "dark"] })
-    .notNull()
-    .default("system"),
-  updatedAt: timestamp("updated_at").notNull().defaultNow(),
-  vatNumber: text("vat_number"),
-});
+export const users = pgTable(
+  "users",
+  {
+    businessAddress: text("business_address"),
+    businessName: text("business_name"),
+    createdAt: timestamp("created_at").defaultNow(),
+    defaultCurrency: text("default_currency").default("EUR"),
+    email: text().notNull().unique(),
+    emailVerified: boolean("email_verified").notNull().default(false),
+    id: uuid().defaultRandom().primaryKey(),
+    image: text(),
+    invoiceDigits: integer("invoice_digits").notNull().default(4),
+    invoicePrefix: text("invoice_prefix").default("INV"),
+    invoiceSeparator: text("invoice_separator").notNull().default("-"),
+    isSuperAdmin: boolean("is_super_admin").notNull().default(false),
+    logoUrl: text("logo_url"),
+    mustChangePassword: boolean("must_change_password").notNull().default(false),
+    name: text().notNull(),
+    nextInvoiceNumber: integer("next_invoice_number").default(1),
+    // Legacy: passwords live in accounts.password now. Kept nullable for rollback.
+    passwordHash: text("password_hash"),
+    theme: text("theme", { enum: ["system", "light", "dark"] })
+      .notNull()
+      .default("system"),
+    updatedAt: timestamp("updated_at").notNull().defaultNow(),
+    vatNumber: text("vat_number"),
+  },
+  (table) => [
+    uniqueIndex("users_one_super_admin_unique")
+      .on(table.isSuperAdmin)
+      .where(sql`${table.isSuperAdmin} = true`),
+  ],
+);
 
 export const orgs = pgTable("orgs", {
   brandColor: text("brand_color"),
@@ -385,6 +395,67 @@ export const readerUsage = pgTable(
     expiresAt: timestamp("expires_at").notNull(),
   },
   (table) => [index("reader_usage_expires_idx").on(table.expiresAt)],
+);
+
+export const aiUsage = pgTable(
+  "ai_usage",
+  {
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+    feature: text().notNull(),
+    id: uuid().defaultRandom().primaryKey(),
+    inputTokens: integer("input_tokens").notNull().default(0),
+    modelId: text("model_id").notNull(),
+    orgId: uuid("org_id").references(() => orgs.id, { onDelete: "set null" }),
+    outputTokens: integer("output_tokens").notNull().default(0),
+    userId: uuid("user_id").references(() => users.id, { onDelete: "set null" }),
+  },
+  (table) => [
+    index("ai_usage_created_at_idx").on(table.createdAt),
+    index("ai_usage_org_created_at_idx").on(table.orgId, table.createdAt),
+  ],
+);
+
+export const aiModelSettings = pgTable("ai_model_settings", {
+  changedAt: timestamp("changed_at").notNull().defaultNow(),
+  changedBy: uuid("changed_by")
+    .notNull()
+    .references(() => users.id),
+  feature: text().primaryKey(),
+  modelId: text("model_id").notNull(),
+});
+
+export const aiWorkspaceModelOverrides = pgTable(
+  "ai_workspace_model_overrides",
+  {
+    changedAt: timestamp("changed_at").notNull().defaultNow(),
+    changedBy: uuid("changed_by")
+      .notNull()
+      .references(() => users.id),
+    feature: text().notNull(),
+    id: uuid().defaultRandom().primaryKey(),
+    modelId: text("model_id").notNull(),
+    orgId: uuid("org_id")
+      .notNull()
+      .references(() => orgs.id, { onDelete: "cascade" }),
+  },
+  (table) => [
+    unique("ai_workspace_model_overrides_org_feature_unique").on(table.orgId, table.feature),
+  ],
+);
+
+export const aiModelChanges = pgTable(
+  "ai_model_changes",
+  {
+    changedAt: timestamp("changed_at").notNull().defaultNow(),
+    changedBy: uuid("changed_by")
+      .notNull()
+      .references(() => users.id),
+    feature: text().notNull(),
+    id: uuid().defaultRandom().primaryKey(),
+    modelId: text("model_id"),
+    orgId: uuid("org_id").references(() => orgs.id, { onDelete: "cascade" }),
+  },
+  (table) => [index("ai_model_changes_changed_at_idx").on(table.changedAt)],
 );
 
 export const chatThreads = pgTable(
