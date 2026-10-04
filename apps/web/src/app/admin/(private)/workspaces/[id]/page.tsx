@@ -1,6 +1,7 @@
 import Link from "next/link";
 
 import { setWorkspaceModel } from "@/actions/admin";
+import { AdminDeleteWorkspace } from "@/components/admin-delete-workspace";
 import { Button } from "@/components/ui/button";
 import { getAdminWorkspace } from "@/lib/admin-data";
 import { ALLOWED_MODELS, MODEL_PRICES } from "@/lib/ai-usage";
@@ -100,6 +101,12 @@ export default async function AdminWorkspacePage({ params }: { params: Promise<{
           </ul>
         </section>
       </div>
+
+      <AdminDeleteWorkspace
+        memberCount={members.length}
+        name={workspace.name}
+        orgId={workspace.id}
+      />
     </div>
   );
 }

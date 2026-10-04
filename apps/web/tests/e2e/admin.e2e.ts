@@ -5,11 +5,16 @@ import { eq } from "drizzle-orm";
 
 import { db } from "../../src/lib/db";
 import {
+  activityLog,
   aiModelChanges,
   aiModelSettings,
   aiUsage,
   aiWorkspaceModelOverrides,
+  clients,
+  invoices,
+  lineItems,
   orgMembers,
+  orgs,
   users,
 } from "../../src/lib/db/schema";
 import { logout, registerAccount, uniqueSuffix } from "./helpers";
@@ -156,4 +161,54 @@ test("super admin changes the temporary password, sees accounts, and changes mod
   await page.getByTestId("login-password").fill(permanentPassword);
   await page.getByTestId("login-submit").click();
   await expect(page).toHaveURL(/\/admin$/);
+
+  // Deleting a workspace takes its data and its sole member with it, and
+  // only after the operator types the workspace's exact name.
+  const [org] = await db.select().from(orgs).where(eq(orgs.id, membership.orgId));
+  const [client] = await db
+    .insert(clients)
+    .values({
+      email: `client-${suffix}@example.com`,
+      name: "Doomed Client",
+      orgId: org.id,
+      userId: normalUser.id,
+    })
+    .returning({ id: clients.id });
+  const [invoice] = await db
+    .insert(invoices)
+    .values({
+      clientId: client.id,
+      dueAt: "2026-11-01",
+      issuedAt: "2026-10-01",
+      number: `DEL-${suffix}`,
+      orgId: org.id,
+      total: "100.00",
+      userId: normalUser.id,
+    })
+    .returning({ id: invoices.id });
+  await db.insert(lineItems).values({
+    amount: "100.00",
+    description: "Work",
+    invoiceId: invoice.id,
+    quantity: "1",
+    unitPrice: "100.00",
+  });
+  await db.insert(activityLog).values({ action: "created", invoiceId: invoice.id });
+
+  await page.goto(`/admin/workspaces/${org.id}`);
+  await page.getByTestId("admin-delete-open").click();
+  await page.getByTestId("admin-delete-confirmation").fill("not the name");
+  await expect(page.getByTestId("admin-delete-submit")).toBeDisabled();
+  await page.getByTestId("admin-delete-confirmation").fill(org.name);
+  await page.getByTestId("admin-delete-submit").click();
+  await expect(page).toHaveURL(/\/admin$/);
+  await expect(page.getByTestId("admin-workspaces")).not.toContainText(`Admin flow ${suffix}`);
+
+  expect(await db.select().from(orgs).where(eq(orgs.id, org.id))).toHaveLength(0);
+  expect(await db.select().from(users).where(eq(users.id, normalUser.id))).toHaveLength(0);
+  expect(await db.select().from(invoices).where(eq(invoices.id, invoice.id))).toHaveLength(0);
+  expect(await db.select().from(clients).where(eq(clients.id, client.id))).toHaveLength(0);
+  expect(await db.select().from(users).where(eq(users.email, adminEmail))).toHaveLength(1);
+  const gone = await page.goto(`/admin/workspaces/${org.id}`);
+  expect(gone?.status()).toBe(404);
 });
