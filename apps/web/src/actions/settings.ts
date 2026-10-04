@@ -35,7 +35,13 @@ const brandFieldSchema = z.enum([
 ]);
 
 const brandSettingsSchema = z.object({
-  brandColor: z.string().regex(/^#[\da-f]{6}$/i, "Choose a six-digit hex colour"),
+  brandColor: z.preprocess(
+    (value) =>
+      typeof value === "string"
+        ? value.replace(/^#([\da-f])([\da-f])([\da-f])$/i, "#$1$1$2$2$3$3")
+        : value,
+    z.string().regex(/^#[\da-f]{6}$/i, "Choose a six-digit hex colour"),
+  ),
   businessName: z.string().trim().max(250),
   city: z.string().trim().max(250),
   contactEmail: z.union([z.literal(""), z.email("Enter a valid email address")]),

@@ -35,6 +35,36 @@ export type BrandSettingsData = {
 type BrandField = Exclude<keyof BrandSettingsData, "faviconUrl" | "logoUrl" | "profileSources">;
 
 const SWATCHES = ["#43C6A6", "#1F1B16", "#14705A"];
+const PAPER_INK = "#1F1B16";
+
+function relativeLuminance(color: string) {
+  const normalized = color.replace(/^#([\da-f])([\da-f])([\da-f])$/i, "#$1$1$2$2$3$3");
+  const channels = normalized.match(/^#([\da-f]{2})([\da-f]{2})([\da-f]{2})$/i)?.slice(1);
+  if (!channels) {
+    return null;
+  }
+
+  const [red, green, blue] = channels.map((channel) => Number.parseInt(channel, 16) / 255);
+  return [red, green, blue]
+    .map((channel) => (channel <= 0.040_45 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4))
+    .reduce((total, channel, index) => total + channel * [0.2126, 0.7152, 0.0722][index], 0);
+}
+
+const PAPER_INK_LUMINANCE = relativeLuminance(PAPER_INK)!;
+
+function contrastTextColor(background: string) {
+  const luminance = relativeLuminance(background);
+  if (luminance === null) {
+    return PAPER_INK;
+  }
+
+  const inkContrast =
+    (Math.max(luminance, PAPER_INK_LUMINANCE) + 0.05) /
+    (Math.min(luminance, PAPER_INK_LUMINANCE) + 0.05);
+  const whiteContrast = 1.05 / (luminance + 0.05);
+
+  return inkContrast >= whiteContrast ? PAPER_INK : "#FFFFFF";
+}
 
 function sourceLabel(source?: Source) {
   if (!source) {
@@ -473,8 +503,11 @@ export function BrandSettings({
                 </div>
               </div>
               <div
-                className="rounded px-3 py-2 text-center text-[10px] font-semibold text-white"
-                style={{ backgroundColor: values.brandColor }}
+                className="rounded px-3 py-2 text-center text-[10px] font-semibold"
+                style={{
+                  backgroundColor: values.brandColor,
+                  color: contrastTextColor(values.brandColor),
+                }}
               >
                 Pay €4,800.00
               </div>
