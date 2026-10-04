@@ -7,6 +7,7 @@ import { BillingSettings } from "@/components/billing-settings";
 import { ConnectedAppsSettings } from "@/components/connected-apps-settings";
 import { SettingsForm } from "@/components/settings-form";
 import { TeamSettings } from "@/components/team-settings";
+import { ThemeSettings } from "@/components/theme-settings";
 import { Button } from "@/components/ui/button";
 import { getCurrentUser } from "@/lib/auth";
 import { billingStatus } from "@/lib/billing";
@@ -103,6 +104,7 @@ export default async function SettingsPage({
       </div>
 
       <div className="max-w-4xl space-y-8">
+        <ThemeSettings theme={user.theme} />
         <SettingsForm
           bankAccounts={organizationBankAccounts}
           canManageBankAccounts={canManageBankAccounts(role)}
@@ -113,7 +115,9 @@ export default async function SettingsPage({
 
         <BillingSettings canManage={canManageSettings(role)} notice={notice} status={billing} />
 
-        <ConnectedAppsSettings apps={connectedApps} />
+        <section className="scroll-mt-6" id="connected-apps">
+          <ConnectedAppsSettings apps={connectedApps} />
+        </section>
 
         {canManageApiKeys(role) ? <ApiKeysSettings apiKeys={apiKeyRecords} /> : null}
 

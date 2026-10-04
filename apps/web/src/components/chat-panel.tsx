@@ -402,8 +402,8 @@ function MessageBubble({ message }: { message: UIMessage }) {
         className={cn(
           "max-w-[88%] space-y-2",
           isUser
-            ? "rounded-[22px] rounded-br-md bg-zinc-950 px-4 py-3 text-white"
-            : "rounded-[22px] rounded-bl-md border border-zinc-200 bg-[#fcfcfa] px-4 py-3 text-zinc-900 shadow-sm",
+            ? "rounded-lg bg-secondary px-4 py-3 text-secondary-foreground"
+            : "rounded-lg border bg-card px-4 py-3 text-card-foreground",
         )}
       >
         {hasText ? (
@@ -436,16 +436,30 @@ function MessageBubble({ message }: { message: UIMessage }) {
   );
 }
 
-export function ChatPanel() {
+export function ChatPanel({
+  inputRef,
+  onOpenChange,
+  open,
+}: {
+  inputRef: React.RefObject<HTMLTextAreaElement | null>;
+  onOpenChange: (open: boolean) => void;
+  open: boolean;
+}) {
   const router = useRouter();
   const pathname = usePathname();
   const [input, setInput] = useState("");
-  const [open, setOpen] = useState(false);
   const [csvFile, setCsvFile] = useState<File | null>(null);
   const [historyLoaded, setHistoryLoaded] = useState(false);
   const [importBusy, setImportBusy] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
+  const closeButton = useRef<HTMLButtonElement>(null);
   const refreshedMessages = useRef<Set<string>>(new Set());
+
+  useEffect(() => {
+    if (open) {
+      (inputRef.current ?? closeButton.current)?.focus();
+    }
+  }, [inputRef, open]);
 
   const { clearError, error, messages, sendMessage, setMessages, status } = useChat({
     experimental_throttle: 50,
@@ -506,6 +520,7 @@ export function ChatPanel() {
     }
 
     clearError();
+    onOpenChange(true);
 
     try {
       const entityId = pathname.match(/^\/(?:clients|invoices)\/([\da-f-]{36})(?:\/|$)/i)?.[1];
@@ -526,34 +541,34 @@ export function ChatPanel() {
 
   return (
     <>
-      <button
-        className="fixed right-4 bottom-24 z-30 inline-flex items-center gap-2 rounded-full border border-zinc-900 bg-zinc-950 px-4 py-3 text-sm font-medium text-white shadow-2xl shadow-black/25 transition hover:-translate-y-0.5 hover:bg-zinc-900 sm:right-6 sm:bottom-28"
-        data-testid="chat-panel-toggle"
-        onClick={() => setOpen((value) => !value)}
-        type="button"
-      >
-        <Sparkles className="size-4" />
-        Nota Chat
-      </button>
-
-      <div
+      <section
+        aria-label="Nota Chat"
         className={cn(
-          "fixed inset-x-4 bottom-40 z-30 flex max-h-[72vh] w-auto flex-col overflow-hidden rounded-[28px] border border-zinc-200 bg-[#f5f3ef] shadow-[0_30px_80px_rgba(15,23,42,0.18)] transition-all duration-300 sm:right-6 sm:bottom-44 sm:left-auto sm:w-[420px]",
-          open ? "translate-y-0 opacity-100" : "pointer-events-none translate-y-6 opacity-0",
+          "fixed z-30 flex flex-col overflow-hidden border bg-card",
+          open
+            ? "inset-y-0 right-0 w-full sm:w-[400px]"
+            : "inset-x-3 bottom-3 rounded-lg md:right-6 md:left-[272px]",
         )}
         onDragOver={(event) => event.preventDefault()}
         onDrop={(event) => {
           event.preventDefault();
           if (!isBusy && !csvFile) {
+            onOpenChange(true);
             setCsvFile(event.dataTransfer.files[0] ?? null);
           }
         }}
+        onKeyDown={(event) => {
+          if (event.key === "Escape" && open) {
+            onOpenChange(false);
+            inputRef.current?.focus();
+          }
+        }}
       >
-        <div className="border-b border-zinc-200 bg-white/80 px-5 py-4 backdrop-blur">
+        <div className={cn("border-b px-5 py-4", !open && "hidden")}>
           <div className="flex items-start justify-between gap-4">
             <div>
               <div className="flex items-center gap-2 text-zinc-900">
-                <div className="flex size-9 items-center justify-center rounded-2xl bg-zinc-950 text-white">
+                <div className="flex size-9 items-center justify-center rounded-md bg-primary text-primary-foreground">
                   <Bot className="size-4" />
                 </div>
                 <div>
@@ -562,15 +577,27 @@ export function ChatPanel() {
                 </div>
               </div>
             </div>
-            <Button onClick={() => setOpen(false)} size="icon-sm" type="button" variant="ghost">
+            <Button
+              aria-label="Close chat"
+              onClick={() => {
+                onOpenChange(false);
+                inputRef.current?.focus();
+              }}
+              ref={closeButton}
+              size="icon-sm"
+              type="button"
+              variant="ghost"
+            >
               <X className="size-4" />
             </Button>
           </div>
         </div>
 
-        <div className="flex-1 space-y-4 overflow-y-auto px-4 py-4">
+        <div
+          className={cn("min-h-0 flex-1 space-y-4 overflow-y-auto px-4 py-4", !open && "hidden")}
+        >
           {messages.length === 0 ? (
-            <div className="space-y-4 rounded-[24px] border border-dashed border-zinc-300 bg-white/80 p-4 text-sm text-zinc-600">
+            <div className="space-y-4 rounded-md border border-dashed bg-background p-4 text-sm text-muted-foreground">
               <p className="font-medium text-zinc-900">Put Nota to work</p>
               <p className="text-xs leading-5">
                 Moving from FreshBooks? Drop your client CSV here or use the paperclip.
@@ -641,15 +668,40 @@ export function ChatPanel() {
           ) : null}
         </div>
 
-        {!csvFile ? (
-          <form
-            className="border-t border-zinc-200 bg-white/85 px-4 py-4 backdrop-blur"
-            onSubmit={handleSubmit}
+        {csvFile && !open ? (
+          <button
+            className="p-4 text-left text-sm"
+            onClick={() => onOpenChange(true)}
+            type="button"
           >
-            <div className="rounded-[22px] border border-zinc-200 bg-white p-2 shadow-sm">
+            Continue importing {csvFile.name}
+          </button>
+        ) : null}
+        {!csvFile ? (
+          <form className="shrink-0 bg-card p-3" onSubmit={handleSubmit}>
+            <div>
+              {!open ? (
+                <div className="mb-1 flex items-center justify-between px-2">
+                  <label className="nota-label" htmlFor="nota-chat-input">
+                    Tell Nota
+                  </label>
+                  <button
+                    aria-expanded={open}
+                    className="flex items-center gap-2 text-xs text-muted-foreground"
+                    data-testid="chat-panel-toggle"
+                    onClick={() => onOpenChange(true)}
+                    type="button"
+                  >
+                    <Sparkles className="size-3" />
+                    Nota Chat
+                  </button>
+                </div>
+              ) : null}
               <textarea
-                className="min-h-[88px] w-full resize-none border-0 bg-transparent px-2 py-2 text-sm leading-6 text-zinc-900 outline-none placeholder:text-zinc-400"
+                aria-label="Ask Nota"
+                className="w-full resize-none border-0 bg-transparent px-2 py-2 text-sm leading-6 text-foreground placeholder:text-muted-foreground"
                 data-testid="chat-panel-input"
+                id="nota-chat-input"
                 onChange={(event) => setInput(event.target.value)}
                 onKeyDown={(event) => {
                   if (event.key === "Enter" && !event.shiftKey && input.trim() && !isBusy) {
@@ -658,6 +710,8 @@ export function ChatPanel() {
                   }
                 }}
                 placeholder="Describe the work, ask about an invoice, or attach a client CSV…"
+                ref={inputRef}
+                rows={open ? 3 : 1}
                 value={input}
               />
               <div className="flex items-center justify-between gap-3 px-2 pb-1">
@@ -667,6 +721,7 @@ export function ChatPanel() {
                   className="hidden"
                   data-testid="client-csv-input"
                   onChange={(event) => {
+                    onOpenChange(true);
                     setCsvFile(event.target.files?.[0] ?? null);
                     event.target.value = "";
                   }}
@@ -694,7 +749,7 @@ export function ChatPanel() {
             </div>
           </form>
         ) : null}
-      </div>
+      </section>
     </>
   );
 }

@@ -40,7 +40,7 @@ test.beforeAll(async () => {
       ],
       stdin: {
         contents:
-          'import React from "react"; import {createRoot} from "react-dom/client"; import {ChatPanel} from "./src/components/chat-panel"; createRoot(document.getElementById("root")).render(<ChatPanel />);',
+          'import React from "react"; import {createRoot} from "react-dom/client"; import {ChatPanel} from "./src/components/chat-panel"; function Fixture() { const [open, setOpen] = React.useState(false); const input = React.useRef(null); return <div className="app-shell"><ChatPanel inputRef={input} open={open} onOpenChange={setOpen} /></div>; } createRoot(document.getElementById("root")).render(<Fixture />);',
         loader: "tsx",
         resolveDir: cwd,
       },

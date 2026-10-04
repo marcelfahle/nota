@@ -109,7 +109,7 @@ export function ChatClientImport({ file, onBusyChange, onComplete, onDismiss }: 
   return (
     <section
       aria-label="Client CSV import"
-      className="rounded-[22px] border border-zinc-200 bg-[#fcfcfa] p-4 shadow-sm"
+      className="rounded-md border bg-card p-4"
       data-testid="client-import-card"
       ref={card}
     >

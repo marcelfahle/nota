@@ -58,6 +58,9 @@ export const users = pgTable("users", {
   nextInvoiceNumber: integer("next_invoice_number").default(1),
   // Legacy: passwords live in accounts.password now. Kept nullable for rollback.
   passwordHash: text("password_hash"),
+  theme: text("theme", { enum: ["system", "light", "dark"] })
+    .notNull()
+    .default("system"),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
   vatNumber: text("vat_number"),
 });
