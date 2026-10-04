@@ -37,7 +37,7 @@ function CopyButton({ label = "Copy", value }: { label?: string; value: string }
 
   return (
     <button
-      className="inline-flex min-h-7 shrink-0 items-center gap-1.5 rounded border border-white/30 px-2.5 text-xs font-semibold text-[#e8e4dc] hover:bg-white/10"
+      className="inline-flex min-h-11 shrink-0 items-center gap-1.5 rounded border border-white/30 px-3 text-sm font-semibold text-[#e8e4dc] hover:bg-white/10 active:bg-white/15 sm:min-h-7 sm:px-2.5 sm:text-xs"
       onClick={() => void copy()}
       type="button"
     >
@@ -68,10 +68,10 @@ function Step({
   number: number;
 }) {
   return (
-    <li className="flex gap-4 pb-6">
+    <li className="flex gap-3 pb-6 sm:gap-4">
       <span
         className={cn(
-          "grid size-7 shrink-0 place-items-center rounded-full border border-foreground font-mono text-xs font-semibold",
+          "grid size-8 shrink-0 place-items-center rounded-full border border-foreground font-mono text-sm font-semibold sm:size-7 sm:text-xs",
           complete && "border-highlighter bg-highlighter text-[#1f1b16]",
         )}
       >
@@ -153,7 +153,7 @@ function ConnectionStatuses({
 }) {
   if (apps.length === 0) {
     return (
-      <div className="flex items-center gap-2 border-t py-4 font-mono text-xs text-muted-foreground">
+      <div className="flex items-start gap-2 border-t py-4 font-mono text-sm text-muted-foreground sm:text-xs">
         <span aria-hidden="true" className="size-2 animate-pulse rounded-full bg-foreground" />
         Waiting for a connection. This page updates itself when one appears.
       </div>
@@ -281,7 +281,7 @@ export function AgentConnections({ initialApps }: { initialApps: Array<Connected
                 aria-controls={`agent-panel-${tab}`}
                 aria-selected={activeTab === tab}
                 className={cn(
-                  "min-h-10 rounded-md border border-transparent px-2 text-sm font-semibold text-muted-foreground",
+                  "min-h-11 rounded-md border border-transparent px-2 text-sm font-semibold text-muted-foreground active:bg-card sm:min-h-10",
                   activeTab === tab && "border-foreground bg-card text-foreground",
                 )}
                 id={`agent-tab-${tab}`}

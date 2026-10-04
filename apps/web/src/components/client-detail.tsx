@@ -80,7 +80,7 @@ export function ClientDetailView({
         Back to clients
       </Link>
 
-      <div className="mb-8">
+      <div className="mb-8 min-w-0 [overflow-wrap:anywhere]">
         <div className="mb-4 flex items-center gap-4">
           <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-zinc-100 text-sm font-medium text-zinc-600">
             {client.name

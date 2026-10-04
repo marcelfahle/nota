@@ -65,24 +65,24 @@ export default async function ClientsPage() {
         <div className="divide-y divide-zinc-100">
           {clientList.map((client) => (
             <Link
-              className="-mx-4 flex items-center justify-between rounded-lg px-4 py-4 transition-colors hover:bg-zinc-50"
+              className="-mx-4 flex min-h-16 items-center justify-between gap-3 rounded-lg px-4 py-4 transition-colors hover:bg-zinc-50 active:bg-zinc-50"
               href={`/clients/${client.id}`}
               key={client.id}
             >
-              <div className="flex items-center gap-4">
+              <div className="flex min-w-0 items-center gap-3 sm:gap-4">
                 <div className="flex h-10 w-10 items-center justify-center rounded-full bg-zinc-100 text-sm font-medium text-zinc-600">
                   {getInitials(client.name)}
                 </div>
-                <div>
-                  <p className="text-sm font-medium text-zinc-900">{client.name}</p>
-                  <p className="text-xs text-zinc-500">{client.email}</p>
+                <div className="min-w-0">
+                  <p className="line-clamp-2 text-sm font-medium text-zinc-900">{client.name}</p>
+                  <p className="truncate text-sm text-zinc-500">{client.email}</p>
                 </div>
               </div>
-              <div className="text-right">
-                <p className="text-sm font-medium text-zinc-900">
+              <div className="max-w-[38%] shrink-0 text-right">
+                <p className="truncate text-sm font-medium text-zinc-900">
                   {formatCurrency(Number(client.totalInvoiced))}
                 </p>
-                <p className="text-xs text-zinc-500">
+                <p className="text-sm text-zinc-500">
                   {client.invoiceCount} {client.invoiceCount === 1 ? "invoice" : "invoices"}
                 </p>
               </div>

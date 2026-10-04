@@ -490,6 +490,8 @@ export function ChatPanel({
   const [importBusy, setImportBusy] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
   const closeButton = useRef<HTMLButtonElement>(null);
+  const conversationContainer = useRef<HTMLElement>(null);
+  const messagesContainer = useRef<HTMLDivElement>(null);
   const toggleButton = useRef<HTMLButtonElement>(null);
   const wasOpen = useRef(false);
   const dialog = useRef<HTMLDialogElement>(null);
@@ -540,6 +542,48 @@ export function ChatPanel({
     desktop.addEventListener("change", syncModality);
     return () => desktop.removeEventListener("change", syncModality);
   }, [csvFile, inputRef, mode, open]);
+
+  useEffect(() => {
+    if (!open) {
+      return;
+    }
+
+    const container = mode === "panel" ? dialog.current : conversationContainer.current;
+    const mobile = window.matchMedia("(max-width: 639px)");
+    const viewport = window.visualViewport;
+    if (!container || !mobile.matches) {
+      return;
+    }
+
+    function syncViewport() {
+      const height = viewport?.height ?? window.innerHeight;
+      const offsetTop = viewport?.offsetTop ?? 0;
+      const messages = messagesContainer.current;
+      const distanceFromBottom = messages
+        ? messages.scrollHeight - messages.scrollTop - messages.clientHeight
+        : 0;
+      container?.style.setProperty("--chat-viewport-height", `${height}px`);
+      container?.style.setProperty("--chat-viewport-top", `${offsetTop}px`);
+      requestAnimationFrame(() => {
+        if (messages) {
+          messages.scrollTop = messages.scrollHeight - messages.clientHeight - distanceFromBottom;
+        }
+      });
+    }
+
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    syncViewport();
+    viewport?.addEventListener("resize", syncViewport);
+    viewport?.addEventListener("scroll", syncViewport);
+    window.addEventListener("resize", syncViewport);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      viewport?.removeEventListener("resize", syncViewport);
+      viewport?.removeEventListener("scroll", syncViewport);
+      window.removeEventListener("resize", syncViewport);
+    };
+  }, [mode, open]);
 
   const { clearError, error, messages, sendMessage, setMessages, status } = useChat({
     experimental_throttle: 50,
@@ -633,7 +677,7 @@ export function ChatPanel({
           "shrink-0 bg-card focus-within:ring-2 focus-within:ring-ring/30",
           homePrompt
             ? "rounded-[14px] border p-4 shadow-[0_16px_40px_-28px_rgb(25_21_16/55%)]"
-            : "p-3",
+            : "p-3 pb-[max(.75rem,env(safe-area-inset-bottom))]",
         )}
         onSubmit={handleSubmit}
       >
@@ -645,7 +689,7 @@ export function ChatPanel({
           className={cn(
             "w-full resize-none border-0 bg-transparent px-2 py-2 leading-6 text-foreground placeholder:text-muted-foreground",
             "focus-visible:outline-none",
-            homePrompt ? "font-voice text-xl" : "text-sm",
+            homePrompt ? "min-h-24 font-voice text-xl" : "text-base sm:text-sm",
           )}
           data-testid="chat-panel-input"
           id="nota-chat-input"
@@ -662,14 +706,14 @@ export function ChatPanel({
               : "Bill, chase, quote or ask…"
           }
           ref={inputRef}
-          rows={homePrompt ? 2 : 3}
+          rows={3}
           value={input}
         />
         {homePrompt ? (
           <div className="mb-3 flex flex-wrap gap-1.5 px-2">
             {starterPrompts.map((prompt) => (
               <button
-                className="min-h-8 rounded-full border px-3 text-xs hover:bg-accent"
+                className="min-h-11 rounded-full border px-3 text-sm hover:bg-accent active:bg-accent sm:min-h-8 sm:text-xs"
                 disabled={isBusy}
                 key={prompt}
                 onClick={() => void submitInput(prompt)}
@@ -718,7 +762,7 @@ export function ChatPanel({
 
   const conversation = (
     <>
-      <header className="flex items-center justify-between gap-4 border-b px-5 py-4">
+      <header className="flex items-center justify-between gap-4 border-b px-5 pt-[max(1rem,env(safe-area-inset-top))] pb-4 sm:py-4">
         {mode === "home" ? (
           <Button onClick={() => onOpenChange(false)} size="sm" type="button" variant="ghost">
             <ArrowLeft />
@@ -745,7 +789,10 @@ export function ChatPanel({
         ) : null}
       </header>
 
-      <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-4 py-5">
+      <div
+        className="min-h-0 flex-1 space-y-4 overflow-x-hidden overflow-y-auto px-4 py-5 [overflow-wrap:anywhere]"
+        ref={messagesContainer}
+      >
         {activity.length > 0 ? (
           <ol aria-label="Recent agent activity" className="space-y-2">
             {activity.map((item) => (
@@ -762,7 +809,7 @@ export function ChatPanel({
             <div className="flex flex-wrap gap-1.5">
               {starterPrompts.map((prompt) => (
                 <button
-                  className="min-h-8 rounded-full border px-3 text-xs hover:bg-accent"
+                  className="min-h-11 rounded-full border px-3 text-sm hover:bg-accent active:bg-accent sm:min-h-8 sm:text-xs"
                   disabled={isBusy}
                   key={prompt}
                   onClick={() => void submitInput(prompt)}
@@ -846,8 +893,9 @@ export function ChatPanel({
         {open || csvFile ? (
           <section
             aria-label="Conversation with Nota"
-            className="mx-auto flex h-[calc(100dvh-10rem)] max-w-[700px] flex-col overflow-hidden rounded-lg border bg-card"
+            className="fixed inset-x-0 top-[var(--chat-viewport-top,0px)] z-50 mx-auto flex h-[var(--chat-viewport-height,100dvh)] max-w-[700px] flex-col overflow-hidden border bg-card sm:static sm:h-[calc(100dvh-10rem)] sm:rounded-lg"
             hidden={!open}
+            ref={conversationContainer}
           >
             {conversation}
           </section>
@@ -861,7 +909,7 @@ export function ChatPanel({
       <button
         aria-expanded="false"
         aria-label={csvFile ? `Continue importing ${csvFile.name}` : "Ask Nota"}
-        className="fixed right-4 bottom-4 z-20 inline-flex size-[46px] items-center justify-center rounded-full border bg-card text-sm font-semibold shadow-[0_14px_30px_-18px_rgb(25_21_16/60%)] hover:bg-accent sm:right-6 sm:bottom-6 sm:h-auto sm:min-h-[46px] sm:w-auto sm:gap-2.5 sm:px-4 sm:pl-3"
+        className="fixed right-[max(1rem,env(safe-area-inset-right))] bottom-[max(1rem,env(safe-area-inset-bottom))] z-20 inline-flex size-[46px] items-center justify-center rounded-full border bg-card text-sm font-semibold shadow-[0_14px_30px_-18px_rgb(25_21_16/60%)] hover:bg-accent active:bg-accent sm:right-6 sm:bottom-6 sm:h-auto sm:min-h-[46px] sm:w-auto sm:gap-2.5 sm:px-4 sm:pl-3"
         data-testid="chat-panel-toggle"
         hidden={open}
         onClick={() => onOpenChange(true)}
@@ -880,7 +928,7 @@ export function ChatPanel({
       </button>
       <dialog
         aria-label="Nota Chat"
-        className="fixed inset-0 z-30 m-0 h-dvh max-h-none w-screen max-w-none flex-col overflow-hidden border bg-card p-0 text-foreground backdrop:bg-background/70 open:flex sm:inset-y-0 sm:right-0 sm:left-auto sm:w-[340px]"
+        className="fixed inset-x-0 top-[var(--chat-viewport-top,0px)] z-50 m-0 h-[var(--chat-viewport-height,100dvh)] max-h-none w-screen max-w-none flex-col overflow-hidden border bg-card p-0 text-foreground backdrop:bg-background/70 open:flex sm:inset-y-0 sm:right-0 sm:left-auto sm:h-dvh sm:w-[340px]"
         onCancel={(event) => {
           event.preventDefault();
           closePanel();

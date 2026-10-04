@@ -179,12 +179,18 @@ export default async function HomePage() {
             return (
               <li className="border-b border-border/50" key={invoice.id}>
                 <Link
-                  className="grid min-h-12 grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 gap-y-1 px-1 py-2 hover:bg-card sm:grid-cols-[5.5rem_minmax(0,1fr)_auto_7rem]"
+                  className="grid min-h-14 grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1 px-1 py-2 hover:bg-card active:bg-card sm:min-h-12 sm:grid-cols-[5.5rem_minmax(0,1fr)_auto_7rem] sm:gap-x-4"
                   href={`/invoices/${invoice.id}`}
                 >
-                  <span className="font-mono text-xs text-muted-foreground">{invoice.number}</span>
-                  <span className="truncate font-medium">{invoice.clientName}</span>
-                  <StatusBadge status={status} />
+                  <span className="col-start-1 row-start-1 font-mono text-xs text-muted-foreground">
+                    {invoice.number}
+                  </span>
+                  <span className="col-start-1 row-start-2 truncate font-medium sm:col-start-2 sm:row-start-1">
+                    {invoice.clientName}
+                  </span>
+                  <span className="col-start-2 row-start-1 justify-self-end sm:col-start-3">
+                    <StatusBadge status={status} />
+                  </span>
                   <span className="col-start-2 row-start-2 text-right font-mono text-sm sm:col-start-4 sm:row-start-1">
                     {formatCurrency(
                       Number(invoice.total ?? 0),
