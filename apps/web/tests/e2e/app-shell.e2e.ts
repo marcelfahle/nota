@@ -1,4 +1,8 @@
 import { expect, test } from "@playwright/test";
+import { eq } from "drizzle-orm";
+
+import { db } from "@/lib/db";
+import { oauthClients, oauthConsents, users } from "@/lib/db/schema";
 
 import {
   createClient,
@@ -27,6 +31,68 @@ test("shell navigation, account themes, paper invoice and chat dock", async ({ b
   await expect(page.getByRole("region", { name: "Conversation with Nota" })).toBeVisible();
   await page.getByRole("button", { name: "Back to Home" }).click();
   await expect(page.getByRole("heading", { name: "Welcome to Nota." })).toBeVisible();
+
+  await page.getByRole("navigation", { name: "Workspace" }).getByText("Connect an agent").click();
+  await expect(page).toHaveURL(/\/agents$/);
+  await expect(
+    page.getByRole("heading", { name: "Run Nota from Claude or ChatGPT." }),
+  ).toBeVisible();
+  await expect(page.getByText("0 connected")).toBeVisible();
+  await expect(page.getByRole("tab", { name: "Claude" })).toHaveAttribute("aria-selected", "true");
+  await expect(page.getByRole("link", { name: "Open Claude" })).toHaveAttribute(
+    "href",
+    "https://claude.ai/customize/connectors?modal=add-custom-connector",
+  );
+  await page.getByRole("tab", { name: "ChatGPT" }).click();
+  await expect(
+    page.getByRole("heading", { name: "Create an app with this address" }),
+  ).toBeVisible();
+  await page.getByRole("tab", { name: "Terminal" }).click();
+  await expect(page.getByText("$ nota login", { exact: false })).toBeVisible();
+  expect(await page.request.get("/api/connected-apps").then((response) => response.json())).toEqual(
+    {
+      apps: [],
+    },
+  );
+  const [registeredUser] = await db
+    .select({ id: users.id })
+    .from(users)
+    .where(eq(users.email, owner.email))
+    .limit(1);
+  const oauthClientId = `claude-${uniqueSuffix()}`;
+  await db.insert(oauthClients).values({
+    clientId: oauthClientId,
+    name: "Claude browser fixture",
+    redirectUris: ["https://claude.test/callback"],
+  });
+  await db.insert(oauthConsents).values({
+    clientId: oauthClientId,
+    scopes: ["nota"],
+    userId: registeredUser!.id,
+  });
+  await expect(page.getByText("1 connected")).toBeVisible({ timeout: 7000 });
+  await page.getByRole("tab", { name: "Claude" }).click();
+  await expect(page.getByText("Claude browser fixture")).toBeVisible();
+  await expect(page.getByText(/Connected .*not used yet/)).toBeVisible();
+
+  const customClientId = `custom-${uniqueSuffix()}`;
+  await db.insert(oauthClients).values({
+    clientId: customClientId,
+    name: "Custom browser fixture",
+    redirectUris: ["https://custom.test/callback"],
+  });
+  await db.insert(oauthConsents).values({
+    clientId: customClientId,
+    scopes: ["nota"],
+    userId: registeredUser!.id,
+  });
+  await expect(page.getByText("2 connected")).toBeVisible({ timeout: 7000 });
+  await expect(page.getByText("Custom browser fixture")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Remove access" })).toHaveCount(2);
+  await page.getByRole("button", { name: "Remove access" }).first().click();
+  await expect(page.getByText("1 connected")).toBeVisible();
+  await page.getByRole("button", { name: "Remove access" }).click();
+  await expect(page.getByText("0 connected")).toBeVisible();
 
   await page.goto("/invoices");
   await expect(page.getByRole("button", { name: "Close chat" })).toBeHidden();

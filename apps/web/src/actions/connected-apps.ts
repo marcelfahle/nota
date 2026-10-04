@@ -8,8 +8,8 @@ import { db } from "@/lib/db";
 import { oauthAccessTokens, oauthConsents, oauthRefreshTokens } from "@/lib/db/schema";
 
 /**
- * Disconnects an assistant: removes the consent and every refresh token, so it
- * can't get new access. Issued access tokens expire within the hour.
+ * Disconnects an assistant by removing its consent and all issued tokens.
+ * API authentication also requires active consent, invalidating JWTs immediately.
  */
 export async function disconnectAppAction(clientId: string) {
   const { user } = await getCurrentUser();
@@ -28,6 +28,6 @@ export async function disconnectAppAction(clientId: string) {
       .where(and(eq(oauthConsents.clientId, clientId), eq(oauthConsents.userId, user.id)));
   });
 
-  revalidatePath("/settings");
+  revalidatePath("/agents");
   return { success: true };
 }

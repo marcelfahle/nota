@@ -860,8 +860,8 @@ export function ChatPanel({
     <>
       <button
         aria-expanded="false"
-        aria-label={csvFile ? undefined : "Ask Nota"}
-        className="fixed right-4 bottom-4 z-20 inline-flex min-h-[46px] items-center gap-2.5 rounded-full border bg-card px-3 text-sm font-semibold shadow-[0_14px_30px_-18px_rgb(25_21_16/60%)] hover:bg-accent sm:right-6 sm:bottom-6 sm:px-4 sm:pl-3"
+        aria-label={csvFile ? `Continue importing ${csvFile.name}` : "Ask Nota"}
+        className="fixed right-4 bottom-4 z-20 inline-flex size-[46px] items-center justify-center rounded-full border bg-card text-sm font-semibold shadow-[0_14px_30px_-18px_rgb(25_21_16/60%)] hover:bg-accent sm:right-6 sm:bottom-6 sm:h-auto sm:min-h-[46px] sm:w-auto sm:gap-2.5 sm:px-4 sm:pl-3"
         data-testid="chat-panel-toggle"
         hidden={open}
         onClick={() => onOpenChange(true)}
@@ -869,7 +869,7 @@ export function ChatPanel({
         type="button"
       >
         <NotaGlyph />
-        <span className={cn(!csvFile && "sr-only sm:not-sr-only")}>
+        <span className="hidden sm:inline">
           {csvFile ? `Continue importing ${csvFile.name}` : "Ask Nota"}
         </span>
         {!csvFile ? (
