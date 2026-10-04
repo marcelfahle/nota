@@ -480,6 +480,7 @@ export function ChatPanel({
   dockAction,
   inputRef,
   mode,
+  onDockSubmit,
   onOpenChange,
   open,
   prompt,
@@ -489,6 +490,8 @@ export function ChatPanel({
   dockAction?: { label: string; onClick: () => void };
   inputRef: React.RefObject<HTMLTextAreaElement | null>;
   mode: "first-run" | "home" | "panel";
+  /** First run only: a message was sent from the phone dock. */
+  onDockSubmit?: () => void;
   onOpenChange: (open: boolean) => void;
   open: boolean;
   prompt?: { label: string; placeholder: string; question?: string; submitLabel: string };
@@ -582,15 +585,15 @@ export function ChatPanel({
       const distanceFromBottom = messages
         ? messages.scrollHeight - messages.scrollTop - messages.clientHeight
         : 0;
-      container?.style.setProperty("--chat-viewport-height", `${height}px`);
-      container?.style.setProperty("--chat-viewport-top", `${offsetTop}px`);
+      // Docked, the whole first-run pane is sized to what the keyboard leaves visible.
+      const sized = docked ? document.documentElement : container;
+      sized?.style.setProperty("--chat-viewport-height", `${height}px`);
+      sized?.style.setProperty("--chat-viewport-top", `${offsetTop}px`);
       if (docked && container) {
-        // Fixed elements sit behind the on-screen keyboard; lift the dock above it.
         const keyboard =
           viewport && viewport.scale === 1
             ? Math.max(0, document.documentElement.clientHeight - height - offsetTop)
             : 0;
-        container.style.setProperty("--chat-dock-bottom", `${keyboard}px`);
         container.dataset.keyboard = String(keyboard > 120);
       }
       requestAnimationFrame(() => {
@@ -614,6 +617,10 @@ export function ChatPanel({
     return () => {
       if (open) {
         document.body.style.overflow = previousOverflow;
+      }
+      if (docked) {
+        document.documentElement.style.removeProperty("--chat-viewport-height");
+        document.documentElement.style.removeProperty("--chat-viewport-top");
       }
       viewport?.removeEventListener("resize", syncViewport);
       viewport?.removeEventListener("scroll", syncViewport);
@@ -696,7 +703,7 @@ export function ChatPanel({
     if (!open && isDocked(mode)) {
       // Stay on the invoice: put the keyboard away so the draft is seen landing.
       inputRef.current?.blur();
-      window.scrollTo({ behavior: "smooth", top: 0 });
+      onDockSubmit?.();
     } else {
       onOpenChange(true);
     }
@@ -1001,7 +1008,7 @@ export function ChatPanel({
         {open ? (
           <div
             aria-hidden="true"
-            className="fixed inset-0 z-20 animate-[dock-fade_180ms_ease-out] bg-background/70 lg:hidden"
+            className="absolute inset-0 z-20 animate-[dock-fade_180ms_ease-out] bg-background/70 lg:hidden"
             onClick={() => onOpenChange(false)}
           />
         ) : null}
@@ -1011,11 +1018,11 @@ export function ChatPanel({
             "flex flex-col bg-card",
             // On a phone the invoice is the page and Nota docks under the thumb:
             // one line of reply, the composer, and the transcript a tap away.
-            "max-lg:fixed max-lg:inset-x-0 max-lg:bottom-[var(--chat-dock-bottom,0px)] max-lg:z-30 max-lg:rounded-t-2xl max-lg:border-t max-lg:shadow-[0_-18px_40px_-28px_rgb(25_21_16/55%)]",
+            "min-w-0 max-lg:relative max-lg:z-30 max-lg:shrink-0 max-lg:border-t lg:col-start-2 lg:row-start-2",
             // Another field has the keyboard: get out of its way.
             "max-lg:[&[data-keyboard=true]:not(:focus-within)]:hidden",
             open &&
-              "overflow-hidden max-lg:h-[min(36rem,calc(var(--chat-viewport-height,100dvh)-4.5rem))] max-lg:animate-[dock-rise_220ms_cubic-bezier(0.16,1,0.3,1)] lg:h-[min(660px,calc(100dvh-8rem))] lg:rounded-lg lg:border",
+              "overflow-hidden max-lg:h-[min(36rem,calc(var(--chat-viewport-height,100dvh)-9rem))] max-lg:animate-[dock-rise_220ms_cubic-bezier(0.16,1,0.3,1)] lg:h-[min(660px,calc(100dvh-8rem))] lg:rounded-lg lg:border",
           )}
           onKeyDown={(event) => {
             if (event.key === "Escape" && open) {

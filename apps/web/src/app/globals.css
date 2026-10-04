@@ -489,6 +489,39 @@
     background-position: right;
   }
 }
+/* First run on a phone: the shell stops being a scrolling page and becomes a
+   fixed pane the height of what is visible, so Nota's dock is a real footer. */
+@media (max-width: 1023px) {
+  .app-shell:has([data-first-run]) {
+    position: fixed;
+    inset-inline: 0;
+    top: var(--chat-viewport-top, 0px);
+    height: var(--chat-viewport-height, 100dvh);
+    min-height: 0;
+    overflow: hidden;
+    grid-template-rows: minmax(0, 1fr);
+  }
+  .app-shell:has([data-first-run]) > div:has(> main) {
+    display: flex;
+    min-height: 0;
+    flex: 1;
+    flex-direction: column;
+  }
+  .app-shell:has([data-first-run]) main {
+    display: flex;
+    min-height: 0;
+    max-width: none;
+    flex: 1;
+    flex-direction: column;
+    padding: 0;
+  }
+}
+@media (max-width: 767px) {
+  .app-shell:has([data-first-run]) {
+    display: flex;
+    flex-direction: column;
+  }
+}
 @keyframes dock-rise {
   from {
     transform: translateY(1.5rem);
