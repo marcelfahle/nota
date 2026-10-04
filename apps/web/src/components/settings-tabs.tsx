@@ -40,7 +40,7 @@ export function SettingsTabs({ panels }: { panels: Record<Tab, ReactNode> }) {
             aria-controls={`settings-panel-${id}`}
             aria-selected={active === id}
             className={cn(
-              "min-h-10 shrink-0 rounded-t-md border border-transparent px-3 text-sm font-medium text-muted-foreground",
+              "min-h-11 shrink-0 rounded-t-md border border-transparent px-3 text-sm font-medium text-muted-foreground active:bg-accent sm:min-h-10",
               active === id &&
                 "-mb-px border-foreground border-b-background bg-background text-foreground",
             )}

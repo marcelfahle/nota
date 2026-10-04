@@ -281,7 +281,7 @@ export function InvoiceDetailView({ activities, business, invoice, role }: Invoi
             : null;
 
   return (
-    <article aria-labelledby="invoice-title" className="space-y-6">
+    <article aria-labelledby="invoice-title" className="min-w-0 space-y-6">
       <header className="space-y-5 border-b pb-6">
         <Link
           className="nota-label inline-flex items-center gap-2 text-muted-foreground hover:text-foreground"
@@ -291,7 +291,7 @@ export function InvoiceDetailView({ activities, business, invoice, role }: Invoi
           Invoices / {invoice.kind === "credit_note" ? "Credit note" : "Invoice"}
         </Link>
         <div className="flex flex-col justify-between gap-4 lg:flex-row lg:items-end">
-          <h1 id="invoice-title">
+          <h1 className="break-words" id="invoice-title">
             {invoice.number}{" "}
             <span className="font-normal text-muted-foreground">{invoice.client.name}</span>
           </h1>
@@ -447,12 +447,12 @@ export function InvoiceDetailView({ activities, business, invoice, role }: Invoi
             </dl>
 
             <div className="py-7">
-              <table className="w-full text-sm">
+              <table className="w-full table-fixed text-sm">
                 <thead>
                   <tr className="nota-label border-b text-left text-zinc-500">
                     <th className="pb-3 font-medium">Description</th>
-                    <th className="pb-3 text-right font-medium">Qty</th>
-                    <th className="pb-3 text-right font-medium">Amount</th>
+                    <th className="w-12 pb-3 text-right font-medium">Qty</th>
+                    <th className="w-28 pb-3 text-right font-medium">Amount</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -464,8 +464,10 @@ export function InvoiceDetailView({ activities, business, invoice, role }: Invoi
                           {formatCurrency(Number(item.unitPrice), currency)} each
                         </span>
                       </td>
-                      <td className="py-5 text-right font-mono text-xs">{item.quantity}</td>
-                      <td className="py-5 text-right font-mono text-xs">
+                      <td className="py-5 text-right font-mono text-xs whitespace-nowrap">
+                        {item.quantity}
+                      </td>
+                      <td className="py-5 text-right font-mono text-xs whitespace-nowrap">
                         {formatCurrency(Number(item.amount), currency)}
                       </td>
                     </tr>
@@ -552,7 +554,7 @@ export function InvoiceDetailView({ activities, business, invoice, role }: Invoi
               </div>
               <div>
                 <dt className="text-xs text-muted-foreground">Sent to</dt>
-                <dd className="mt-1">{invoice.client.email}</dd>
+                <dd className="mt-1 break-all">{invoice.client.email}</dd>
               </div>
               {invoice.client.vatNumber ? (
                 <div>

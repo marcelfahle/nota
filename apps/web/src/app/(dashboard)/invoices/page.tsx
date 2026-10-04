@@ -132,8 +132,8 @@ export default async function InvoicesPage({
               aria-current={activeFilter === key ? "page" : undefined}
               className={
                 activeFilter === key
-                  ? "inline-flex min-h-9 shrink-0 items-center gap-1.5 rounded-md border border-foreground bg-foreground px-3 text-sm font-medium text-background"
-                  : "inline-flex min-h-9 shrink-0 items-center gap-1.5 rounded-md border border-transparent px-3 text-sm font-medium hover:bg-card"
+                  ? "inline-flex min-h-11 shrink-0 items-center gap-1.5 rounded-md border border-foreground bg-foreground px-3 text-sm font-medium text-background sm:min-h-9"
+                  : "inline-flex min-h-11 shrink-0 items-center gap-1.5 rounded-md border border-transparent px-3 text-sm font-medium hover:bg-card active:bg-card sm:min-h-9"
               }
               href={filterHref(key, query)}
               key={key}
@@ -152,7 +152,7 @@ export default async function InvoicesPage({
 
         <form
           action="/invoices"
-          className="flex min-h-9 w-full items-center rounded-md border bg-card px-3 sm:w-[300px]"
+          className="flex min-h-11 w-full items-center rounded-md border bg-card px-3 sm:min-h-9 sm:w-[300px]"
         >
           {activeFilter !== "all" ? (
             <input name="status" type="hidden" value={activeFilter} />
