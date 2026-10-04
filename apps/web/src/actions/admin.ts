@@ -6,6 +6,7 @@ import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 
+import { deleteWorkspace } from "@/lib/admin-delete";
 import { isAllowedModel, MODEL_FEATURES } from "@/lib/ai-usage";
 import { requireSuperAdmin } from "@/lib/auth";
 import { auth } from "@/lib/better-auth";
@@ -15,6 +16,7 @@ import {
   aiModelChanges,
   aiModelSettings,
   aiWorkspaceModelOverrides,
+  orgs,
   sessions,
   users,
 } from "@/lib/db/schema";
@@ -131,4 +133,49 @@ export async function setWorkspaceModel(formData: FormData) {
   });
   revalidatePath("/admin");
   revalidatePath(`/admin/workspaces/${orgId}`);
+}
+
+/**
+ * Deletes a workspace for good. The operator must type its exact name; the
+ * check runs here, not only in the browser.
+ */
+export async function deleteWorkspaceAsAdmin(
+  _state: AdminActionState,
+  formData: FormData,
+): Promise<AdminActionState> {
+  const admin = await requireSuperAdmin();
+  const orgId = z.string().uuid().safeParse(formData.get("orgId"));
+  if (!orgId.success) {
+    return { error: "Workspace not found." };
+  }
+  const [workspace] = await db
+    .select({ name: orgs.name })
+    .from(orgs)
+    .where(eq(orgs.id, orgId.data))
+    .limit(1);
+  if (!workspace) {
+    return { error: "Workspace not found." };
+  }
+  if (String(formData.get("confirmation") ?? "").trim() !== workspace.name.trim()) {
+    return { error: "The name does not match." };
+  }
+
+  let result: Awaited<ReturnType<typeof deleteWorkspace>>;
+  try {
+    result = await deleteWorkspace(orgId.data);
+  } catch (error) {
+    // eslint-disable-next-line no-console -- A failed deletion must be visible in server logs.
+    console.error("[admin] workspace deletion failed", error);
+    return { error: "Could not delete this workspace. Nothing was removed." };
+  }
+  if ("error" in result) {
+    return { error: result.error };
+  }
+  // eslint-disable-next-line no-console -- The only record that a workspace was removed, and by whom.
+  console.info(
+    `[admin] ${admin.email} deleted workspace "${workspace.name}" (${orgId.data}):`,
+    JSON.stringify(result.deleted),
+  );
+  revalidatePath("/admin");
+  redirect("/admin");
 }
