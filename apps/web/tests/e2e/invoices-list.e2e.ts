@@ -6,6 +6,7 @@ import {
   activityLog,
   clients,
   invoices,
+  jobs,
   orgMembers,
   payments,
   users,
@@ -40,9 +41,10 @@ test("invoice list supports its richer statuses, filters, search, actions, and p
       invoice(context, "LIST-PAID", "875.00", issuedAt, dueAt, "paid", "api"),
     ])
     .returning({ id: invoices.id, number: invoices.number });
+  const draft = seeded.find(({ number }) => number === "LIST-DRAFT");
   const opened = seeded.find(({ number }) => number === "LIST-OPENED");
   const partPaid = seeded.find(({ number }) => number === "LIST-PART");
-  if (!opened || !partPaid) {
+  if (!draft || !opened || !partPaid) {
     throw new Error("Expected seeded invoices");
   }
 
@@ -111,6 +113,12 @@ test("invoice list supports its richer statuses, filters, search, actions, and p
   await expect(page.getByText("without emailing the client")).toBeVisible();
   await page.getByRole("button", { name: "Mark as sent" }).click();
   await expect(row.getByText("Sent", { exact: true })).toBeVisible();
+  expect(
+    await db
+      .select({ id: jobs.id })
+      .from(jobs)
+      .where(and(eq(jobs.invoiceId, draft.id), eq(jobs.type, "send_invoice_email"))),
+  ).toHaveLength(0);
 
   await page.setViewportSize({ height: 844, width: 390 });
   const paidFilter = statusNav.getByRole("link", { name: "Paid 1" });
