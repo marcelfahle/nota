@@ -243,7 +243,9 @@ test("the read streams in, and an unreachable site returns to the question", asy
   await page.getByTestId("onboarding-read").click();
   await expect(page.getByTestId("onboarding-title")).toHaveText("Nice to meet you, Studio Ruiz.");
   await expect(page.getByTestId("onboarding-status")).toHaveText("From studio.example");
-  await expect(page.getByTestId("onboarding-invoice-pay")).toHaveCSS(
+  // On a phone the invoice sits at the top of the screen, in the site's colour.
+  await expect(page.getByTestId("onboarding-invoice-mobile")).toBeInViewport();
+  await expect(page.getByTestId("onboarding-invoice-mobile-pay")).toHaveCSS(
     "background-color",
     "rgb(196, 38, 26)",
   );

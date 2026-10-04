@@ -13,8 +13,11 @@ export async function login(page: Page, email: string, password: string) {
 }
 
 export async function logout(page: Page) {
-  await page.goto("/settings");
-  await page.getByRole("tab", { name: "Account" }).click();
+  await page.goto("/home");
+  // On a phone the sidebar, and sign out with it, sits behind the menu button.
+  if (!(await page.getByTestId("logout-button").isVisible())) {
+    await page.getByRole("button", { name: "Open navigation" }).click();
+  }
   await page.getByTestId("logout-button").click();
   await expect(page).toHaveURL(/\/login$/);
 }

@@ -1,6 +1,5 @@
 import { asc, desc, eq } from "drizzle-orm";
 
-import { logout } from "@/actions/auth";
 import { listMembers } from "@/actions/members";
 import { ApiKeysSettings } from "@/components/api-keys-settings";
 import { BillingSettings } from "@/components/billing-settings";
@@ -129,11 +128,6 @@ export default async function SettingsPage({
           account: (
             <div className="space-y-8">
               <ThemeSettings theme={user.theme} />
-              <form action={logout}>
-                <Button data-testid="logout-button" type="submit" variant="outline">
-                  Sign out
-                </Button>
-              </form>
             </div>
           ),
           api: canManageApiKeys(role) ? (

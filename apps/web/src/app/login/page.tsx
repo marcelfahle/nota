@@ -5,6 +5,7 @@ import { useSearchParams } from "next/navigation";
 import { Suspense, useState, type FormEvent } from "react";
 
 import { AuthShell } from "@/components/auth-shell";
+import { HighlighterSwipe } from "@/components/nota-marks";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -58,18 +59,24 @@ function LoginForm() {
 
   return (
     <AuthShell
+      lead="Your invoices are right where you left them."
       subtitle={
         <>
           New here?{" "}
           <Link
-            className="font-medium text-zinc-900 underline underline-offset-4"
+            className="font-medium text-foreground underline underline-offset-4"
+            data-testid="login-start"
             href={registerHref}
           >
-            Create an account
+            Start free
           </Link>
         </>
       }
-      title="Sign in"
+      title={
+        <>
+          Welcome <HighlighterSwipe>back.</HighlighterSwipe>
+        </>
+      }
     >
       <form className="space-y-4" data-testid="login-form" onSubmit={onSubmit}>
         <div className="space-y-2">
@@ -77,6 +84,7 @@ function LoginForm() {
           <Input
             autoComplete="email"
             autoFocus
+            className="h-12 bg-card md:text-base"
             data-testid="login-email"
             id="email"
             name="email"
@@ -89,6 +97,7 @@ function LoginForm() {
           <Label htmlFor="password">Password</Label>
           <Input
             autoComplete="current-password"
+            className="h-12 bg-card md:text-base"
             data-testid="login-password"
             id="password"
             name="password"
@@ -97,15 +106,27 @@ function LoginForm() {
           />
         </div>
 
-        {notice && <p className="text-sm text-emerald-600">{notice}</p>}
-        {error && <p className="text-sm text-red-500">{error}</p>}
+        {notice && <p className="text-sm text-foreground">{notice}</p>}
+        {error && (
+          <p className="text-sm text-destructive" role="alert">
+            {error}
+          </p>
+        )}
 
-        <Button className="w-full" data-testid="login-submit" disabled={pending} type="submit">
-          {pending ? "Signing in..." : "Sign in"}
+        <Button
+          className="h-12 w-full text-base font-semibold"
+          data-testid="login-submit"
+          disabled={pending}
+          type="submit"
+        >
+          {pending ? "Signing in…" : "Sign in"}
         </Button>
 
-        <div className="text-center text-sm">
-          <Link className="text-zinc-500 hover:text-zinc-900" href="/forgot-password">
+        <div className="text-sm">
+          <Link
+            className="inline-flex min-h-11 items-center text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
+            href="/forgot-password"
+          >
             Forgot your password?
           </Link>
         </div>

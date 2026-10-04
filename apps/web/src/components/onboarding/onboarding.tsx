@@ -349,7 +349,21 @@ export function Onboarding({ initialProfile }: { initialProfile: SiteProfile | n
               )}
             </h1>
 
-            <div className="mt-8">
+            {/* On a phone the invoice rides along at the top, so every edit below shows on it. */}
+            <div className="sticky top-0 z-[5] -mx-5 mt-5 bg-background/95 px-5 pt-3 pb-5 backdrop-blur sm:-mx-8 sm:px-8 lg:hidden">
+              <HalftoneShadow className="onboarding-invoice mr-2 -rotate-[0.6deg]">
+                <InvoicePreview
+                  brief
+                  compact
+                  details
+                  profile={profile}
+                  reading={reading}
+                  testId="onboarding-invoice-mobile"
+                />
+              </HalftoneShadow>
+            </div>
+
+            <div className="mt-4 lg:mt-8">
               <Meet read={read} />
             </div>
 
@@ -377,13 +391,13 @@ export function Onboarding({ initialProfile }: { initialProfile: SiteProfile | n
             </p>
           </section>
 
-          <section className="min-w-0 lg:sticky lg:top-8 lg:self-start">
+          <section className="hidden min-w-0 lg:sticky lg:top-8 lg:block lg:self-start">
             <HalftoneShadow className="onboarding-invoice">
               <InvoicePreview profile={profile} reading={reading} />
             </HalftoneShadow>
           </section>
 
-          <div className="fixed inset-x-0 bottom-0 z-10 flex items-center gap-4 border-t bg-background/95 px-5 py-3 backdrop-blur lg:hidden">
+          <div className="fixed inset-x-0 bottom-0 z-10 flex items-center gap-4 border-t bg-background/95 px-5 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] backdrop-blur lg:hidden">
             <Button
               className="h-12 flex-1 px-5 text-base font-semibold"
               data-testid="onboarding-keep-mobile"
@@ -417,6 +431,17 @@ export function Onboarding({ initialProfile }: { initialProfile: SiteProfile | n
             <div className="mt-10 hidden max-w-[24rem] lg:block">
               <HalftoneShadow className="onboarding-invoice -rotate-2">
                 <InvoicePreview compact profile={profile} reading={reading} />
+              </HalftoneShadow>
+            </div>
+            <div className="mt-7 mr-2 max-w-[22rem] lg:hidden">
+              <HalftoneShadow className="onboarding-invoice -rotate-1">
+                <InvoicePreview
+                  brief
+                  compact
+                  profile={profile}
+                  reading={reading}
+                  testId="onboarding-invoice-mobile"
+                />
               </HalftoneShadow>
             </div>
           </section>

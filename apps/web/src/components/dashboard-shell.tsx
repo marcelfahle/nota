@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { ChatPanel } from "@/components/chat-panel";
+import { SignOutButton } from "@/components/sign-out-button";
 import {
   StripeDevDock,
   type EmailJobDockItem,
@@ -32,6 +33,7 @@ function writeChatOpen(userId: string, open: boolean) {
 }
 
 export function DashboardShell({
+  account,
   brandName,
   children,
   domain,
@@ -43,6 +45,7 @@ export function DashboardShell({
   usage,
   userId,
 }: {
+  account: { email: string; name: string };
   brandName: string;
   children: React.ReactNode;
   domain: string | null;
@@ -249,6 +252,15 @@ export function DashboardShell({
               <Link className="text-xs underline underline-offset-4" href="/settings">
                 {usage.limit !== null ? "View plans and usage" : "Manage billing"}
               </Link>
+            </div>
+            <div className="flex items-center justify-between gap-2 border-t pt-3 pl-2">
+              <span className="min-w-0">
+                <span className="block truncate text-sm font-medium">{account.name}</span>
+                <span className="block truncate font-mono text-[11px] text-muted-foreground">
+                  {account.email}
+                </span>
+              </span>
+              <SignOutButton />
             </div>
             <div className="flex items-center justify-between px-2">
               <span className="text-xl font-bold tracking-tight">

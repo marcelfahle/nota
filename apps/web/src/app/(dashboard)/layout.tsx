@@ -109,6 +109,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
 
   return (
     <DashboardShell
+      account={{ email: user.email, name: user.name }}
       brandName={org.businessName || org.name || APP_NAME}
       domain={domain}
       emailJobItems={emailJobItems.map((item) => ({

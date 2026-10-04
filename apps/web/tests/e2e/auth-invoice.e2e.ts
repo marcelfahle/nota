@@ -5,8 +5,7 @@ import { acceptInvite, createClient, registerAccount, selectClient, uniqueSuffix
 test("registers, signs out, and signs back in", async ({ page }) => {
   const credentials = await registerAccount(page);
 
-  await page.goto("/settings");
-  await page.getByRole("tab", { name: "Account" }).click();
+  // Sign out lives in the sidebar and lands on a fresh sign-in page.
   await page.getByTestId("logout-button").click();
   await expect(page).toHaveURL(/\/login$/);
 

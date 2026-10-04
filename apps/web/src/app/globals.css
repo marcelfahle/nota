@@ -106,7 +106,8 @@
 @media (prefers-color-scheme: dark) {
   /* Also a wrapper: signed-out onboarding follows the system inside a light root. */
   :root[data-theme="system"],
-  .onboarding[data-theme="system"] {
+  .onboarding[data-theme="system"],
+  .auth-shell[data-theme="system"] {
     color-scheme: dark;
     --paper: #181512;
     --paper-2: #12100d;
@@ -137,6 +138,7 @@
 /* Compatibility for existing page content. Layouts migrate independently of the shell. */
 @layer utilities {
   .app-shell,
+  .auth-shell,
   [data-slot="dialog-content"],
   [data-slot="select-content"],
   [data-slot="dropdown-menu-content"] {
@@ -400,6 +402,31 @@
   }
   .onboarding-confirm:active {
     opacity: 0.76;
+  }
+}
+
+/* The PAID stamp on the sign-in playground: slams down where you click. */
+.auth-stamp {
+  transform: translate(-50%, -50%) rotate(var(--stamp-rotate, -9deg));
+  border: 3px solid var(--color-highlighter);
+  outline: 1px solid var(--color-highlighter);
+  outline-offset: 2px;
+  border-radius: 4px;
+  padding: 0.15em 0.55em;
+  /* Opaque, so the dot field does not show through the letters. */
+  background: #1f1b16;
+  color: var(--color-highlighter);
+  font-size: 1.6rem;
+  font-weight: 900;
+  font-variation-settings: "wdth" 125;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  animation: auth-stamp 380ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+@keyframes auth-stamp {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -50%) rotate(var(--stamp-rotate, -9deg)) scale(2.4);
   }
 }
 

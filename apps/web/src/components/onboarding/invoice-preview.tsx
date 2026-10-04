@@ -33,18 +33,26 @@ function Slot({
  * so far. It mirrors the public invoice page so the preview keeps its promise.
  */
 export function InvoicePreview({
+  brief = false,
   className,
   compact = false,
+  details = !compact,
   icon,
   profile,
   reading,
+  testId = "onboarding-invoice",
 }: {
+  /** Header, total and pay bar only: the phone-sized invoice. */
+  brief?: boolean;
   className?: string;
   compact?: boolean;
+  /** Address and VAT lines under the name. On by default at full size. */
+  details?: boolean;
   /** A favicon loaded in the browser while the address is still being typed. */
   icon?: string | null;
   profile: SiteProfile | null;
   reading: boolean;
+  testId?: string;
 }) {
   const fields = profile?.fields ?? {};
   const name = fields.name?.value;
@@ -64,9 +72,14 @@ export function InvoicePreview({
         compact ? "p-5 text-[11px]" : "p-6 sm:p-9",
         className,
       )}
-      data-testid="onboarding-invoice"
+      data-testid={testId}
     >
-      <header className="flex items-start justify-between gap-4 border-b border-black/10 pb-6">
+      <header
+        className={cn(
+          "flex items-start justify-between gap-4 border-b border-black/10",
+          brief ? "pb-4" : "pb-6",
+        )}
+      >
         <div className="flex min-w-0 items-start gap-3">
           {profile?.logo ? (
             <img
@@ -75,7 +88,7 @@ export function InvoicePreview({
                 "onboarding-pop w-auto shrink-0 rounded-md object-contain object-left",
                 compact ? "h-8 max-w-[5rem]" : "h-11 max-w-[7.5rem]",
               )}
-              data-testid="onboarding-invoice-logo"
+              data-testid={`${testId}-logo`}
               src={profile.logo}
             />
           ) : icon ? (
@@ -105,7 +118,7 @@ export function InvoicePreview({
             <p className="truncate text-sm font-bold text-[#1f1b16]">
               <Slot missing="Your business" value={fields.legalName?.value ?? name} />
             </p>
-            {compact ? null : (
+            {details ? (
               <>
                 <p>
                   <Slot missing="Street and number" value={fields.street?.value} />
@@ -126,7 +139,7 @@ export function InvoicePreview({
                   />
                 </p>
               </>
-            )}
+            ) : null}
           </div>
         </div>
         <div className="shrink-0 text-right">
@@ -142,39 +155,43 @@ export function InvoicePreview({
         </div>
       </header>
 
-      <section className="grid grid-cols-3 gap-4 border-b border-black/10 py-6">
-        <div>
-          <p className="nota-label text-[#6b655c]">Billed to</p>
-          <p className="mt-2 text-sm font-bold">Your first client</p>
-        </div>
-        <div>
-          <p className="nota-label text-[#6b655c]">Issued</p>
-          <p className="mt-2 font-mono text-xs">{formatDate(today)}</p>
-        </div>
-        <div>
-          <p className="nota-label text-[#6b655c]">Due</p>
-          <p className="mt-2 font-mono text-xs">{formatDate(due)}</p>
-        </div>
-      </section>
+      {brief ? null : (
+        <>
+          <section className="grid grid-cols-3 gap-4 border-b border-black/10 py-6">
+            <div>
+              <p className="nota-label text-[#6b655c]">Billed to</p>
+              <p className="mt-2 text-sm font-bold">Your first client</p>
+            </div>
+            <div>
+              <p className="nota-label text-[#6b655c]">Issued</p>
+              <p className="mt-2 font-mono text-xs">{formatDate(today)}</p>
+            </div>
+            <div>
+              <p className="nota-label text-[#6b655c]">Due</p>
+              <p className="mt-2 font-mono text-xs">{formatDate(due)}</p>
+            </div>
+          </section>
 
-      <table className="mt-6 w-full border-collapse text-left text-sm">
-        <thead>
-          <tr className="border-b border-black/10 text-[#6b655c]">
-            <th className="nota-label pb-3 font-medium">Description</th>
-            <th className="nota-label w-12 pb-3 text-right font-medium">Qty</th>
-            <th className="nota-label w-24 pb-3 text-right font-medium">Amount</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr className="border-b border-black/10 align-top">
-            <td className="py-4 pr-3 font-medium">Your first project</td>
-            <td className="py-4 text-right font-mono text-xs">1</td>
-            <td className="py-4 text-right font-mono text-xs font-medium">{amount}</td>
-          </tr>
-        </tbody>
-      </table>
+          <table className="mt-6 w-full border-collapse text-left text-sm">
+            <thead>
+              <tr className="border-b border-black/10 text-[#6b655c]">
+                <th className="nota-label pb-3 font-medium">Description</th>
+                <th className="nota-label w-12 pb-3 text-right font-medium">Qty</th>
+                <th className="nota-label w-24 pb-3 text-right font-medium">Amount</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr className="border-b border-black/10 align-top">
+                <td className="py-4 pr-3 font-medium">Your first project</td>
+                <td className="py-4 text-right font-mono text-xs">1</td>
+                <td className="py-4 text-right font-mono text-xs font-medium">{amount}</td>
+              </tr>
+            </tbody>
+          </table>
+        </>
+      )}
 
-      <div className="mt-6 flex items-end justify-between gap-5">
+      <div className={cn("flex items-end justify-between gap-5", brief ? "mt-4" : "mt-6")}>
         <p className="nota-label pb-1">Total due</p>
         <p
           className={cn("font-mono font-bold tracking-[-0.04em]", compact ? "text-xl" : "text-3xl")}
@@ -184,8 +201,11 @@ export function InvoicePreview({
       </div>
 
       <div
-        className="mt-6 flex min-h-11 items-center justify-between gap-4 px-4 text-sm font-bold transition-colors duration-500"
-        data-testid="onboarding-invoice-pay"
+        className={cn(
+          "flex min-h-11 items-center justify-between gap-4 px-4 text-sm font-bold transition-colors duration-500",
+          brief ? "mt-4" : "mt-6",
+        )}
+        data-testid={`${testId}-pay`}
         style={{ backgroundColor: color ?? "var(--paper-2)", color: color ? textOnColor : INK }}
       >
         <span>Pay {amount}</span>

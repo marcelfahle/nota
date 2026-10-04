@@ -1,31 +1,51 @@
 import Link from "next/link";
 
-import { APP_MONOGRAM, APP_NAME } from "@/lib/app-brand";
+import { AuthPlayground } from "@/components/auth-playground";
+import { NotaGlyph } from "@/components/nota-marks";
 
+/**
+ * Sign in, register and password pages: the form on paper to the left, the
+ * playground on ink to the right. On a phone the form stands alone.
+ */
 export function AuthShell({
   children,
+  lead,
   subtitle,
   title,
 }: {
   children: React.ReactNode;
+  /** One line in the reading voice under the title. */
+  lead?: React.ReactNode;
   subtitle?: React.ReactNode;
-  title: string;
+  title: React.ReactNode;
 }) {
   return (
-    <div className="flex min-h-screen items-center justify-center bg-zinc-50">
-      <div className="w-full max-w-sm space-y-8 px-4">
-        <div className="text-center">
-          <Link className="inline-flex items-center gap-3" href="/login">
-            <div className="flex h-10 w-10 items-center justify-center rounded-md bg-zinc-900">
-              <span className="text-sm font-semibold text-white">{APP_MONOGRAM}</span>
-            </div>
-            <span className="text-xl font-semibold tracking-tight text-zinc-950">{APP_NAME}</span>
+    <div
+      className="auth-shell grid min-h-dvh bg-background text-foreground lg:grid-cols-[minmax(0,5fr)_minmax(0,6fr)]"
+      data-theme="system"
+    >
+      <div className="flex min-h-dvh flex-col px-5 py-5 sm:px-10 lg:min-h-0">
+        <header className="flex items-center justify-between gap-4">
+          <Link aria-label="Nota" className="flex items-center gap-2" href="/login">
+            <NotaGlyph />
+            <span className="text-lg font-bold tracking-tight">Nota.</span>
           </Link>
-          <h1 className="mt-6 text-xl font-semibold tracking-tight text-zinc-950">{title}</h1>
-          {subtitle ? <div className="mt-2 text-sm text-zinc-500">{subtitle}</div> : null}
-        </div>
+          {subtitle ? <div className="text-sm text-muted-foreground">{subtitle}</div> : null}
+        </header>
 
-        <div className="rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm">{children}</div>
+        <main className="mx-auto flex w-full max-w-[24rem] flex-1 flex-col justify-center py-12">
+          <h1 className="onboarding-title">{title}</h1>
+          {lead ? <p className="mt-4 font-voice text-xl text-muted-foreground">{lead}</p> : null}
+          <div className="mt-9">{children}</div>
+        </main>
+
+        <p className="text-xs text-muted-foreground">Minimal invoicing for independent work.</p>
+      </div>
+
+      <div className="hidden lg:block lg:p-3 lg:pl-0">
+        <div className="sticky top-3 h-[calc(100dvh-1.5rem)] overflow-hidden rounded-xl">
+          <AuthPlayground />
+        </div>
       </div>
     </div>
   );
