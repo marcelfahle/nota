@@ -246,10 +246,10 @@ function titleName(title: string, domain: string) {
   // part that resembles the domain is the brand; failing that, the shortest.
   const parts = title
     .split(/\s+[|–—·•:-]\s+/)
-    .map((part) => part.trim())
+    .map((part) => part.replaceAll(/^[\s|–—·•:-]+|[\s|–—·•:-]+$/g, ""))
     .filter(Boolean);
   if (parts.length < 2) {
-    return title.length <= 40 ? title : null;
+    return parts[0] && parts[0].length <= 40 ? parts[0] : null;
   }
   const host = letters(domain.split(".").slice(0, -1).join(""));
   const match = parts.find((part) => {

@@ -63,6 +63,11 @@ test("a site with no structured data yields a name from its title and nothing in
   expect(signals.logos).toEqual(["https://martaruiz.es/favicon.ico"]);
 });
 
+test("a title that ends in a separator still gives a clean name", () => {
+  const signals = extractSignals("<title>posteo.de - </title>", "https://posteo.de/");
+  expect(signals.name?.value).toBe("posteo.de");
+});
+
 test("VAT IDs are taken only next to a VAT label", () => {
   expect(findVatNumber("VAT: NL805734958B01")).toBe("NL805734958B01");
   expect(findVatNumber("NIF/CIF: ES B12345678")).toBe("ESB12345678");

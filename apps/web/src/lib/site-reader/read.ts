@@ -188,7 +188,12 @@ export async function* readSite(
   }
 
   if (signals) {
-    setField("name", site(signals.name?.value, signals.name?.detail ?? "your website", 0.8));
+    // A name cut out of a <title> is a guess the model's reading may improve on.
+    const fromTitle = signals.name?.detail === "your site's title";
+    setField(
+      "name",
+      site(signals.name?.value, signals.name?.detail ?? "your website", fromTitle ? 0.55 : 0.8),
+    );
     setField("email", site(signals.email, "your website", 0.7));
     setField("legalName", site(signals.legalName, "your site's structured data", 0.85));
     setField("vatNumber", site(signals.vatNumber, "your website", 0.85));
