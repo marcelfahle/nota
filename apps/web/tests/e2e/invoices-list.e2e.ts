@@ -106,7 +106,11 @@ test("invoice list supports its richer statuses, filters, search, actions, and p
   await row.getByRole("link", { name: "Download LIST-DRAFT PDF" }).click({ trial: true });
   await row.getByRole("button", { name: "More actions for LIST-DRAFT" }).click();
   await expect(page.getByRole("menuitem", { name: "Duplicate as draft" })).toBeVisible();
-  await page.keyboard.press("Escape");
+  await page.getByRole("menuitem", { name: "Mark as sent" }).click();
+  await expect(page.getByRole("heading", { name: "Mark this invoice as sent?" })).toBeVisible();
+  await expect(page.getByText("without emailing the client")).toBeVisible();
+  await page.getByRole("button", { name: "Mark as sent" }).click();
+  await expect(row.getByText("Sent", { exact: true })).toBeVisible();
 
   await page.setViewportSize({ height: 844, width: 390 });
   const paidFilter = statusNav.getByRole("link", { name: "Paid 1" });

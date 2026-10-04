@@ -14,7 +14,13 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
-import { duplicateInvoice, markInvoicePaid, sendInvoice, sendReminder } from "@/actions/invoices";
+import {
+  duplicateInvoice,
+  markInvoicePaid,
+  markInvoiceSent,
+  sendInvoice,
+  sendReminder,
+} from "@/actions/invoices";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -44,7 +50,7 @@ import {
   canSendInvoiceReminder as canSendInvoiceReminderRole,
 } from "@/lib/roles";
 
-type ConfirmAction = "mark-paid" | "remind" | "send";
+type ConfirmAction = "mark-paid" | "mark-sent" | "remind" | "send";
 
 type InvoiceRowActionsProps = {
   invoice: {
@@ -69,6 +75,12 @@ const CONFIRM_COPY: Record<
     description: (invoiceNumber) =>
       `This records ${invoiceNumber} as paid and removes it from outstanding balances.`,
     title: "Record payment?",
+  },
+  "mark-sent": {
+    confirmLabel: "Mark as sent",
+    description: (invoiceNumber) =>
+      `This records ${invoiceNumber} as sent without emailing the client. You can record its payment later.`,
+    title: "Mark this invoice as sent?",
   },
   remind: {
     confirmLabel: "Send reminder",
@@ -104,6 +116,9 @@ function getPrimaryAction(
 function runInvoiceAction(action: ConfirmAction, invoiceId: string) {
   if (action === "send") {
     return sendInvoice(invoiceId);
+  }
+  if (action === "mark-sent") {
+    return markInvoiceSent(invoiceId);
   }
   if (action === "remind") {
     return sendReminder(invoiceId);
@@ -249,6 +264,12 @@ export function InvoiceRowActions({ invoice, role }: InvoiceRowActionsProps) {
                 <DropdownMenuItem onSelect={() => setConfirmAction("remind")}>
                   <Mail />
                   Send reminder
+                </DropdownMenuItem>
+              )}
+              {canSend && (
+                <DropdownMenuItem onSelect={() => setConfirmAction("mark-sent")}>
+                  <CheckCircle2 />
+                  Mark as sent
                 </DropdownMenuItem>
               )}
               {canMarkPaid && primaryAction !== "mark-paid" && (
