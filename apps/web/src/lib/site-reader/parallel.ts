@@ -1,4 +1,3 @@
-/* eslint-disable no-console */
 // Parallel (parallel.ai) fetches and searches on our behalf, so page text for
 // the model never passes through our own network.
 
@@ -16,6 +15,7 @@ async function call<T>(
   path: string,
   body: unknown,
   feature: Extract<UsageFeature, "parallel-extract" | "parallel-search">,
+  units: number,
   timeoutMs: number,
   signal?: AbortSignal,
 ) {
@@ -36,11 +36,9 @@ async function call<T>(
       return null;
     }
     const payload = (await response.json()) as T;
-    try {
-      await recordAiUsage({ feature, modelId: `parallel/${path.slice(1)}` });
-    } catch (error) {
-      console.error("[reader] failed to record Parallel usage", error);
-    }
+    // Parallel has no tokens; the input column carries the billable units
+    // (URLs for an extract, one for a search).
+    await recordAiUsage({ feature, modelId: `parallel/${path.slice(1)}` }, { inputTokens: units });
     return payload;
   } catch {
     return null;
@@ -73,6 +71,7 @@ export async function extractPages(
       urls,
     },
     "parallel-extract",
+    urls.length,
     options.timeoutMs ?? 12_000,
     options.signal,
   );
@@ -99,6 +98,7 @@ export async function searchWeb(
       search_queries: [query],
     },
     "parallel-search",
+    1,
     options.timeoutMs ?? 6000,
     options.signal,
   );

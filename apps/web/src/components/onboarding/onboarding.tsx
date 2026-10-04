@@ -212,7 +212,7 @@ export function Onboarding({ initialProfile }: { initialProfile: SiteProfile | n
 
   return (
     <div
-      className="onboarding min-h-dvh bg-background text-foreground"
+      className="onboarding min-h-dvh bg-background pt-[env(safe-area-inset-top)] text-foreground"
       data-step={step}
       data-testid="onboarding"
       data-theme="system"

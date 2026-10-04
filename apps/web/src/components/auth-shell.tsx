@@ -20,10 +20,10 @@ export function AuthShell({
 }) {
   return (
     <div
-      className="auth-shell grid min-h-dvh bg-background text-foreground lg:grid-cols-[minmax(0,5fr)_minmax(0,6fr)]"
+      className="auth-shell grid min-h-dvh bg-background pt-[env(safe-area-inset-top)] text-foreground lg:grid-cols-[minmax(0,5fr)_minmax(0,6fr)]"
       data-theme="system"
     >
-      <div className="flex min-h-dvh flex-col px-5 py-5 sm:px-10 lg:min-h-0">
+      <div className="flex min-h-[calc(100dvh-env(safe-area-inset-top))] flex-col px-5 py-5 sm:px-10 lg:min-h-0">
         <header className="flex items-center justify-between gap-4">
           <a aria-label="Nota home" className="flex items-center gap-2" href={HOME_URL}>
             <NotaGlyph />

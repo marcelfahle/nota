@@ -71,8 +71,24 @@ export function isAllowedModel(value: string): value is AllowedModel {
   return Object.hasOwn(MODEL_PRICES, value);
 }
 
-export async function resolveModel(feature: ModelFeature, orgId?: string | null) {
+function fallbackModel(feature: ModelFeature) {
   const config = FEATURE_CONFIG[feature];
+  const environment = process.env[config.env];
+  return environment && isAllowedModel(environment) ? environment : config.fallback;
+}
+
+export async function resolveModel(feature: ModelFeature, orgId?: string | null) {
+  try {
+    return await configuredModel(feature, orgId);
+  } catch (error) {
+    // Model settings are an operator convenience. If they cannot be read
+    // (database blip, migration not applied yet) the feature still runs.
+    console.error("[ai-usage] could not read model settings, using the fallback", error);
+    return fallbackModel(feature);
+  }
+}
+
+async function configuredModel(feature: ModelFeature, orgId?: string | null) {
   const [workspaceOverride, globalSetting] = await Promise.all([
     orgId
       ? db
@@ -93,11 +109,7 @@ export async function resolveModel(feature: ModelFeature, orgId?: string | null)
       .limit(1),
   ]);
   const configured = workspaceOverride[0]?.modelId ?? globalSetting[0]?.modelId;
-  if (configured && isAllowedModel(configured)) {
-    return configured;
-  }
-  const environment = process.env[config.env];
-  return environment && isAllowedModel(environment) ? environment : config.fallback;
+  return configured && isAllowedModel(configured) ? configured : fallbackModel(feature);
 }
 
 export async function recordAiUsage(context: UsageContext, usage: ModelUsage = {}) {
@@ -116,8 +128,8 @@ export async function recordAiUsage(context: UsageContext, usage: ModelUsage = {
     try {
       await db.insert(aiUsage).values(values).onConflictDoNothing({ target: aiUsage.id });
     } catch (error) {
+      // Counting is bookkeeping: losing a row must not break chat or a website read.
       console.error("[ai-usage] failed to record model usage after retry", error);
-      throw error;
     }
   }
 }
@@ -143,8 +155,13 @@ export function estimatedCost(input: {
   outputTokens: number;
   requests?: number;
 }) {
-  if (input.feature === "parallel-extract" || input.feature === "parallel-search") {
-    return 0.001 * (input.requests ?? 1);
+  // Parallel's list prices as read on 2026-10-04: about $0.001 per extracted
+  // URL and $0.005 per search. Their rows carry the unit count as input tokens.
+  if (input.feature === "parallel-extract") {
+    return 0.001 * input.inputTokens;
+  }
+  if (input.feature === "parallel-search") {
+    return 0.005 * input.inputTokens;
   }
   const price = MODEL_PRICES[input.modelId as AllowedModel];
   return price

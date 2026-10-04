@@ -14,16 +14,10 @@ describe("AI usage pricing", () => {
     ).toBe(9);
   });
 
-  test("prices each successful Parallel request", () => {
-    expect(
-      estimatedCost({
-        feature: "parallel-search",
-        inputTokens: 0,
-        modelId: "parallel/search",
-        outputTokens: 0,
-        requests: 3,
-      }),
-    ).toBe(0.003);
+  test("prices Parallel by what it bills: URLs extracted and searches run", () => {
+    const parallel = { modelId: "parallel/extract", outputTokens: 0 };
+    expect(estimatedCost({ ...parallel, feature: "parallel-extract", inputTokens: 4 })).toBe(0.004);
+    expect(estimatedCost({ ...parallel, feature: "parallel-search", inputTokens: 3 })).toBe(0.015);
   });
 
   test("rejects models outside the operator allowlist", () => {
