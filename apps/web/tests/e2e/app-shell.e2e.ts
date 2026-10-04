@@ -39,6 +39,7 @@ test("shell navigation, account themes, paper invoice and chat dock", async ({ b
   await expect(page.getByRole("button", { name: /Ask Nota/ })).toBeFocused();
 
   await page.goto("/settings");
+  await page.getByRole("tab", { name: "Account" }).click();
   await page.getByLabel("Theme", { exact: true }).selectOption("dark");
   await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
   await expect(page.locator("body")).toHaveCSS("background-color", "rgb(24, 21, 18)");
@@ -75,6 +76,7 @@ test("shell navigation, account themes, paper invoice and chat dock", async ({ b
   await page.getByRole("button", { name: "Close chat" }).click();
 
   await page.goto("/settings");
+  await page.getByRole("tab", { name: "Account" }).click();
   await page.getByLabel("Theme", { exact: true }).selectOption("system");
   await expect(page.locator("html")).toHaveAttribute("data-theme", "system");
   await page.emulateMedia({ colorScheme: "dark" });

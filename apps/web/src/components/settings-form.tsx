@@ -1,7 +1,7 @@
 "use client";
 
 import { Pencil, Plus, Star, Trash2 } from "lucide-react";
-import { useActionState, useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
+import { useActionState, useMemo, useState } from "react";
 
 import { createBankAccount, deleteBankAccount, updateBankAccount } from "@/actions/bank-accounts";
 import { updateSettings } from "@/actions/settings";
@@ -41,133 +41,18 @@ type BankAccount = {
 };
 
 type SettingsData = {
-  businessAddress: string | null;
-  businessName: string | null;
   defaultCurrency: string | null;
   invoiceDigits: number;
   invoicePrefix: string | null;
   invoiceSeparator: string;
-  logoUrl: string | null;
   nextInvoiceNumber: number | null;
-  vatNumber: string | null;
 };
 
-function LogoUploadField({
-  canManageSettings,
-  currentLogoUrl,
-}: {
-  canManageSettings: boolean;
-  currentLogoUrl: string | null;
-}) {
-  const fileInputRef = useRef<HTMLInputElement | null>(null);
-  const objectUrlRef = useRef<string | null>(null);
-  const [selectedPreviewUrl, setSelectedPreviewUrl] = useState<string | null>(null);
-  const [removeLogo, setRemoveLogo] = useState(false);
-
-  useEffect(() => {
-    return () => {
-      if (objectUrlRef.current) {
-        URL.revokeObjectURL(objectUrlRef.current);
-      }
-    };
-  }, []);
-
-  function updateSelectedPreview(nextPreviewUrl: string | null) {
-    if (objectUrlRef.current) {
-      URL.revokeObjectURL(objectUrlRef.current);
-      objectUrlRef.current = null;
-    }
-
-    setSelectedPreviewUrl(nextPreviewUrl);
-  }
-
-  function handleFileChange(event: ChangeEvent<HTMLInputElement>) {
-    const file = event.target.files?.[0] ?? null;
-    setRemoveLogo(false);
-
-    if (!file) {
-      updateSelectedPreview(null);
-      return;
-    }
-
-    const objectUrl = URL.createObjectURL(file);
-    updateSelectedPreview(objectUrl);
-    objectUrlRef.current = objectUrl;
-  }
-
-  function handleRemoveLogo() {
-    if (fileInputRef.current) {
-      fileInputRef.current.value = "";
-    }
-
-    setRemoveLogo(true);
-    updateSelectedPreview(null);
-  }
-
-  const previewUrl = removeLogo ? null : (selectedPreviewUrl ?? currentLogoUrl);
-  const hasPreview = Boolean(previewUrl);
-  const removeButtonLabel =
-    currentLogoUrl && !removeLogo && !selectedPreviewUrl
-      ? "Remove current logo"
-      : "Clear selection";
-
-  return (
-    <div className="space-y-3">
-      <div className="flex flex-col gap-4 sm:flex-row">
-        <div className="flex h-20 w-20 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-zinc-200 bg-zinc-50">
-          {previewUrl ? (
-            <img
-              alt="Organization logo preview"
-              className="h-full w-full object-contain"
-              src={previewUrl}
-            />
-          ) : (
-            <span className="px-3 text-center text-[11px] font-medium tracking-[0.2em] text-zinc-400 uppercase">
-              No logo
-            </span>
-          )}
-        </div>
-
-        <div className="min-w-0 flex-1 space-y-2">
-          <Label htmlFor="logoFile">Logo</Label>
-          <Input
-            accept="image/png,image/jpeg,image/webp"
-            data-testid="settings-logo-file"
-            disabled={!canManageSettings}
-            id="logoFile"
-            name="logoFile"
-            onChange={handleFileChange}
-            ref={fileInputRef}
-            type="file"
-          />
-          <input name="removeLogo" type="hidden" value={removeLogo ? "true" : "false"} />
-          <p className="text-xs text-zinc-500">
-            PNG, JPG, or WebP up to 2 MB. Used in the app header and invoice PDFs.
-          </p>
-          {removeLogo ? (
-            <p className="text-xs text-amber-700">Logo will be removed when you save.</p>
-          ) : null}
-          {hasPreview && canManageSettings ? (
-            <Button onClick={handleRemoveLogo} size="sm" type="button" variant="outline">
-              <Trash2 className="size-4" />
-              {removeButtonLabel}
-            </Button>
-          ) : null}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-export function SettingsForm({
-  bankAccounts,
-  canManageBankAccounts,
+export function NumberingSettings({
   canManageSettings,
   lastIssuedNumber,
   settings,
 }: {
-  bankAccounts: Array<BankAccount>;
-  canManageBankAccounts: boolean;
   canManageSettings: boolean;
   lastIssuedNumber: string | null;
   settings: SettingsData;
@@ -196,164 +81,125 @@ export function SettingsForm({
   }, [prefix, effectiveSeparator, digits, nextNumber]);
 
   return (
-    <div className="space-y-10">
-      <form action={formAction} className="space-y-6" encType="multipart/form-data">
-        {readOnlySettings && (
-          <div className="rounded-lg border border-zinc-200 bg-zinc-50 px-4 py-3 text-sm text-zinc-600">
-            Only organization owners can update these settings.
-          </div>
-        )}
-        <fieldset className="space-y-6" disabled={readOnlySettings}>
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div className="space-y-2">
-              <Label htmlFor="businessName">Business Name</Label>
-              <Input
-                defaultValue={settings.businessName ?? ""}
-                id="businessName"
-                name="businessName"
-                placeholder="Your Business Name"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="vatNumber">VAT Number</Label>
-              <Input
-                defaultValue={settings.vatNumber ?? ""}
-                id="vatNumber"
-                name="vatNumber"
-                placeholder="e.g. DE123456789"
-              />
-            </div>
-          </div>
+    <form action={formAction} className="space-y-6">
+      <div>
+        <h2 className="text-lg font-semibold">Invoice numbering and tax</h2>
+        <p className="mt-1 text-sm text-muted-foreground">
+          Choose the currency and sequence used for new invoices.
+        </p>
+      </div>
+      {readOnlySettings && (
+        <div className="rounded-lg border border-zinc-200 bg-zinc-50 px-4 py-3 text-sm text-zinc-600">
+          Only organization owners can update these settings.
+        </div>
+      )}
+      <fieldset className="space-y-6" disabled={readOnlySettings}>
+        <div className="space-y-2">
+          <Label>Default Currency</Label>
+          <Select
+            defaultValue={settings.defaultCurrency ?? "EUR"}
+            disabled={readOnlySettings}
+            name="defaultCurrency"
+          >
+            <SelectTrigger className="w-full sm:w-48">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="EUR">EUR (€)</SelectItem>
+              <SelectItem value="USD">USD ($)</SelectItem>
+              <SelectItem value="GBP">GBP (£)</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
 
-          <LogoUploadField
-            canManageSettings={canManageSettings}
-            currentLogoUrl={settings.logoUrl}
-            key={settings.logoUrl ?? "no-logo"}
+        <div className="space-y-2">
+          <Label htmlFor="invoicePrefix">Invoice Prefix</Label>
+          <Input
+            disabled={readOnlySettings}
+            id="invoicePrefix"
+            name="invoicePrefix"
+            onChange={(event) => setPrefix(event.target.value.toUpperCase())}
+            value={prefix}
           />
+        </div>
 
+        <div className="grid gap-4 sm:grid-cols-3">
           <div className="space-y-2">
-            <Label htmlFor="businessAddress">Business Address</Label>
-            <textarea
-              className="w-full min-w-0 rounded-md border border-input bg-transparent px-3 py-2 text-base shadow-xs transition-[color,box-shadow] outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50 md:text-sm"
-              defaultValue={settings.businessAddress ?? ""}
-              id="businessAddress"
-              name="businessAddress"
-              placeholder={"123 Business Street\nCity, Country"}
-              rows={3}
-            />
-          </div>
-
-          <div className="space-y-2">
-            <Label>Default Currency</Label>
+            <Label htmlFor="invoiceSeparator">Separator</Label>
             <Select
-              defaultValue={settings.defaultCurrency ?? "EUR"}
               disabled={readOnlySettings}
-              name="defaultCurrency"
+              name="invoiceSeparator"
+              onValueChange={(value) => setSeparator(value)}
+              value={separator}
             >
-              <SelectTrigger className="w-full sm:w-48">
+              <SelectTrigger>
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="EUR">EUR (€)</SelectItem>
-                <SelectItem value="USD">USD ($)</SelectItem>
-                <SelectItem value="GBP">GBP (£)</SelectItem>
+                <SelectItem value="-">Dash (-)</SelectItem>
+                <SelectItem value="/">Slash (/)</SelectItem>
+                <SelectItem value=".">Dot (.)</SelectItem>
+                <SelectItem value="none">None</SelectItem>
               </SelectContent>
             </Select>
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="invoicePrefix">Invoice Prefix</Label>
+            <Label htmlFor="invoiceDigits">Number of Digits</Label>
             <Input
               disabled={readOnlySettings}
-              id="invoicePrefix"
-              name="invoicePrefix"
-              onChange={(event) => setPrefix(event.target.value.toUpperCase())}
-              value={prefix}
+              id="invoiceDigits"
+              max={10}
+              min={3}
+              name="invoiceDigits"
+              onChange={(event) => setDigits(event.target.value)}
+              type="number"
+              value={digits}
             />
           </div>
 
-          <div className="grid gap-4 sm:grid-cols-3">
-            <div className="space-y-2">
-              <Label htmlFor="invoiceSeparator">Separator</Label>
-              <Select
-                disabled={readOnlySettings}
-                name="invoiceSeparator"
-                onValueChange={(value) => setSeparator(value)}
-                value={separator}
+          <div className="space-y-2">
+            <Label htmlFor="nextInvoiceNumber">Next Invoice Number</Label>
+            <Input
+              disabled={readOnlySettings}
+              id="nextInvoiceNumber"
+              min={1}
+              name="nextInvoiceNumber"
+              onChange={(event) => setNextNumber(event.target.value)}
+              type="number"
+              value={nextNumber}
+            />
+          </div>
+        </div>
+
+        <div className="rounded-xl border border-zinc-200 bg-zinc-50 p-4">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <p className="text-sm font-medium text-zinc-900">Invoice number preview</p>
+              <p className="text-xs text-zinc-500">Last issued: {lastIssuedNumber ?? "None yet"}</p>
+            </div>
+          </div>
+          <div className="mt-3 flex flex-wrap gap-2">
+            {preview.map((value) => (
+              <span
+                className="rounded-full border border-zinc-200 bg-white px-3 py-1 text-xs font-medium text-zinc-700"
+                key={value}
               >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="-">Dash (-)</SelectItem>
-                  <SelectItem value="/">Slash (/)</SelectItem>
-                  <SelectItem value=".">Dot (.)</SelectItem>
-                  <SelectItem value="none">None</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="invoiceDigits">Number of Digits</Label>
-              <Input
-                disabled={readOnlySettings}
-                id="invoiceDigits"
-                max={10}
-                min={3}
-                name="invoiceDigits"
-                onChange={(event) => setDigits(event.target.value)}
-                type="number"
-                value={digits}
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="nextInvoiceNumber">Next Invoice Number</Label>
-              <Input
-                disabled={readOnlySettings}
-                id="nextInvoiceNumber"
-                min={1}
-                name="nextInvoiceNumber"
-                onChange={(event) => setNextNumber(event.target.value)}
-                type="number"
-                value={nextNumber}
-              />
-            </div>
+                {value}
+              </span>
+            ))}
           </div>
+        </div>
 
-          <div className="rounded-xl border border-zinc-200 bg-zinc-50 p-4">
-            <div className="flex items-center justify-between gap-3">
-              <div>
-                <p className="text-sm font-medium text-zinc-900">Invoice number preview</p>
-                <p className="text-xs text-zinc-500">
-                  Last issued: {lastIssuedNumber ?? "None yet"}
-                </p>
-              </div>
-            </div>
-            <div className="mt-3 flex flex-wrap gap-2">
-              {preview.map((value) => (
-                <span
-                  className="rounded-full border border-zinc-200 bg-white px-3 py-1 text-xs font-medium text-zinc-700"
-                  key={value}
-                >
-                  {value}
-                </span>
-              ))}
-            </div>
-          </div>
-
-          <div className="flex items-center gap-3">
-            <Button disabled={pending || readOnlySettings} type="submit">
-              Save Settings
-            </Button>
-            {state?.error ? <p className="text-sm text-red-600">{state.error}</p> : null}
-            {state?.success ? <p className="text-sm text-green-600">Settings updated.</p> : null}
-          </div>
-        </fieldset>
-      </form>
-
-      <BankAccountsSection accounts={bankAccounts} canManageBankAccounts={canManageBankAccounts} />
-    </div>
+        <div className="flex items-center gap-3">
+          <Button disabled={pending || readOnlySettings} type="submit">
+            Save Settings
+          </Button>
+          {state?.error ? <p className="text-sm text-red-600">{state.error}</p> : null}
+          {state?.success ? <p className="text-sm text-green-600">Settings updated.</p> : null}
+        </div>
+      </fieldset>
+    </form>
   );
 }
 
@@ -512,7 +358,7 @@ function BankAccountFormFields({
   );
 }
 
-function BankAccountsSection({
+export function BankAccountsSettings({
   accounts,
   canManageBankAccounts,
 }: {

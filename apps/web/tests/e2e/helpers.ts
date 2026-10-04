@@ -14,6 +14,7 @@ export async function login(page: Page, email: string, password: string) {
 
 export async function logout(page: Page) {
   await page.goto("/settings");
+  await page.getByRole("tab", { name: "Account" }).click();
   await page.getByTestId("logout-button").click();
   await expect(page).toHaveURL(/\/login$/);
 }
@@ -87,6 +88,7 @@ export async function createDraftInvoice(
 
 export async function createInvite(page: Page, email: string, role: "Admin" | "Member" | "Owner") {
   await page.goto("/settings");
+  await page.getByRole("tab", { name: "Team" }).click();
   await page.getByTestId("team-invite-email").fill(email);
   await page.getByTestId("team-invite-role").click();
   await page.getByRole("option", { name: role }).click();
