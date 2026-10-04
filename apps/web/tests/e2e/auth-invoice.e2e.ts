@@ -27,7 +27,7 @@ test("updates organization settings and reflects branding", async ({ page }) => 
   await page.getByRole("button", { name: "Save Settings" }).click();
 
   await expect(page.getByText("Settings updated.")).toBeVisible();
-  await expect(page.locator("header").getByText(businessName)).toBeVisible();
+  await expect(page.getByRole("complementary").getByText(businessName)).toBeVisible();
 });
 
 test("creates and deletes an API key from settings", async ({ page }) => {

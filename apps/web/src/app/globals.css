@@ -149,6 +149,16 @@
     .text-zinc-950 {
       color: var(--ink);
     }
+    .text-red-500,
+    .text-red-600,
+    .text-red-700,
+    .hover\:text-red-700:hover {
+      color: var(--red-pen);
+    }
+    .bg-red-50,
+    .hover\:bg-red-50:hover {
+      background-color: color-mix(in srgb, var(--red-pen) 8%, var(--sheet));
+    }
     .bg-white {
       background-color: var(--sheet);
     }
@@ -227,9 +237,17 @@
     content: "";
     position: absolute;
     inset: 0;
-    z-index: -1;
+    z-index: -2;
     transform: translate(9px, 9px);
     background: radial-gradient(var(--ink) 0.9px, transparent 1.3px) 0 0 / 4px 4px;
+  }
+  .halftone-shadow::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    border-radius: inherit;
+    background: var(--sheet);
   }
 }
 

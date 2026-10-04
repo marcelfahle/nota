@@ -45,6 +45,19 @@ test("shell navigation, account themes, paper invoice and chat dock", async ({ b
   await expect(page.locator(".invoice-paper")).toHaveCSS("background-color", "rgb(255, 254, 251)");
   await expect(page.locator(".invoice-paper")).toHaveCSS("color", "rgb(31, 27, 22)");
 
+  await page.setViewportSize({ height: 1000, width: 1440 });
+  await page.goto("/invoices");
+  await page.getByTestId("chat-panel-toggle").click();
+  const row = page.getByTestId("invoice-list-row").first();
+  // Actionability checks catch controls covered by the right-hand conversation panel.
+  await row
+    .getByRole("link", { name: `Download ${invoice.invoiceNumber} PDF` })
+    .click({ trial: true });
+  await row
+    .getByRole("button", { name: `More actions for ${invoice.invoiceNumber}` })
+    .click({ trial: true });
+  await page.getByRole("button", { name: "Close chat" }).click();
+
   await page.goto("/settings");
   await page.getByLabel("Theme", { exact: true }).selectOption("system");
   await expect(page.locator("html")).toHaveAttribute("data-theme", "system");
@@ -65,6 +78,17 @@ test("shell navigation, account themes, paper invoice and chat dock", async ({ b
   await expect(page).toHaveURL(/\/clients$/);
   await expect(nav).toBeHidden();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+
+  await page.getByTestId("chat-panel-toggle").click();
+  const chat = page.getByRole("dialog", { name: "Nota Chat" });
+  await expect(chat).toBeVisible();
+  for (let index = 0; index < 12; index++) {
+    await page.keyboard.press("Tab");
+    expect(await chat.evaluate((element) => element.contains(document.activeElement))).toBe(true);
+  }
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("button", { name: "Close chat" })).toBeHidden();
+  await expect(page.getByRole("textbox", { name: "Ask Nota" })).toBeFocused();
 
   await logout(page);
   await registerAccount(page, "Another Studio");

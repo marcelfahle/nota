@@ -453,12 +453,37 @@ export function ChatPanel({
   const [importBusy, setImportBusy] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
   const closeButton = useRef<HTMLButtonElement>(null);
+  const resumeImport = useRef<HTMLButtonElement>(null);
+  const wasOpen = useRef(false);
+  const dialog = useRef<HTMLDialogElement>(null);
   const refreshedMessages = useRef<Set<string>>(new Set());
 
   useEffect(() => {
+    const panel = dialog.current;
+    if (!panel) {
+      return;
+    }
+    const desktop = window.matchMedia("(min-width: 1280px)");
+    // Keep the composer mounted so minimising chat cannot reset an in-flight import.
+    // Native modality contains focus and makes the covered page inert on small screens.
+    const syncModality = () => {
+      if (open && !desktop.matches && !panel.matches(":modal")) {
+        panel.close();
+        panel.showModal();
+      } else if ((!open || desktop.matches) && panel.matches(":modal")) {
+        panel.close();
+        panel.show();
+      }
+    };
+    syncModality();
     if (open) {
       (inputRef.current ?? closeButton.current)?.focus();
+    } else if (wasOpen.current) {
+      (inputRef.current ?? resumeImport.current)?.focus();
     }
+    wasOpen.current = open;
+    desktop.addEventListener("change", syncModality);
+    return () => desktop.removeEventListener("change", syncModality);
   }, [inputRef, open]);
 
   const { clearError, error, messages, sendMessage, setMessages, status } = useChat({
@@ -541,14 +566,18 @@ export function ChatPanel({
 
   return (
     <>
-      <section
+      <dialog
         aria-label="Nota Chat"
         className={cn(
-          "fixed z-30 flex flex-col overflow-hidden border bg-card",
+          "fixed z-30 m-0 flex max-h-none max-w-none flex-col overflow-hidden border bg-card p-0 text-foreground backdrop:bg-background/70",
           open
-            ? "inset-y-0 right-0 w-full sm:w-[400px]"
-            : "inset-x-3 bottom-3 rounded-lg md:right-6 md:left-[272px]",
+            ? "inset-y-0 right-0 left-auto h-dvh w-full sm:w-[400px]"
+            : "inset-x-3 top-auto bottom-3 h-auto w-auto rounded-lg md:right-6 md:left-[272px]",
         )}
+        onCancel={(event) => {
+          event.preventDefault();
+          onOpenChange(false);
+        }}
         onDragOver={(event) => event.preventDefault()}
         onDrop={(event) => {
           event.preventDefault();
@@ -559,10 +588,12 @@ export function ChatPanel({
         }}
         onKeyDown={(event) => {
           if (event.key === "Escape" && open) {
+            event.preventDefault();
             onOpenChange(false);
-            inputRef.current?.focus();
           }
         }}
+        open
+        ref={dialog}
       >
         <div className={cn("border-b px-5 py-4", !open && "hidden")}>
           <div className="flex items-start justify-between gap-4">
@@ -581,7 +612,6 @@ export function ChatPanel({
               aria-label="Close chat"
               onClick={() => {
                 onOpenChange(false);
-                inputRef.current?.focus();
               }}
               ref={closeButton}
               size="icon-sm"
@@ -672,6 +702,7 @@ export function ChatPanel({
           <button
             className="p-4 text-left text-sm"
             onClick={() => onOpenChange(true)}
+            ref={resumeImport}
             type="button"
           >
             Continue importing {csvFile.name}
@@ -749,7 +780,7 @@ export function ChatPanel({
             </div>
           </form>
         ) : null}
-      </section>
+      </dialog>
     </>
   );
 }

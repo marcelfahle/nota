@@ -16,11 +16,12 @@ export function ThemeSettings({ theme }: { theme: "system" | "light" | "dark" })
       <p className="text-sm text-muted-foreground">
         Paper by day, Terminal by night. Saved to your account.
       </p>
-      <label className="flex items-center gap-4 text-sm">
-        Theme
+      <div className="flex items-center gap-4 text-sm">
+        <label htmlFor="theme-preference">Theme</label>
         <select
           className="rounded-md border border-input bg-card px-3 py-2"
           disabled={pending}
+          id="theme-preference"
           onChange={(event) => {
             const value = event.target.value;
             setError("");
@@ -38,7 +39,7 @@ export function ThemeSettings({ theme }: { theme: "system" | "light" | "dark" })
           <option value="light">Light</option>
           <option value="dark">Dark</option>
         </select>
-      </label>
+      </div>
       {error ? (
         <p className="text-sm text-destructive" role="alert">
           {error}
