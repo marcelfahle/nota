@@ -31,6 +31,12 @@ import {
 } from "@/lib/db/schema";
 import { getResend } from "@/lib/email";
 import { getBetterAuthEnv, getEmailEnv } from "@/lib/env";
+import {
+  cookieValueFromHeader,
+  finishOnboarding,
+  getOnboardingSession,
+  orgValuesFromProfile,
+} from "@/lib/onboarding-session";
 import { hashPassword, verifyPassword } from "@/lib/password";
 
 const env = getBetterAuthEnv();
@@ -57,11 +63,26 @@ async function findInviteFor(email: string, token: string) {
   return invite && invite.email === email.toLowerCase() ? invite : null;
 }
 
+/** The onboarding cookie from the sign-up request, if the visitor read their site first. */
+function onboardingCookieFrom(context: unknown) {
+  const candidate = context as {
+    headers?: Headers;
+    request?: { headers?: Headers };
+  } | null;
+  const headers = candidate?.headers ?? candidate?.request?.headers;
+  return cookieValueFromHeader(headers?.get?.("cookie"));
+}
+
 async function joinOrCreateWorkspace(
   user: { email: string; id: string; name: string },
   inviteToken?: string,
+  onboardingCookie?: string | null,
 ) {
   const invite = inviteToken ? await findInviteFor(user.email, inviteToken) : null;
+  // The website read is saved to an account here and nowhere else.
+  const onboarding = invite ? null : await getOnboardingSession(onboardingCookie);
+  const profile = onboarding?.profile ?? null;
+  let orgId: string | null = null;
 
   await db.transaction(async (tx) => {
     if (invite) {
@@ -74,10 +95,22 @@ async function joinOrCreateWorkspace(
 
     const [org] = await tx
       .insert(orgs)
-      .values({ name: `${user.name}'s Workspace` })
+      .values({
+        ...(profile ? orgValuesFromProfile(profile) : {}),
+        name: profile?.fields.name?.value ?? `${user.name}'s Workspace`,
+      })
       .returning({ id: orgs.id });
     await tx.insert(orgMembers).values({ orgId: org.id, role: "owner", userId: user.id });
+    orgId = org.id;
   });
+
+  if (onboarding && profile && orgId) {
+    try {
+      await finishOnboarding(onboarding.id, orgId, profile);
+    } catch {
+      // The account exists; a logo that failed to move is fixable in Settings.
+    }
+  }
 }
 
 export const auth = betterAuth({
@@ -107,7 +140,11 @@ export const auth = betterAuth({
     user: {
       create: {
         after: async (user, context) => {
-          await joinOrCreateWorkspace(user, inviteTokenFrom(context));
+          await joinOrCreateWorkspace(
+            user,
+            inviteTokenFrom(context),
+            onboardingCookieFrom(context),
+          );
         },
         // Reject a bad invite before the account exists, as the old sign-up did.
         before: async (user, context) => {
