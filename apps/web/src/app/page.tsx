@@ -4,5 +4,5 @@ import { getCurrentUserOrNull } from "@/lib/auth";
 
 export default async function Home() {
   const user = await getCurrentUserOrNull();
-  redirect(user ? "/invoices" : "/login");
+  redirect(user ? "/home" : "/login");
 }

@@ -13,33 +13,28 @@ test("shell navigation, account themes, paper invoice and chat dock", async ({ b
   await page.emulateMedia({ colorScheme: "light", reducedMotion: "reduce" });
   const owner = await registerAccount(page, "Paper Studio");
   const nav = page.getByRole("navigation", { exact: true, name: "Main" });
-  await expect(nav.getByRole("link", { exact: true, name: "Invoices" })).toHaveAttribute(
+  await expect(nav.getByRole("link", { exact: true, name: "Home" })).toHaveAttribute(
     "aria-current",
     "page",
   );
-  await expect(page.getByRole("button", { name: /Ask Nota/ })).toBeVisible();
+  await expect(page.getByRole("button", { name: /Ask Nota/ })).toBeHidden();
+  await expect(page.getByRole("textbox", { name: "Ask Nota" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Send your first invoice" })).toBeVisible();
   await page.keyboard.press("Control+k");
   await expect(page.getByRole("dialog", { name: "Nota Chat" })).toBeHidden();
   await page.keyboard.press("Control+j");
   await expect(page.getByRole("textbox", { name: "Ask Nota" })).toBeFocused();
-  await page.reload();
-  await expect(page.getByRole("button", { name: "Close chat" })).toBeVisible();
-  await expect(page.getByText(/Nota.*your invoices/i)).toBeVisible();
-  await page.getByRole("button", { name: "Close chat" }).click();
-  await expect(page.getByRole("button", { name: /Ask Nota/ })).toBeFocused();
-
-  await page.goto("/home");
-  await expect(page.getByRole("button", { name: /Ask Nota/ })).toBeHidden();
-  await expect(page.getByRole("textbox", { name: "Ask Nota" })).toBeVisible();
-  await page.keyboard.press("Control+j");
   await expect(page.getByRole("region", { name: "Conversation with Nota" })).toBeVisible();
   await page.getByRole("button", { name: "Back to Home" }).click();
-  await expect(page.getByRole("heading", { name: /Back to work/ })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Welcome to Nota." })).toBeVisible();
 
   await page.goto("/invoices");
   await expect(page.getByRole("button", { name: "Close chat" })).toBeHidden();
   await page.getByTestId("chat-panel-toggle").click();
   await expect(page.getByRole("button", { name: "Close chat" })).toBeVisible();
+  await page.reload();
+  await expect(page.getByRole("button", { name: "Close chat" })).toBeVisible();
+  await expect(page.getByText(/Nota.*your invoices/i)).toBeVisible();
   await page.getByRole("button", { name: "Close chat" }).click();
   await expect(page.getByRole("button", { name: /Ask Nota/ })).toBeFocused();
 
