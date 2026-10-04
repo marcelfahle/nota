@@ -123,7 +123,15 @@ test("creates a client and moves an invoice through the manual lifecycle", async
   await page.getByTestId("invoice-mark-sent").click();
   await expect(page.getByTestId("invoice-status")).toContainText("Sent");
 
-  await page.getByTestId("invoice-mark-paid").click();
+  await page.getByTestId("invoice-record-payment").click();
+  await page.getByLabel("Amount (EUR)").fill("200");
+  await page.getByTestId("invoice-payment-submit").click();
+  await expect(page.getByTestId("invoice-status")).toContainText("Part paid");
+  await expect(page.getByText("€300.00").first()).toBeVisible();
+  await expect(page.getByText("€200.00 payment recorded")).toBeVisible();
+
+  await page.getByTestId("invoice-record-payment").click();
+  await page.getByTestId("invoice-payment-submit").click();
   await expect(page.getByTestId("invoice-status")).toContainText("Paid");
-  await expect(page.getByText("Payment received")).toBeVisible();
+  await expect(page.getByText(/payment recorded/i).first()).toBeVisible();
 });

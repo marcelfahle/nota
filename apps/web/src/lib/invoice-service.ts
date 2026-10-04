@@ -226,10 +226,14 @@ export async function getInvoiceDetail(orgId: string, invoiceId: string) {
   const [client, items, activities, paymentRows, [creditRow], [viewRow]] = await Promise.all([
     db
       .select({
+        address: clients.address,
+        company: clients.company,
         defaultCurrency: clients.defaultCurrency,
         email: clients.email,
         id: clients.id,
         name: clients.name,
+        vatNumber: clients.vatNumber,
+        vatStatus: clients.vatStatus,
       })
       .from(clients)
       .where(and(eq(clients.id, invoice.clientId), eq(clients.orgId, orgId)))

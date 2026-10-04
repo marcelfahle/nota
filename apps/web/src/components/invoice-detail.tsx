@@ -1,31 +1,20 @@
 "use client";
 
-import {
-  ArrowLeft,
-  Ban,
-  CheckCircle2,
-  Copy,
-  Download,
-  FileCode,
-  Mail,
-  Pencil,
-  Send,
-  Trash2,
-} from "lucide-react";
+import { ArrowLeft, BadgeCheck, Copy, Download, FileCode, Pencil, Send } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
 import {
   cancelInvoice,
+  createCreditNote,
   deleteInvoice,
   duplicateInvoice,
-  markInvoicePaid,
   markInvoiceSent,
+  recordInvoicePayment,
   sendInvoice,
   sendReminder,
 } from "@/actions/invoices";
-import { StatusBadge } from "@/components/status-badge";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -35,557 +24,689 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import type { AuthenticatedRole } from "@/lib/auth";
 import {
-  canCancelInvoice as canCancelInvoiceStatus,
-  canMarkInvoicePaid as canMarkInvoicePaidStatus,
-  canSendInvoiceReminder as canSendInvoiceReminderStatus,
+  canCancelInvoice as canCancelStatus,
   normalizeInvoiceStatus,
 } from "@/lib/invoice-lifecycle";
 import {
-  canCancelInvoice as canCancelInvoiceRole,
-  canDeleteInvoice as canDeleteInvoiceRole,
-  canMarkInvoicePaid as canMarkInvoicePaidRole,
-  canSendInvoice as canSendInvoiceRole,
-  canSendInvoiceReminder as canSendInvoiceReminderRole,
+  canCancelInvoice,
+  canDeleteInvoice,
+  canMarkInvoicePaid,
+  canSendInvoice,
+  canSendInvoiceReminder,
 } from "@/lib/roles";
 import { formatCurrency } from "@/lib/utils";
-
-type LineItem = {
-  amount: string;
-  description: string;
-  id: string;
-  quantity: string;
-  sortOrder: number | null;
-  unitPrice: string;
-};
 
 type ActivityEntry = {
   action: string;
   createdAt: string;
   id: string;
+  metadata: unknown;
+  source: "api" | "chat" | "cli" | "mcp" | "system" | "web";
+  sourceClient: string | null;
 };
 
 type InvoiceDetailProps = {
   activities: Array<ActivityEntry>;
+  business: {
+    address: string | null;
+    brandColor: string | null;
+    city: string | null;
+    country: string | null;
+    logoUrl: string | null;
+    name: string;
+    region: string | null;
+  };
   invoice: {
     balance: string;
-    client: { email: string; name: string };
+    client: {
+      address?: string | null;
+      company?: string | null;
+      email: string;
+      name: string;
+      vatNumber?: string | null;
+      vatStatus?: "invalid" | "unavailable" | "valid" | null;
+    };
     currency: string | null;
     dueAt: string;
     id: string;
-    internalNotes: string | null;
     issuedAt: string;
     kind: "credit_note" | "invoice";
-    lineItems: Array<LineItem>;
+    lineItems: Array<{
+      amount: string;
+      description: string;
+      id: string;
+      quantity: string;
+      unitPrice: string;
+    }>;
     notes: string | null;
     number: string;
     paidAmount: string;
-    paidAt: string | null;
     reverseCharge: string | null;
     settlementStatus: "paid" | "partially_paid" | "unpaid";
     status: string | null;
-    stripePaymentLinkUrl: string | null;
     subtotal: string | null;
     taxAmount: string | null;
     taxRate: string | null;
     total: string | null;
+    viewCount: number;
   };
   role: AuthenticatedRole;
 };
 
-function formatDate(dateStr: string): string {
-  return new Date(dateStr).toLocaleDateString("en-US", {
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-  });
-}
-
-const ACTION_LABELS: Record<string, string> = {
+const ACTIVITY_LABELS: Record<string, string> = {
   cancelled: "Invoice cancelled",
   created: "Invoice created",
-  marked_overdue: "Marked overdue",
-  paid: "Payment received",
-  reminder_sent: "Reminder sent",
+  marked_overdue: "Invoice marked overdue",
+  paid: "Payment recorded",
+  reminder_sent: "Payment reminder sent",
   sent: "Invoice sent",
+  viewed: "Invoice opened",
 };
 
-export function InvoiceDetailView({ activities, invoice, role }: InvoiceDetailProps) {
-  const [actionError, setActionError] = useState<string | null>(null);
-  const [actionNotice, setActionNotice] = useState<string | null>(null);
-  const [confirmAction, setConfirmAction] = useState<"cancel" | "delete" | null>(null);
-  const [duplicating, setDuplicating] = useState(false);
-  const [pendingAction, setPendingAction] = useState<string | null>(null);
-  const router = useRouter();
+function formatDate(value: string) {
+  return new Intl.DateTimeFormat("en-GB", {
+    day: "numeric",
+    month: "short",
+    timeZone: "UTC",
+    year: "numeric",
+  }).format(new Date(value));
+}
 
+function daysUntil(value: string) {
+  const due = new Date(`${value}T00:00:00`);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  return Math.ceil((due.getTime() - today.getTime()) / 86_400_000);
+}
+
+function sourceLabel(activity: ActivityEntry) {
+  if (activity.sourceClient) {
+    return activity.sourceClient;
+  }
+  if (activity.source === "chat") {
+    return "Nota Chat";
+  }
+  if (activity.source === "system" && activity.action === "paid") {
+    return "Stripe";
+  }
+  if (activity.source === "system" && activity.action === "viewed") {
+    return "public invoice";
+  }
+  if (activity.source === "api") {
+    return "API";
+  }
+  if (activity.source === "cli") {
+    return "Nota CLI";
+  }
+  if (activity.source === "mcp") {
+    return "MCP";
+  }
+  return "Nota";
+}
+
+function activityText(activity: ActivityEntry, currency: string) {
+  const metadata =
+    activity.metadata && typeof activity.metadata === "object"
+      ? (activity.metadata as Record<string, unknown>)
+      : null;
+  if (activity.action === "paid" && typeof metadata?.amount === "string") {
+    return `${formatCurrency(Number(metadata.amount), currency)} payment recorded`;
+  }
+  return ACTIVITY_LABELS[activity.action] ?? activity.action.replaceAll("_", " ");
+}
+
+export function InvoiceDetailView({ activities, business, invoice, role }: InvoiceDetailProps) {
+  const router = useRouter();
   const currency = invoice.currency ?? "EUR";
   const status = normalizeInvoiceStatus(invoice.status);
-  const isDraft = status === "draft";
-  const canManageSending = canSendInvoiceRole(role);
-  const canManageDelete = canDeleteInvoiceRole(role);
-  const canManageCancel = canCancelInvoiceRole(role);
-  const canManageMarkPaid = canMarkInvoicePaidRole(role);
-  const canManageReminders = canSendInvoiceReminderRole(role);
-  const canSendReminder = canManageReminders && canSendInvoiceReminderStatus(status);
-  const canCancel = canManageCancel && canCancelInvoiceStatus(status);
-  const canMarkPaid = canManageMarkPaid && canMarkInvoicePaidStatus(status);
+  const total = Number(invoice.total ?? 0);
+  const paid = Number(invoice.paidAmount);
+  const balance = Number(invoice.balance);
+  const paidPercent = total > 0 ? Math.min(100, Math.round((paid / total) * 100)) : 0;
+  const remainingDays = daysUntil(invoice.dueAt);
+  const canRecordPayment =
+    invoice.kind === "invoice" &&
+    ["sent", "overdue"].includes(status) &&
+    balance > 0 &&
+    canMarkInvoicePaid(role);
+  const [paymentOpen, setPaymentOpen] = useState(false);
+  const [paymentAmount, setPaymentAmount] = useState(invoice.balance);
+  const [paymentMethod, setPaymentMethod] = useState<"bank_transfer" | "other">("bank_transfer");
+  const [paymentNote, setPaymentNote] = useState("");
+  const [pending, setPending] = useState<string | null>(null);
+  const [message, setMessage] = useState<{ kind: "error" | "notice"; text: string } | null>(null);
 
-  async function handleDeleteOrCancel() {
-    if (!confirmAction) {
-      return;
-    }
-
-    setPendingAction(confirmAction);
-    setActionError(null);
-    setActionNotice(null);
-
-    const result =
-      confirmAction === "delete"
-        ? await deleteInvoice(invoice.id)
-        : await cancelInvoice(invoice.id);
-
+  async function runAction(name: string, action: () => Promise<{ error?: string } | void>) {
+    setPending(name);
+    setMessage(null);
+    const result = await action();
     if (result?.error) {
-      setActionError(result.error);
-      setPendingAction(null);
-      return;
+      setMessage({ kind: "error", text: result.error });
+    } else {
+      router.refresh();
     }
-
-    if (confirmAction === "delete") {
-      router.push("/invoices");
-      return;
-    }
-
-    const warning =
-      typeof result === "object" &&
-      result &&
-      "warning" in result &&
-      typeof result.warning === "string"
-        ? result.warning
-        : null;
-
-    if (warning) {
-      setActionNotice(warning);
-    }
-
-    setConfirmAction(null);
-    router.refresh();
-    setPendingAction(null);
+    setPending(null);
   }
 
-  async function handleSend() {
-    setPendingAction("send");
-    setActionError(null);
-    setActionNotice(null);
-    const result = await sendInvoice(invoice.id);
-    if (result?.error) {
-      setActionError(result.error);
-      setPendingAction(null);
+  async function handlePayment(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setPending("payment");
+    setMessage(null);
+    const result = await recordInvoicePayment(invoice.id, {
+      amount: Number(paymentAmount),
+      method: paymentMethod,
+      note: paymentNote.trim() || undefined,
+    });
+    if (result.error) {
+      setMessage({ kind: "error", text: result.error });
+      setPending(null);
       return;
     }
-
-    router.refresh();
-    setPendingAction(null);
-  }
-
-  async function handleReminder() {
-    setPendingAction("remind");
-    setActionError(null);
-    setActionNotice(null);
-    const result = await sendReminder(invoice.id);
-    if (result?.error) {
-      setActionError(result.error);
-      setPendingAction(null);
-      return;
+    setPaymentOpen(false);
+    if (result.warning) {
+      setMessage({ kind: "notice", text: result.warning });
     }
-
     router.refresh();
-    setPendingAction(null);
-  }
-
-  async function handleMarkSent() {
-    setPendingAction("mark-sent");
-    setActionError(null);
-    setActionNotice(null);
-    const result = await markInvoiceSent(invoice.id);
-    if (result?.error) {
-      setActionError(result.error);
-      setPendingAction(null);
-      return;
-    }
-
-    router.refresh();
-    setPendingAction(null);
-  }
-
-  async function handleMarkPaid() {
-    setPendingAction("mark-paid");
-    setActionError(null);
-    setActionNotice(null);
-    const result = await markInvoicePaid(invoice.id);
-    if (result?.error) {
-      setActionError(result.error);
-      setPendingAction(null);
-      return;
-    }
-
-    router.refresh();
-    setPendingAction(null);
+    setPending(null);
   }
 
   async function handleDuplicate() {
-    setDuplicating(true);
-    setActionError(null);
-    setActionNotice(null);
-    const newId = await duplicateInvoice(invoice.id);
-    router.push(`/invoices/${newId}`);
+    setPending("duplicate");
+    setMessage(null);
+    const result = await duplicateInvoice(invoice.id);
+    if ("error" in result) {
+      setMessage({ kind: "error", text: result.error });
+      setPending(null);
+      return;
+    }
+    router.push(`/invoices/${result.invoiceId}`);
   }
 
+  async function handleCreditNote() {
+    setPending("credit-note");
+    setMessage(null);
+    const result = await createCreditNote(invoice.id);
+    if (result.error) {
+      setMessage({ kind: "error", text: result.error });
+      setPending(null);
+      return;
+    }
+    router.push(`/invoices/${result.invoiceId}`);
+  }
+
+  async function handleDestructiveAction(action: "cancel" | "delete") {
+    const verb = action === "delete" ? "delete" : "cancel";
+    if (!window.confirm(`Are you sure you want to ${verb} ${invoice.number}?`)) {
+      return;
+    }
+    setPending(action);
+    setMessage(null);
+    const result =
+      action === "delete" ? await deleteInvoice(invoice.id) : await cancelInvoice(invoice.id);
+    if (result.error) {
+      setMessage({ kind: "error", text: result.error });
+      setPending(null);
+      return;
+    }
+    if (action === "delete") {
+      router.push("/invoices");
+      return;
+    }
+    router.refresh();
+    setPending(null);
+  }
+
+  const stamp =
+    invoice.kind === "credit_note"
+      ? status === "cancelled"
+        ? "Cancelled"
+        : null
+      : invoice.settlementStatus === "partially_paid"
+        ? "Part paid"
+        : invoice.settlementStatus === "paid"
+          ? "Paid"
+          : status === "cancelled"
+            ? "Cancelled"
+            : null;
+
   return (
-    <div>
-      <Link
-        className="mb-6 inline-flex items-center gap-1 text-sm text-zinc-500 hover:text-zinc-900"
-        href="/invoices"
-      >
-        <ArrowLeft className="size-4" />
-        Back to invoices
-      </Link>
-
-      {/* Header */}
-      <div className="mb-8">
-        <div className="mb-4">
-          <div className="mb-1 flex items-center gap-3">
-            <h1 className="font-mono text-lg font-semibold">{invoice.number}</h1>
-            <div data-testid="invoice-status">
-              <StatusBadge status={status} />
-            </div>
-          </div>
-          <p className="text-sm text-zinc-500">
-            {invoice.client.name} &middot; {invoice.client.email}
-          </p>
-          <p className="mt-2 text-3xl font-semibold">
-            {formatCurrency(Number(invoice.total ?? 0), currency)}
-          </p>
-          {invoice.settlementStatus === "partially_paid" ? (
-            <p className="mt-1 text-sm font-medium text-zinc-600">
-              {formatCurrency(Number(invoice.paidAmount), currency)} paid ·{" "}
-              {formatCurrency(Number(invoice.balance), currency)} due
-            </p>
-          ) : null}
-        </div>
-
-        <div className="flex flex-wrap items-center gap-2">
-          {isDraft && canManageSending && (
-            <>
+    <article aria-labelledby="invoice-title" className="space-y-6">
+      <header className="space-y-5 border-b pb-6">
+        <Link
+          className="nota-label inline-flex items-center gap-2 text-muted-foreground hover:text-foreground"
+          href="/invoices"
+        >
+          <ArrowLeft className="size-3.5" />
+          Invoices / {invoice.kind === "credit_note" ? "Credit note" : "Invoice"}
+        </Link>
+        <div className="flex flex-col justify-between gap-4 lg:flex-row lg:items-end">
+          <h1 id="invoice-title">
+            {invoice.number}{" "}
+            <span className="font-normal text-muted-foreground">{invoice.client.name}</span>
+          </h1>
+          <div aria-label="Invoice actions" className="flex flex-wrap gap-2">
+            <Button asChild size="sm" variant="outline">
+              <a href={`/api/invoices/${invoice.id}/pdf`} rel="noopener noreferrer" target="_blank">
+                <Download /> PDF
+              </a>
+            </Button>
+            <Button asChild size="sm" variant="outline">
+              <a
+                href={`/api/invoices/${invoice.id}/xrechnung`}
+                rel="noopener noreferrer"
+                target="_blank"
+              >
+                <FileCode /> XRechnung
+              </a>
+            </Button>
+            {invoice.kind === "invoice" && ["sent", "overdue", "paid"].includes(status) ? (
               <Button
-                data-testid="invoice-send"
-                disabled={pendingAction !== null}
-                onClick={handleSend}
+                disabled={pending !== null}
+                onClick={handleCreditNote}
                 size="sm"
                 variant="outline"
               >
-                <Mail className="size-4" />
-                {pendingAction === "send" ? "Sending..." : "Send Invoice"}
+                {pending === "credit-note" ? "Creating…" : "Credit note"}
               </Button>
+            ) : null}
+            <Button
+              disabled={pending !== null}
+              onClick={handleDuplicate}
+              size="sm"
+              variant="outline"
+            >
+              <Copy /> {pending === "duplicate" ? "Duplicating…" : "Duplicate"}
+            </Button>
+            {status === "draft" ? (
+              <>
+                <Button asChild size="sm" variant="outline">
+                  <Link href={`/invoices/${invoice.id}/edit`}>
+                    <Pencil /> Edit
+                  </Link>
+                </Button>
+                {canSendInvoice(role) ? (
+                  <>
+                    <Button
+                      data-testid="invoice-send"
+                      disabled={pending !== null}
+                      onClick={() => runAction("send", () => sendInvoice(invoice.id))}
+                      size="sm"
+                    >
+                      <Send /> {pending === "send" ? "Sending…" : "Send invoice"}
+                    </Button>
+                    <Button
+                      data-testid="invoice-mark-sent"
+                      disabled={pending !== null}
+                      onClick={() => runAction("mark-sent", () => markInvoiceSent(invoice.id))}
+                      size="sm"
+                      variant="outline"
+                    >
+                      {pending === "mark-sent" ? "Marking…" : "Mark sent"}
+                    </Button>
+                  </>
+                ) : null}
+              </>
+            ) : canRecordPayment ? (
               <Button
-                data-testid="invoice-mark-sent"
-                disabled={pendingAction !== null}
-                onClick={handleMarkSent}
+                data-testid="invoice-record-payment"
+                onClick={() => {
+                  setPaymentAmount(invoice.balance);
+                  setPaymentOpen(true);
+                }}
                 size="sm"
-                variant="outline"
               >
-                <Send className="size-4" />
-                {pendingAction === "mark-sent" ? "Marking..." : "Mark Sent"}
+                Record payment
               </Button>
-            </>
-          )}
-          {isDraft && canManageMarkPaid && (
-            <Button
-              data-testid="invoice-mark-paid"
-              disabled={pendingAction !== null}
-              onClick={handleMarkPaid}
-              size="sm"
-              variant="outline"
-            >
-              <CheckCircle2 className="size-4" />
-              {pendingAction === "mark-paid" ? "Marking..." : "Mark Paid"}
-            </Button>
-          )}
-          {isDraft && (
-            <Link href={`/invoices/${invoice.id}/edit`}>
-              <Button disabled={pendingAction !== null} size="sm" variant="outline">
-                <Pencil className="size-4" />
-                Edit
-              </Button>
-            </Link>
-          )}
-          {canSendReminder && (
-            <Button
-              data-testid="invoice-send-reminder"
-              disabled={pendingAction !== null}
-              onClick={handleReminder}
-              size="sm"
-              variant="outline"
-            >
-              <Mail className="size-4" />
-              {pendingAction === "remind"
-                ? "Sending..."
-                : status === "overdue"
-                  ? "Send Overdue Notice"
-                  : "Send Reminder"}
-            </Button>
-          )}
-          {canMarkPaid && !isDraft && (
-            <Button
-              data-testid="invoice-mark-paid"
-              disabled={pendingAction !== null}
-              onClick={handleMarkPaid}
-              size="sm"
-              variant="outline"
-            >
-              <CheckCircle2 className="size-4" />
-              {pendingAction === "mark-paid" ? "Marking..." : "Mark Paid"}
-            </Button>
-          )}
-          <a href={`/api/invoices/${invoice.id}/pdf`} rel="noopener noreferrer" target="_blank">
-            <Button disabled={pendingAction !== null} size="sm" variant="outline">
-              <Download className="size-4" />
-              Download PDF
-            </Button>
-          </a>
-          <a
-            href={`/api/invoices/${invoice.id}/xrechnung`}
-            rel="noopener noreferrer"
-            target="_blank"
-          >
-            <Button disabled={pendingAction !== null} size="sm" variant="outline">
-              <FileCode className="size-4" />
-              XRechnung XML
-            </Button>
-          </a>
-          <Button
-            disabled={duplicating || pendingAction !== null}
-            onClick={handleDuplicate}
-            size="sm"
-            variant="outline"
-          >
-            <Copy className="size-4" />
-            {duplicating ? "Duplicating..." : "Duplicate"}
-          </Button>
-          {canCancel && (
-            <Button
-              className="text-red-600 hover:bg-red-50 hover:text-red-700"
-              data-testid="invoice-cancel"
-              disabled={pendingAction !== null}
-              onClick={() => setConfirmAction("cancel")}
-              size="sm"
-              variant="outline"
-            >
-              <Ban className="size-4" />
-              Cancel Invoice
-            </Button>
-          )}
-          {isDraft && canManageDelete && (
-            <Button
-              className="text-red-600 hover:bg-red-50 hover:text-red-700"
-              data-testid="invoice-delete-draft"
-              disabled={pendingAction !== null}
-              onClick={() => setConfirmAction("delete")}
-              size="sm"
-              variant="outline"
-            >
-              <Trash2 className="size-4" />
-              Delete Draft
-            </Button>
-          )}
-        </div>
-
-        {actionError && (
-          <div className="mt-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-            {actionError}
+            ) : null}
           </div>
-        )}
-        {actionNotice && (
-          <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-            {actionNotice}
-          </div>
-        )}
-      </div>
-
-      {/* Stripe Payment Link Indicator */}
-      {(status === "sent" || status === "overdue") && invoice.stripePaymentLinkUrl && (
-        <div className="mb-6 flex items-center gap-2 rounded-lg border border-blue-100 bg-blue-50 px-4 py-3 text-sm text-blue-700">
-          <Copy className="size-4" />
-          <span>Stripe payment link active</span>
-          <a
-            className="ml-auto text-xs underline"
-            href={invoice.stripePaymentLinkUrl}
-            rel="noopener noreferrer"
-            target="_blank"
-          >
-            Open link
-          </a>
         </div>
-      )}
+        {message ? (
+          <p
+            className={
+              message.kind === "error"
+                ? "text-sm text-destructive"
+                : "text-sm text-muted-foreground"
+            }
+            role={message.kind === "error" ? "alert" : "status"}
+          >
+            {message.text}
+          </p>
+        ) : null}
+      </header>
 
-      {/* Invoice Details Grid */}
-      <div className="mb-8 grid max-w-2xl gap-4 sm:grid-cols-3">
-        <DetailItem label="Issue Date" value={formatDate(invoice.issuedAt)} />
-        <DetailItem label="Due Date" value={formatDate(invoice.dueAt)} />
-        {invoice.paidAt ? (
-          <DetailItem label="Paid Date" value={formatDate(invoice.paidAt)} />
-        ) : (
-          <DetailItem label="Currency" value={currency} />
-        )}
-      </div>
-
-      {invoice.reverseCharge === "true" && (
-        <p className="mb-6 text-xs font-medium text-zinc-500">
-          Reverse charge — VAT not applicable
-        </p>
-      )}
-
-      {/* Line Items */}
-      <div className="mb-8">
-        <h2 className="mb-4 text-sm font-semibold">Line Items</h2>
-        <div className="invoice-paper overflow-x-auto rounded-lg border border-zinc-200">
-          <table className="w-full min-w-[400px]">
-            <thead>
-              <tr className="border-b border-zinc-100 text-left text-xs font-medium tracking-wide text-zinc-400 uppercase">
-                <th className="px-4 py-3">Description</th>
-                <th className="px-4 py-3 text-right">Qty</th>
-                <th className="px-4 py-3 text-right">Rate</th>
-                <th className="px-4 py-3 text-right">Amount</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-zinc-50">
-              {invoice.lineItems.map((item) => (
-                <tr key={item.id}>
-                  <td className="px-4 py-3 text-sm text-zinc-900">{item.description}</td>
-                  <td className="px-4 py-3 text-right text-sm text-zinc-600">{item.quantity}</td>
-                  <td className="px-4 py-3 text-right text-sm text-zinc-600">
-                    {formatCurrency(Number(item.unitPrice), currency)}
-                  </td>
-                  <td className="px-4 py-3 text-right text-sm font-medium text-zinc-900">
-                    {formatCurrency(Number(item.amount), currency)}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-
-          {/* Totals */}
-          <div className="border-t border-zinc-200 px-4 py-3">
-            <div className="flex flex-col items-end gap-1">
-              <div className="flex w-48 justify-between text-sm">
-                <span className="text-zinc-500">Subtotal</span>
-                <span className="font-medium">
-                  {formatCurrency(Number(invoice.subtotal ?? 0), currency)}
-                </span>
-              </div>
-              {Number(invoice.taxRate ?? 0) > 0 && (
-                <div className="flex w-48 justify-between text-sm">
-                  <span className="text-zinc-500">Tax ({invoice.taxRate}%)</span>
-                  <span className="font-medium">
-                    {formatCurrency(Number(invoice.taxAmount ?? 0), currency)}
+      <div className="grid gap-6 xl:grid-cols-[minmax(0,1.45fr)_minmax(280px,0.55fr)]">
+        <section
+          aria-label="Invoice preview"
+          className="overflow-hidden rounded-lg border p-4 sm:p-8"
+          style={{
+            backgroundColor: "var(--paper-2)",
+            backgroundImage: "radial-gradient(var(--line) 1px, transparent 1px)",
+            backgroundSize: "8px 8px",
+          }}
+        >
+          <div className="invoice-paper relative mx-auto min-h-[720px] max-w-[720px] border p-7 shadow-sm sm:p-12">
+            <div className="flex items-start justify-between gap-8 border-b pb-8">
+              <div className="flex items-start gap-3">
+                {business.logoUrl ? (
+                  <img alt="" className="size-10 object-contain" src={business.logoUrl} />
+                ) : (
+                  <span
+                    aria-hidden="true"
+                    className="grid size-10 place-items-center rounded-md text-lg font-bold text-white"
+                    style={{ backgroundColor: business.brandColor || "#1f1b16" }}
+                  >
+                    {business.name.slice(0, 1)}
                   </span>
+                )}
+                <div>
+                  <p className="font-semibold">{business.name}</p>
+                  <p className="mt-1 max-w-52 text-xs leading-relaxed whitespace-pre-line text-zinc-500">
+                    {[business.address, business.city, business.region, business.country]
+                      .filter(Boolean)
+                      .join(", ")}
+                  </p>
                 </div>
-              )}
-              <div className="mt-1 flex w-48 justify-between border-t border-zinc-200 pt-2 text-sm">
-                <span className="font-semibold">Total</span>
-                <span className="font-semibold">
-                  {formatCurrency(Number(invoice.total ?? 0), currency)}
-                </span>
+              </div>
+              <div className="text-right">
+                <p className="text-3xl font-semibold">
+                  {invoice.kind === "credit_note" ? "Credit note" : "Invoice"}
+                </p>
+                <p className="mt-1 font-mono text-sm text-zinc-500">{invoice.number}</p>
               </div>
             </div>
+
+            <dl className="grid gap-6 border-b py-7 text-sm sm:grid-cols-3">
+              <div>
+                <dt className="nota-label text-zinc-500">Billed to</dt>
+                <dd className="mt-2 font-semibold">
+                  {invoice.client.company || invoice.client.name}
+                </dd>
+                <dd className="mt-1 text-xs leading-relaxed whitespace-pre-line text-zinc-500">
+                  {invoice.client.address?.replaceAll(String.raw`\n`, "\n")}
+                </dd>
+              </div>
+              <div>
+                <dt className="nota-label text-zinc-500">Issued</dt>
+                <dd className="mt-2 font-mono text-xs">{formatDate(invoice.issuedAt)}</dd>
+              </div>
+              <div>
+                <dt className="nota-label text-zinc-500">Due</dt>
+                <dd className="mt-2 font-mono text-xs">{formatDate(invoice.dueAt)}</dd>
+              </div>
+            </dl>
+
+            <div className="py-7">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="nota-label border-b text-left text-zinc-500">
+                    <th className="pb-3 font-medium">Description</th>
+                    <th className="pb-3 text-right font-medium">Qty</th>
+                    <th className="pb-3 text-right font-medium">Amount</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {invoice.lineItems.map((item) => (
+                    <tr className="border-b" key={item.id}>
+                      <td className="py-5 pr-4">
+                        <span className="font-medium">{item.description}</span>
+                        <span className="mt-1 block font-mono text-xs text-zinc-500">
+                          {formatCurrency(Number(item.unitPrice), currency)} each
+                        </span>
+                      </td>
+                      <td className="py-5 text-right font-mono text-xs">{item.quantity}</td>
+                      <td className="py-5 text-right font-mono text-xs">
+                        {formatCurrency(Number(item.amount), currency)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              <dl className="mt-6 ml-auto w-full max-w-64 space-y-2 font-mono text-xs">
+                <div className="flex justify-between">
+                  <dt className="text-zinc-500">Subtotal</dt>
+                  <dd>{formatCurrency(Number(invoice.subtotal), currency)}</dd>
+                </div>
+                <div className="flex justify-between">
+                  <dt className="text-zinc-500">VAT {invoice.taxRate}%</dt>
+                  <dd>{formatCurrency(Number(invoice.taxAmount), currency)}</dd>
+                </div>
+                <div className="mt-3 flex justify-between border-t pt-3 text-sm font-bold">
+                  <dt>Total</dt>
+                  <dd>{formatCurrency(total, currency)}</dd>
+                </div>
+              </dl>
+            </div>
+
+            {stamp ? (
+              <div className="rubber-stamp ml-8" data-testid="invoice-status">
+                {stamp}
+              </div>
+            ) : (
+              <span className="sr-only" data-testid="invoice-status">
+                {status[0].toUpperCase() + status.slice(1).replaceAll("_", " ")}
+              </span>
+            )}
+            {invoice.notes ? (
+              <p className="mt-auto border-t pt-5 text-xs leading-relaxed text-zinc-500">
+                {invoice.notes}
+              </p>
+            ) : null}
+            {invoice.kind === "invoice" ? (
+              <div
+                className="absolute right-7 bottom-7 left-7 flex items-center justify-between rounded-md px-5 py-4 text-sm font-semibold text-white sm:right-12 sm:left-12"
+                style={{ backgroundColor: business.brandColor || "#1f1b16" }}
+              >
+                <span>{balance > 0 ? `${formatCurrency(balance, currency)} due` : "Settled"}</span>
+                <span aria-hidden="true">→</span>
+              </div>
+            ) : null}
           </div>
-        </div>
+        </section>
+
+        <aside aria-label="Invoice details" className="space-y-8">
+          <section className="border-b pb-7">
+            <p className="nota-label text-muted-foreground">Still owed</p>
+            <p className="mt-2 text-4xl font-semibold tabular-nums">
+              {formatCurrency(balance, currency)}
+            </p>
+            <div
+              aria-label={`${paidPercent}% paid`}
+              className="mt-5 h-2 overflow-hidden rounded-full bg-muted ring-1 ring-border"
+              role="img"
+            >
+              <div className="h-full bg-primary" style={{ width: `${paidPercent}%` }} />
+            </div>
+            <div className="mt-2 flex justify-between font-mono text-[11px] text-muted-foreground">
+              <span>{formatCurrency(paid, currency)} paid</span>
+              <span>
+                {balance <= 0 || status === "cancelled"
+                  ? "Settled"
+                  : remainingDays < 0
+                    ? `${Math.abs(remainingDays)} days overdue`
+                    : remainingDays === 0
+                      ? "Due today"
+                      : `${remainingDays} days until due`}
+              </span>
+            </div>
+          </section>
+
+          <section className="border-b pb-7">
+            <h2 className="nota-label">Client</h2>
+            <dl className="mt-4 space-y-4 text-sm">
+              <div>
+                <dt className="text-xs text-muted-foreground">Billed to</dt>
+                <dd className="mt-1 font-medium">
+                  {invoice.client.company || invoice.client.name}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-xs text-muted-foreground">Sent to</dt>
+                <dd className="mt-1">{invoice.client.email}</dd>
+              </div>
+              {invoice.client.vatNumber ? (
+                <div>
+                  <dt className="text-xs text-muted-foreground">VAT ID</dt>
+                  <dd className="mt-1 flex items-center gap-1.5 font-mono text-xs">
+                    {invoice.client.vatNumber}
+                    {invoice.client.vatStatus === "valid" ? (
+                      <BadgeCheck aria-label="Verified" className="size-4 text-emerald-600" />
+                    ) : null}
+                  </dd>
+                </div>
+              ) : null}
+              <div>
+                <dt className="text-xs text-muted-foreground">Tax rule</dt>
+                <dd className="mt-1">
+                  {invoice.reverseCharge === "true" ? "Reverse charge" : `VAT ${invoice.taxRate}%`}
+                </dd>
+              </div>
+            </dl>
+          </section>
+
+          <section>
+            <div className="flex items-baseline justify-between gap-3">
+              <h2 className="nota-label">What happened</h2>
+              {invoice.viewCount > 0 ? (
+                <span className="font-mono text-[11px] text-muted-foreground">
+                  {invoice.viewCount} {invoice.viewCount === 1 ? "open" : "opens"}
+                </span>
+              ) : null}
+            </div>
+            {activities.length ? (
+              <ol className="mt-5 space-y-5">
+                {activities.map((activity) => (
+                  <li className="grid grid-cols-[8px_1fr] gap-3" key={activity.id}>
+                    <span className="mt-1.5 size-2 rounded-full bg-foreground" />
+                    <div>
+                      <p className="text-sm">{activityText(activity, currency)}</p>
+                      <p className="mt-1 font-mono text-[11px] text-muted-foreground">
+                        {formatDate(activity.createdAt)} · via {sourceLabel(activity)}
+                      </p>
+                    </div>
+                  </li>
+                ))}
+              </ol>
+            ) : (
+              <p className="mt-4 text-sm text-muted-foreground">No activity yet.</p>
+            )}
+            {(status === "sent" || status === "overdue") && canSendInvoiceReminder(role) ? (
+              <Button
+                className="mt-6"
+                disabled={pending !== null}
+                onClick={() => runAction("reminder", () => sendReminder(invoice.id))}
+                size="sm"
+                variant="outline"
+              >
+                {pending === "reminder" ? "Sending…" : "Send reminder"}
+              </Button>
+            ) : null}
+            {status === "draft" && canDeleteInvoice(role) ? (
+              <Button
+                className="mt-3 text-destructive"
+                disabled={pending !== null}
+                onClick={() => handleDestructiveAction("delete")}
+                size="sm"
+                variant="ghost"
+              >
+                {pending === "delete" ? "Deleting…" : "Delete draft"}
+              </Button>
+            ) : canCancelInvoice(role) && canCancelStatus(status) ? (
+              <Button
+                className="mt-3 text-destructive"
+                disabled={pending !== null}
+                onClick={() => handleDestructiveAction("cancel")}
+                size="sm"
+                variant="ghost"
+              >
+                {pending === "cancel" ? "Cancelling…" : "Cancel invoice"}
+              </Button>
+            ) : null}
+          </section>
+        </aside>
       </div>
 
-      {/* Notes */}
-      {(invoice.notes || invoice.internalNotes) && (
-        <div className="mb-8 grid max-w-2xl gap-4 sm:grid-cols-2">
-          {invoice.notes && <DetailItem label="Notes" value={invoice.notes} />}
-          {invoice.internalNotes && (
-            <DetailItem label="Internal Notes" value={invoice.internalNotes} />
-          )}
-        </div>
-      )}
-
-      {/* Activity Log */}
-      {activities.length > 0 && (
-        <div className="mb-8">
-          <h2 className="mb-4 text-sm font-semibold">Activity</h2>
-          <div className="relative pl-6">
-            {activities.map((activity, i) => (
-              <div className="relative pb-4 last:pb-0" key={activity.id}>
-                {/* Vertical line */}
-                {i < activities.length - 1 && (
-                  <div className="absolute top-2 left-[-17px] h-full w-px bg-zinc-200" />
-                )}
-                {/* Dot */}
-                <div className="absolute top-1.5 left-[-20px] size-[7px] rounded-full bg-zinc-400" />
-                <p className="text-sm text-zinc-900">
-                  {ACTION_LABELS[activity.action] ?? activity.action}
-                </p>
-                <p className="text-xs text-zinc-400">{formatDate(activity.createdAt)}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Delete Confirmation Dialog */}
-      <Dialog
-        onOpenChange={(open) => !open && setConfirmAction(null)}
-        open={confirmAction !== null}
-      >
+      <Dialog onOpenChange={setPaymentOpen} open={paymentOpen}>
         <DialogContent>
-          <DialogHeader>
-            <DialogTitle>
-              {confirmAction === "delete" ? "Delete invoice" : "Cancel invoice"}
-            </DialogTitle>
-            <DialogDescription>
-              {confirmAction === "delete"
-                ? `Are you sure you want to delete invoice ${invoice.number}? This action cannot be undone.`
-                : `Are you sure you want to cancel invoice ${invoice.number}? The invoice will remain visible, but it can no longer be sent or marked overdue.`}
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button
-              data-testid="invoice-confirm-dismiss"
-              disabled={pendingAction === "delete" || pendingAction === "cancel"}
-              onClick={() => setConfirmAction(null)}
-              variant="outline"
-            >
-              Cancel
-            </Button>
-            <Button
-              data-testid="invoice-confirm-action"
-              disabled={pendingAction === "delete" || pendingAction === "cancel"}
-              onClick={handleDeleteOrCancel}
-              variant="destructive"
-            >
-              {pendingAction === "delete"
-                ? "Deleting..."
-                : pendingAction === "cancel"
-                  ? "Cancelling..."
-                  : confirmAction === "delete"
-                    ? "Delete Invoice"
-                    : "Cancel Invoice"}
-            </Button>
-          </DialogFooter>
+          <form onSubmit={handlePayment}>
+            <DialogHeader>
+              <DialogTitle>Record payment</DialogTitle>
+              <DialogDescription>
+                The amount defaults to the outstanding balance. Enter a lower amount to record a
+                partial payment.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="grid gap-5 py-6">
+              <div className="grid gap-2">
+                <Label htmlFor="payment-amount">Amount ({currency})</Label>
+                <Input
+                  autoFocus
+                  id="payment-amount"
+                  max={invoice.balance}
+                  min="0.01"
+                  onChange={(event) => setPaymentAmount(event.target.value)}
+                  required
+                  step="0.01"
+                  type="number"
+                  value={paymentAmount}
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="payment-method">Method</Label>
+                <Select
+                  onValueChange={(value: "bank_transfer" | "other") => setPaymentMethod(value)}
+                  value={paymentMethod}
+                >
+                  <SelectTrigger className="w-full" id="payment-method">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="bank_transfer">Bank transfer</SelectItem>
+                    <SelectItem value="other">Other</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="payment-note">
+                  Note <span className="font-normal text-muted-foreground">(optional)</span>
+                </Label>
+                <Input
+                  id="payment-note"
+                  onChange={(event) => setPaymentNote(event.target.value)}
+                  value={paymentNote}
+                />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button
+                disabled={pending === "payment"}
+                onClick={() => setPaymentOpen(false)}
+                type="button"
+                variant="outline"
+              >
+                Cancel
+              </Button>
+              <Button
+                data-testid="invoice-payment-submit"
+                disabled={pending === "payment"}
+                type="submit"
+              >
+                {pending === "payment" ? "Recording…" : "Record payment"}
+              </Button>
+            </DialogFooter>
+          </form>
         </DialogContent>
       </Dialog>
-    </div>
-  );
-}
-
-function DetailItem({ label, value }: { label: string; value: string }) {
-  return (
-    <div>
-      <p className="text-xs font-medium text-zinc-400">{label}</p>
-      <p className="mt-1 text-sm text-zinc-900">{value}</p>
-    </div>
+    </article>
   );
 }
