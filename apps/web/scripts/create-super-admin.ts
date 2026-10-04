@@ -14,10 +14,8 @@ function argument(name: string) {
 
 const email = (argument("email") ?? process.env.SUPER_ADMIN_EMAIL)?.trim().toLowerCase();
 const name = (argument("name") ?? process.env.SUPER_ADMIN_NAME ?? "Nota operator").trim();
-const temporaryPassword =
-  argument("password") ??
-  process.env.SUPER_ADMIN_TEMP_PASSWORD ??
-  randomBytes(18).toString("base64url");
+const suppliedPassword = argument("password") ?? process.env.SUPER_ADMIN_TEMP_PASSWORD;
+const temporaryPassword = suppliedPassword ?? randomBytes(18).toString("base64url");
 
 if (!email) {
   throw new Error("Pass --email operator@example.com or set SUPER_ADMIN_EMAIL.");
@@ -66,7 +64,11 @@ const [user] = await db.transaction(async (tx) => {
 });
 
 console.log(`Created super admin: ${email}`);
-console.log(`Temporary password: ${temporaryPassword}`);
+console.log(
+  suppliedPassword
+    ? "Temporary password: supplied securely"
+    : `Temporary password: ${temporaryPassword}`,
+);
 console.log(`User id: ${user.id}`);
 console.log("The password must be changed on first login.");
 process.exit(0);

@@ -1,6 +1,7 @@
 import { and, asc, count, desc, eq, gte, lt, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { notFound } from "next/navigation";
+import { z } from "zod";
 
 import {
   estimatedCost,
@@ -43,6 +44,7 @@ function summarizeUsage(
     modelId: string;
     orgId: string | null;
     outputTokens: number;
+    requests: number;
   }>,
 ) {
   const byOrg = new Map<string, { cost: number; requests: number }>();
@@ -53,11 +55,30 @@ function summarizeUsage(
     if (row.orgId) {
       const current = byOrg.get(row.orgId) ?? { cost: 0, requests: 0 };
       current.cost += rowCost;
-      current.requests += 1;
+      current.requests += row.requests;
       byOrg.set(row.orgId, current);
     }
   }
-  return { byOrg, cost, requests: rows.length };
+  return {
+    byOrg,
+    cost,
+    requests: rows.reduce((total, row) => total + row.requests, 0),
+  };
+}
+
+function loadUsage(start: Date, end: Date) {
+  return db
+    .select({
+      feature: aiUsage.feature,
+      inputTokens: sql<number>`sum(${aiUsage.inputTokens})::int`,
+      modelId: aiUsage.modelId,
+      orgId: aiUsage.orgId,
+      outputTokens: sql<number>`sum(${aiUsage.outputTokens})::int`,
+      requests: sql<number>`count(*)::int`,
+    })
+    .from(aiUsage)
+    .where(and(gte(aiUsage.createdAt, start), lt(aiUsage.createdAt, end)))
+    .groupBy(aiUsage.feature, aiUsage.modelId, aiUsage.orgId);
 }
 
 export async function getAdminOverview() {
@@ -73,7 +94,10 @@ export async function getAdminOverview() {
         id: workspace.id,
         invoiceCount: sql<number>`(select count(*)::int from ${invoices} i where i.org_id = "workspace"."id" and i.kind = 'invoice')`,
         invoicesLast30Days: sql<number>`(select count(*)::int from ${invoices} i where i.org_id = "workspace"."id" and i.kind = 'invoice' and i.created_at >= ${thirtyDaysAgo})`,
-        lastActive: sql<Date | null>`(select max(s.updated_at) from ${sessions} s inner join ${orgMembers} om on om.user_id = s.user_id where om.org_id = "workspace"."id")`,
+        lastActive:
+          sql<Date | null>`(select max(s.updated_at) from ${sessions} s inner join ${orgMembers} om on om.user_id = s.user_id where om.org_id = "workspace"."id")`.mapWith(
+            sessions.updatedAt,
+          ),
         memberCount: sql<number>`(select count(*)::int from ${orgMembers} om where om.org_id = "workspace"."id")`,
         name: workspace.name,
         ownerEmail: sql<
@@ -84,16 +108,7 @@ export async function getAdminOverview() {
       })
       .from(workspace)
       .orderBy(asc(workspace.name)),
-    db
-      .select({
-        feature: aiUsage.feature,
-        inputTokens: aiUsage.inputTokens,
-        modelId: aiUsage.modelId,
-        orgId: aiUsage.orgId,
-        outputTokens: aiUsage.outputTokens,
-      })
-      .from(aiUsage)
-      .where(and(gte(aiUsage.createdAt, month.start), lt(aiUsage.createdAt, month.end))),
+    loadUsage(month.start, month.end),
     db.select().from(aiWorkspaceModelOverrides),
     db.select({ count: count() }).from(users).where(eq(users.isSuperAdmin, false)),
     db
@@ -132,6 +147,9 @@ export async function getAdminOverview() {
 
 export async function getAdminWorkspace(orgId: string) {
   await requireSuperAdmin();
+  if (!z.string().uuid().safeParse(orgId).success) {
+    notFound();
+  }
   const [workspace] = await db.select().from(orgs).where(eq(orgs.id, orgId)).limit(1);
   if (!workspace) {
     notFound();
@@ -171,7 +189,9 @@ export async function getAdminAi() {
   const thisMonth = monthRange();
   const [settings, changes, workspaces, overrides, currentModels, thisMonthRows, lastMonthRows] =
     await Promise.all([
-      db.select().from(aiModelSettings),
+      db
+        .select({ feature: aiModelSettings.feature, modelId: aiModelSettings.modelId })
+        .from(aiModelSettings),
       db
         .select({
           changedAt: aiModelChanges.changedAt,
@@ -179,9 +199,11 @@ export async function getAdminAi() {
           feature: aiModelChanges.feature,
           modelId: aiModelChanges.modelId,
           orgId: aiModelChanges.orgId,
+          workspaceName: orgs.name,
         })
         .from(aiModelChanges)
         .innerJoin(users, eq(users.id, aiModelChanges.changedBy))
+        .leftJoin(orgs, eq(orgs.id, aiModelChanges.orgId))
         .orderBy(desc(aiModelChanges.changedAt))
         .limit(20),
       db.select({ id: orgs.id, name: orgs.name }).from(orgs).orderBy(asc(orgs.name)),
@@ -189,26 +211,8 @@ export async function getAdminAi() {
       Promise.all(
         MODEL_FEATURES.map(async (feature) => [feature, await resolveModel(feature)] as const),
       ),
-      db
-        .select({
-          feature: aiUsage.feature,
-          inputTokens: aiUsage.inputTokens,
-          modelId: aiUsage.modelId,
-          orgId: aiUsage.orgId,
-          outputTokens: aiUsage.outputTokens,
-        })
-        .from(aiUsage)
-        .where(and(gte(aiUsage.createdAt, thisMonth.start), lt(aiUsage.createdAt, thisMonth.end))),
-      db
-        .select({
-          feature: aiUsage.feature,
-          inputTokens: aiUsage.inputTokens,
-          modelId: aiUsage.modelId,
-          orgId: aiUsage.orgId,
-          outputTokens: aiUsage.outputTokens,
-        })
-        .from(aiUsage)
-        .where(and(gte(aiUsage.createdAt, lastMonth.start), lt(aiUsage.createdAt, lastMonth.end))),
+      loadUsage(thisMonth.start, thisMonth.end),
+      loadUsage(lastMonth.start, lastMonth.end),
     ]);
 
   const exampleContext = {
@@ -222,20 +226,20 @@ export async function getAdminAi() {
     user: { name: "Workspace owner" },
   } as ChatToolContext;
   const chatTools = createChatTools(exampleContext);
+  const settingsByFeature = new Map(settings.map((setting) => [setting.feature, setting.modelId]));
   const prompts: Record<ModelFeature, string> = {
     chat: buildChatSystemPrompt(exampleContext, { clients: [], recentInvoices: [] }),
     "reader-location": LOCATION_READER_SYSTEM_PROMPT,
     "reader-site-facts": SITE_READER_SYSTEM_PROMPT,
   };
-  const settingsByFeature = new Map(settings.map((setting) => [setting.feature, setting]));
   return {
     changes,
     features: MODEL_FEATURES.map((feature) => ({
       ...FEATURE_CONFIG[feature],
+      configuredModelId: settingsByFeature.get(feature) ?? null,
       feature,
       modelId: Object.fromEntries(currentModels)[feature],
       prompt: prompts[feature],
-      setting: settingsByFeature.get(feature) ?? null,
       tools:
         feature === "chat"
           ? Object.entries(chatTools).map(([name, tool]) => ({

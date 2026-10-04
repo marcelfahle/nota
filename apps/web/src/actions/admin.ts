@@ -2,7 +2,6 @@
 
 import { and, eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
-import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 
@@ -26,7 +25,6 @@ export async function changeTemporaryPassword(
   _state: AdminActionState,
   formData: FormData,
 ): Promise<AdminActionState> {
-  await headers();
   const user = await requireSuperAdmin({ allowPasswordChange: true });
   if (!user.mustChangePassword) {
     redirect("/admin");
@@ -65,18 +63,24 @@ export async function setGlobalModel(formData: FormData) {
   const admin = await requireSuperAdmin();
   const feature = modelFeature.parse(formData.get("feature"));
   const modelId = String(formData.get("modelId") ?? "");
-  if (!isAllowedModel(modelId)) {
+  if (modelId !== "fallback" && !isAllowedModel(modelId)) {
     throw new Error("Model is not allowed");
   }
   await db.transaction(async (tx) => {
+    if (modelId === "fallback") {
+      await tx.delete(aiModelSettings).where(eq(aiModelSettings.feature, feature));
+    } else {
+      await tx
+        .insert(aiModelSettings)
+        .values({ changedAt: new Date(), changedBy: admin.id, feature, modelId })
+        .onConflictDoUpdate({
+          set: { changedAt: new Date(), changedBy: admin.id, modelId },
+          target: aiModelSettings.feature,
+        });
+    }
     await tx
-      .insert(aiModelSettings)
-      .values({ changedAt: new Date(), changedBy: admin.id, feature, modelId })
-      .onConflictDoUpdate({
-        set: { changedAt: new Date(), changedBy: admin.id, modelId },
-        target: aiModelSettings.feature,
-      });
-    await tx.insert(aiModelChanges).values({ changedBy: admin.id, feature, modelId });
+      .insert(aiModelChanges)
+      .values({ changedBy: admin.id, feature, modelId: modelId === "fallback" ? null : modelId });
   });
   revalidatePath("/admin/ai");
 }
@@ -86,6 +90,9 @@ export async function setWorkspaceModel(formData: FormData) {
   const feature = modelFeature.parse(formData.get("feature"));
   const modelId = String(formData.get("modelId") ?? "");
   const orgId = z.string().uuid().parse(formData.get("orgId"));
+  if (feature !== "chat") {
+    throw new Error("Only chat supports workspace overrides");
+  }
   if (modelId !== "fallback" && !isAllowedModel(modelId)) {
     throw new Error("Model is not allowed");
   }

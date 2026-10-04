@@ -3,7 +3,7 @@ import Link from "next/link";
 import { setWorkspaceModel } from "@/actions/admin";
 import { Button } from "@/components/ui/button";
 import { getAdminWorkspace } from "@/lib/admin-data";
-import { ALLOWED_MODELS, MODEL_FEATURES, MODEL_PRICES } from "@/lib/ai-usage";
+import { ALLOWED_MODELS, MODEL_PRICES } from "@/lib/ai-usage";
 
 function date(value: Date | null) {
   return value
@@ -31,40 +31,33 @@ export default async function AdminWorkspacePage({ params }: { params: Promise<{
       </div>
 
       <section className="space-y-3">
-        <h2 className="text-lg font-semibold">Model overrides</h2>
+        <h2 className="text-lg font-semibold">Chat model override</h2>
         <div className="divide-y rounded-md border">
-          {MODEL_FEATURES.map((feature) => {
-            const current = overrides.find((override) => override.feature === feature);
-            return (
-              <form
-                action={setWorkspaceModel}
-                className="flex flex-wrap items-center gap-3 p-3"
-                key={feature}
-              >
-                <input name="feature" type="hidden" value={feature} />
-                <input name="orgId" type="hidden" value={workspace.id} />
-                <label className="min-w-44 text-sm font-medium" htmlFor={`model-${feature}`}>
-                  {feature}
-                </label>
-                <select
-                  className="h-9 min-w-64 rounded-md border bg-background px-3 text-sm"
-                  defaultValue={current?.modelId ?? "fallback"}
-                  id={`model-${feature}`}
-                  name="modelId"
-                >
-                  <option value="fallback">Use global setting</option>
-                  {ALLOWED_MODELS.map((model) => (
-                    <option key={model} value={model}>
-                      {MODEL_PRICES[model].label} · {model}
-                    </option>
-                  ))}
-                </select>
-                <Button size="sm" type="submit" variant="outline">
-                  Save
-                </Button>
-              </form>
-            );
-          })}
+          <form action={setWorkspaceModel} className="flex flex-wrap items-center gap-3 p-3">
+            <input name="feature" type="hidden" value="chat" />
+            <input name="orgId" type="hidden" value={workspace.id} />
+            <label className="min-w-44 text-sm font-medium" htmlFor="model-chat">
+              In-app chat
+            </label>
+            <select
+              className="h-9 min-w-64 rounded-md border bg-background px-3 text-sm"
+              defaultValue={
+                overrides.find((override) => override.feature === "chat")?.modelId ?? "fallback"
+              }
+              id="model-chat"
+              name="modelId"
+            >
+              <option value="fallback">Use global setting</option>
+              {ALLOWED_MODELS.map((model) => (
+                <option key={model} value={model}>
+                  {MODEL_PRICES[model].label} · {model}
+                </option>
+              ))}
+            </select>
+            <Button size="sm" type="submit" variant="outline">
+              Save
+            </Button>
+          </form>
         </div>
       </section>
 

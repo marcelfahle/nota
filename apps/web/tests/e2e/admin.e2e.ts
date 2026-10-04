@@ -55,6 +55,7 @@ test("super admin changes the temporary password, sees accounts, and changes mod
     { cwd: process.cwd(), encoding: "utf8", env: process.env },
   );
   expect(command.status, command.stderr).toBe(0);
+  expect(command.stdout).not.toContain(temporaryPassword);
 
   await page.goto("/login");
   await page.getByTestId("login-email").fill(adminEmail);
@@ -69,6 +70,9 @@ test("super admin changes the temporary password, sees accounts, and changes mod
   await page.getByRole("button", { name: "Set password" }).click();
   await expect(page).toHaveURL(/\/admin$/);
   await expect(page.getByTestId("admin-workspaces")).toContainText(`Admin flow ${suffix}`);
+  const missingWorkspace = await page.goto("/admin/workspaces/not-a-uuid");
+  expect(missingWorkspace?.status()).toBe(404);
+  await page.goto("/admin");
 
   await db.insert(aiUsage).values({
     feature: "chat",
@@ -93,6 +97,20 @@ test("super admin changes the temporary password, sees accounts, and changes mod
       .filter({ hasText: "In-app chat" })
       .getByText(/active: claude-haiku/),
   ).toBeVisible();
+  await page.getByLabel("Model for In-app chat").selectOption("fallback");
+  await page
+    .locator('form:has(label:text("Model for In-app chat"))')
+    .getByRole("button", { name: "Save" })
+    .click();
+  await expect
+    .poll(async () => {
+      const [setting] = await db
+        .select({ modelId: aiModelSettings.modelId })
+        .from(aiModelSettings)
+        .where(eq(aiModelSettings.feature, "chat"));
+      return setting?.modelId;
+    })
+    .toBeUndefined();
 
   await page
     .getByLabel(`Chat model for Admin flow ${suffix}`)

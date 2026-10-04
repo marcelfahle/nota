@@ -67,7 +67,7 @@ type UsageContext = {
 type ModelUsage = { inputTokens?: number; outputTokens?: number };
 
 export function isAllowedModel(value: string): value is AllowedModel {
-  return value in MODEL_PRICES;
+  return Object.hasOwn(MODEL_PRICES, value);
 }
 
 export async function resolveModel(feature: ModelFeature, orgId?: string | null) {
@@ -129,9 +129,10 @@ export function estimatedCost(input: {
   inputTokens: number;
   modelId: string;
   outputTokens: number;
+  requests?: number;
 }) {
   if (input.feature === "parallel-extract" || input.feature === "parallel-search") {
-    return 0.001;
+    return 0.001 * (input.requests ?? 1);
   }
   const price = MODEL_PRICES[input.modelId as AllowedModel];
   return price

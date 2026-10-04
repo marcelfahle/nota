@@ -9,17 +9,10 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { getAdminOverview } from "@/lib/admin-data";
+import { formatEstimatedCost } from "@/lib/admin-format";
 
 function date(value: Date | null) {
   return value ? new Intl.DateTimeFormat("en", { dateStyle: "medium" }).format(value) : "Never";
-}
-
-function cost(value: number) {
-  return new Intl.NumberFormat("en-US", {
-    currency: "USD",
-    maximumFractionDigits: value < 0.01 ? 4 : 2,
-    style: "currency",
-  }).format(value);
 }
 
 export default async function AdminAccountsPage({
@@ -36,7 +29,7 @@ export default async function AdminAccountsPage({
     ["Users", totals.users],
     ["Invoices sent this month", totals.invoicesSent],
     ["AI requests this month", totals.aiRequests],
-    ["Estimated AI cost this month", cost(totals.aiCost)],
+    ["Estimated AI cost this month", formatEstimatedCost(totals.aiCost)],
   ];
 
   return (
@@ -77,7 +70,7 @@ export default async function AdminAccountsPage({
                 <TableHead>Members</TableHead>
                 <TableHead>Clients</TableHead>
                 <TableHead>Invoices</TableHead>
-                <TableHead>AI this month</TableHead>
+                <TableHead>AI requests / estimated cost</TableHead>
                 <TableHead>Plan / Stripe</TableHead>
                 <TableHead>Override</TableHead>
               </TableRow>
@@ -107,7 +100,7 @@ export default async function AdminAccountsPage({
                     </span>
                   </TableCell>
                   <TableCell>
-                    {workspace.aiRequests} · {cost(workspace.aiCost)}
+                    {workspace.aiRequests} · {formatEstimatedCost(workspace.aiCost)}
                   </TableCell>
                   <TableCell>
                     {workspace.plan} / {workspace.stripeStatus ?? "none"}

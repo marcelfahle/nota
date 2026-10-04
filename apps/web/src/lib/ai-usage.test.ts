@@ -21,12 +21,15 @@ describe("AI usage pricing", () => {
         inputTokens: 0,
         modelId: "parallel/search",
         outputTokens: 0,
+        requests: 3,
       }),
-    ).toBe(0.001);
+    ).toBe(0.003);
   });
 
   test("rejects models outside the operator allowlist", () => {
     expect(isAllowedModel("claude-sonnet-5-5")).toBe(true);
     expect(isAllowedModel("unpriced-model")).toBe(false);
+    expect(isAllowedModel("constructor")).toBe(false);
+    expect(isAllowedModel("toString")).toBe(false);
   });
 });

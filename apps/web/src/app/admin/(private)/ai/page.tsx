@@ -1,15 +1,8 @@
 import { setGlobalModel, setWorkspaceModel } from "@/actions/admin";
 import { Button } from "@/components/ui/button";
 import { getAdminAi } from "@/lib/admin-data";
+import { formatEstimatedCost } from "@/lib/admin-format";
 import { ALLOWED_MODELS, MODEL_PRICES } from "@/lib/ai-usage";
-
-function cost(value: number) {
-  return new Intl.NumberFormat("en-US", {
-    currency: "USD",
-    maximumFractionDigits: value < 0.01 ? 4 : 2,
-    style: "currency",
-  }).format(value);
-}
 
 export default async function AdminAiPage() {
   const data = await getAdminAi();
@@ -28,13 +21,15 @@ export default async function AdminAiPage() {
         <div className="p-4 sm:border-r">
           <dt className="text-xs text-muted-foreground">This month</dt>
           <dd className="mt-1 font-mono text-lg font-semibold">
-            {data.thisMonth.requests} requests · {cost(data.thisMonth.cost)} estimated
+            {data.thisMonth.requests} requests · {formatEstimatedCost(data.thisMonth.cost)}{" "}
+            estimated
           </dd>
         </div>
         <div className="border-t p-4 sm:border-t-0">
           <dt className="text-xs text-muted-foreground">Last month</dt>
           <dd className="mt-1 font-mono text-lg font-semibold">
-            {data.lastMonth.requests} requests · {cost(data.lastMonth.cost)} estimated
+            {data.lastMonth.requests} requests · {formatEstimatedCost(data.lastMonth.cost)}{" "}
+            estimated
           </dd>
         </div>
       </dl>
@@ -61,10 +56,11 @@ export default async function AdminAiPage() {
                   </label>
                   <select
                     className="h-9 w-full rounded-md border bg-background px-3 text-sm sm:w-[28rem]"
-                    defaultValue={feature.modelId}
+                    defaultValue={feature.configuredModelId ?? "fallback"}
                     id={`global-${feature.feature}`}
                     name="modelId"
                   >
+                    <option value="fallback">Use {feature.env} / code fallback</option>
                     {ALLOWED_MODELS.map((model) => (
                       <option key={model} value={model}>
                         {MODEL_PRICES[model].label} · {model}
@@ -77,10 +73,18 @@ export default async function AdminAiPage() {
                 </form>
               </div>
               <details>
-                <summary className="cursor-pointer text-sm font-medium">System prompt</summary>
+                <summary className="cursor-pointer text-sm font-medium">
+                  {feature.feature === "chat" ? "System prompt example" : "System prompt"}
+                </summary>
                 <pre className="mt-3 max-h-96 overflow-auto rounded-md bg-muted p-4 text-xs leading-relaxed whitespace-pre-wrap">
                   {feature.prompt}
                 </pre>
+                {feature.feature === "chat" ? (
+                  <p className="mt-2 text-xs text-muted-foreground">
+                    Workspace, user, client, invoice, role, and date context is populated at
+                    runtime.
+                  </p>
+                ) : null}
               </details>
               {feature.tools.length > 0 ? (
                 <details>
@@ -160,7 +164,9 @@ export default async function AdminAiPage() {
               >
                 <span>
                   {change.feature} → {change.modelId ?? "global fallback"}
-                  {change.orgId ? " · workspace override" : " · global"}
+                  {change.orgId
+                    ? ` · ${change.workspaceName ?? change.orgId} workspace override`
+                    : " · global"}
                 </span>
                 <span className="text-xs text-muted-foreground">
                   {change.changedBy} · {change.changedAt.toLocaleString("en")}
