@@ -30,7 +30,9 @@ test("updates organization settings and reflects branding", async ({ page }) => 
   const payButton = preview.getByText("Pay €4,800.00");
   await expect(preview).toContainText(businessName);
   await expect(payButton).toHaveCSS("color", "rgb(31, 27, 22)");
-  await page.getByLabel("Custom brand colour").fill("#1F1B16");
+  await page.getByLabel("Custom brand colour").fill("#000");
+  await expect(payButton).toHaveCSS("color", "rgb(255, 255, 255)");
+  await page.getByLabel("Custom brand colour").fill("#797979");
   await expect(payButton).toHaveCSS("color", "rgb(255, 255, 255)");
   await page.getByRole("button", { name: "Save brand" }).click();
 
