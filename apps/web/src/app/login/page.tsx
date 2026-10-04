@@ -25,7 +25,8 @@ function LoginForm() {
   const [pending, setPending] = useState(false);
   // Keep a pending ChatGPT/Claude authorization when switching to sign-up.
   const query = searchParams.toString();
-  const registerHref = query ? `/register?${query}` : "/register";
+  // A plain visit starts with the website read; a pending authorization keeps the form.
+  const registerHref = query ? `/register?${query}` : "/start";
   const notice =
     searchParams.get("reset") === "1" ? "Password updated. Sign in with your new password." : null;
 

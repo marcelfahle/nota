@@ -104,7 +104,9 @@
 }
 
 @media (prefers-color-scheme: dark) {
-  :root[data-theme="system"] {
+  /* Also a wrapper: signed-out onboarding follows the system inside a light root. */
+  :root[data-theme="system"],
+  .onboarding[data-theme="system"] {
     color-scheme: dark;
     --paper: #181512;
     --paper-2: #12100d;
@@ -249,6 +251,200 @@
     border-radius: inherit;
     background: var(--sheet);
   }
+}
+
+/* Onboarding: the website read and the invoice that paints itself. */
+@layer utilities {
+  .onboarding-title {
+    overflow-wrap: anywhere;
+    font-size: clamp(2.5rem, 6.2vw, 4.25rem);
+    line-height: 1.02;
+    font-weight: 650;
+    font-variation-settings: "wdth" 76;
+    letter-spacing: -0.015em;
+    text-wrap: balance;
+    outline: none;
+  }
+  .onboarding-invoice {
+    view-transition-name: onboarding-invoice;
+  }
+  /* Step one shows only the head of the blank invoice, fading into the page. */
+  .onboarding-peek {
+    max-height: 13.5rem;
+    overflow: hidden;
+    padding: 0 12px 0 2px;
+    mask-image: linear-gradient(#000 35%, transparent);
+  }
+  .onboarding-rise {
+    animation: onboarding-rise 520ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+  .onboarding-pop {
+    animation: onboarding-pop 420ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+  /* A value landing on the invoice: the highlighter passes over it once. */
+  .onboarding-land {
+    background: linear-gradient(var(--color-highlighter), var(--color-highlighter)) no-repeat left /
+      0% 100%;
+    animation: onboarding-land 1100ms ease-out both;
+  }
+  .onboarding-missing {
+    display: inline-block;
+    border-radius: 2px;
+    background: var(--color-highlighter);
+    padding: 0 0.35em;
+    color: var(--ink);
+    font-weight: 500;
+    line-height: 1.5;
+  }
+  .onboarding-pulse {
+    animation: onboarding-pulse 1400ms ease-in-out infinite;
+  }
+  /* Work still in flight: a quiet line that breathes until it resolves. */
+  .onboarding-pending {
+    color: var(--ink-2);
+    animation: onboarding-pulse 1600ms ease-in-out infinite;
+  }
+  .onboarding-dots::after {
+    content: "…";
+    display: inline-block;
+    width: 1.2em;
+    overflow: hidden;
+    vertical-align: bottom;
+    animation: onboarding-dots 1400ms steps(4, end) infinite;
+  }
+  .onboarding-chip {
+    display: inline-block;
+    max-width: 100%;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    background: var(--sheet);
+    padding: 0.05em 0.7em 0.1em;
+    font-family: var(--font-archivo), sans-serif;
+    font-size: 0.84em;
+    font-weight: 500;
+    line-height: 1.5;
+    color: var(--ink);
+    overflow-wrap: anywhere;
+    transition:
+      border-color 150ms,
+      box-shadow 150ms;
+  }
+  button.onboarding-chip {
+    position: relative;
+    cursor: text;
+  }
+  /* A full-height touch target without stretching the line. */
+  button.onboarding-chip::after,
+  .onboarding-confirm::after {
+    content: "";
+    position: absolute;
+    inset: -8px 0;
+  }
+  button.onboarding-chip:active {
+    background: var(--paper-2);
+  }
+  button.onboarding-chip:hover {
+    border-color: var(--ink-2);
+    box-shadow: 0 2px 0 var(--line);
+  }
+  .onboarding-chip-empty {
+    border-style: dashed;
+    color: var(--ink-2);
+  }
+  .onboarding-chip-input {
+    max-width: 100%;
+    border-color: var(--ink);
+    outline: none;
+  }
+  .onboarding-dot {
+    width: 1.15rem;
+    height: 1.15rem;
+    border-radius: 999px;
+    box-shadow: inset 0 0 0 1px rgb(0 0 0 / 12%);
+    transition:
+      transform 180ms cubic-bezier(0.16, 1, 0.3, 1),
+      box-shadow 180ms;
+    /* 44px touch target around a small dot. */
+    position: relative;
+  }
+  .onboarding-dot::after {
+    content: "";
+    position: absolute;
+    inset: -13px -4px;
+  }
+  .onboarding-dot:hover {
+    transform: scale(1.18);
+  }
+  .onboarding-dot[aria-pressed="true"] {
+    transform: scale(1.18);
+    box-shadow:
+      0 0 0 2px var(--paper),
+      0 0 0 4px var(--ink);
+  }
+  .onboarding-confirm {
+    position: relative;
+    display: inline-flex;
+    min-height: 1.9em;
+    align-items: center;
+    border-radius: 999px;
+    background: var(--primary);
+    padding: 0 0.8em;
+    font-family: var(--font-archivo), sans-serif;
+    font-size: 0.78em;
+    font-weight: 600;
+    color: var(--primary-foreground);
+    transition: opacity 150ms;
+  }
+  .onboarding-confirm:hover {
+    opacity: 0.88;
+  }
+  .onboarding-confirm:active {
+    opacity: 0.76;
+  }
+}
+
+@keyframes onboarding-rise {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+    filter: blur(3px);
+  }
+}
+@keyframes onboarding-pop {
+  from {
+    opacity: 0;
+    transform: scale(0.6);
+  }
+}
+@keyframes onboarding-land {
+  0% {
+    background-size: 0% 100%;
+  }
+  35% {
+    background-size: 100% 100%;
+  }
+  70% {
+    background-size: 100% 100%;
+    background-position: right;
+  }
+  100% {
+    background-size: 0% 100%;
+    background-position: right;
+  }
+}
+@keyframes onboarding-pulse {
+  50% {
+    opacity: 0.45;
+  }
+}
+@keyframes onboarding-dots {
+  from {
+    width: 0;
+  }
+}
+::view-transition-group(onboarding-invoice) {
+  animation-duration: 620ms;
+  animation-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 @media (prefers-reduced-motion: reduce) {
