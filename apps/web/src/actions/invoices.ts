@@ -10,11 +10,13 @@ import { activityLog, invoices } from "@/lib/db/schema";
 import { canSendInvoice as canSendInvoiceStatus } from "@/lib/invoice-lifecycle";
 import {
   cancelInvoice as cancelInvoiceService,
+  createCreditNote as createCreditNoteService,
   createInvoice as createInvoiceService,
   deleteInvoice as deleteInvoiceService,
   duplicateInvoice as duplicateInvoiceService,
   getOwnedInvoice,
   markInvoicePaid as markInvoicePaidService,
+  recordInvoicePayment as recordInvoicePaymentService,
   sendInvoice as sendInvoiceService,
   sendReminder as sendReminderService,
   type InvoiceServiceContext,
@@ -204,6 +206,36 @@ export async function markInvoicePaid(invoiceId: string) {
   revalidatePath("/invoices");
   revalidatePath(`/invoices/${invoiceId}`);
   return { success: true };
+}
+
+export async function recordInvoicePayment(
+  invoiceId: string,
+  input: { amount: number; method: "bank_transfer" | "other"; note?: string },
+) {
+  const currentUser = await getCurrentUser();
+  const serviceResult = await recordInvoicePaymentService(
+    buildServiceContext(currentUser),
+    invoiceId,
+    input,
+  );
+  if ("error" in serviceResult) {
+    return { error: serviceResult.error };
+  }
+
+  revalidatePath("/invoices");
+  revalidatePath(`/invoices/${invoiceId}`);
+  return { success: true, warning: serviceResult.warning };
+}
+
+export async function createCreditNote(invoiceId: string) {
+  const currentUser = await getCurrentUser();
+  const serviceResult = await createCreditNoteService(buildServiceContext(currentUser), invoiceId);
+  if ("error" in serviceResult) {
+    return { error: serviceResult.error };
+  }
+
+  revalidatePath("/invoices");
+  return { invoiceId: serviceResult.invoiceId, success: true };
 }
 
 export async function cancelInvoice(invoiceId: string) {

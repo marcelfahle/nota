@@ -62,7 +62,19 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
         action: a.action,
         createdAt: a.createdAt?.toISOString() ?? "",
         id: a.id,
+        metadata: a.metadata,
+        source: a.source,
+        sourceClient: a.sourceClient,
       }))}
+      business={{
+        address: org.businessAddress,
+        brandColor: org.brandColor,
+        city: org.city,
+        country: org.country,
+        logoUrl: org.logoUrl,
+        name: org.businessName || org.name,
+        region: org.region,
+      }}
       invoice={{
         ...invoice,
         client: invoice.client ?? { email: "", name: "Unknown" },
