@@ -195,7 +195,32 @@ test("super admin changes the temporary password, sees accounts, and changes mod
   });
   await db.insert(activityLog).values({ action: "created", invoiceId: invoice.id });
 
+  // Deactivating locks the member out without removing anything; reactivating lets them back in.
   await page.goto(`/admin/workspaces/${org.id}`);
+  await page.getByTestId("admin-activation-submit").click();
+  await expect(page.getByTestId("admin-deactivated")).toBeVisible();
+  const memberContext = await browser.newContext();
+  const memberPage = await memberContext.newPage();
+  await memberPage.goto("/login");
+  await memberPage.getByTestId("login-email").fill(account.email);
+  await memberPage.getByTestId("login-password").fill(account.password);
+  await memberPage.getByTestId("login-submit").click();
+  await expect(memberPage).toHaveURL(/\/deactivated$/);
+  await expect(
+    memberPage.getByRole("heading", { name: "This workspace is paused." }),
+  ).toBeVisible();
+  await memberPage.goto("/invoices");
+  await expect(memberPage).toHaveURL(/\/deactivated$/);
+  const refused = await memberPage.request.post("/api/chat", { data: { messages: [] } });
+  expect(refused.status()).toBe(401);
+  expect(await db.select().from(invoices).where(eq(invoices.id, invoice.id))).toHaveLength(1);
+
+  await page.getByTestId("admin-activation-submit").click();
+  await expect(page.getByTestId("admin-deactivated")).toHaveCount(0);
+  await memberPage.goto("/home");
+  await expect(memberPage).toHaveURL(/\/home$/);
+  await memberContext.close();
+
   await page.getByTestId("admin-delete-open").click();
   await page.getByTestId("admin-delete-confirmation").fill("not the name");
   await expect(page.getByTestId("admin-delete-submit")).toBeDisabled();

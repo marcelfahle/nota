@@ -1,10 +1,10 @@
-import { getCurrentUserOrNull } from "@/lib/auth";
+import { getActiveUserOrNull } from "@/lib/auth";
 import { getAppEnv } from "@/lib/env";
 import { canManageSettings } from "@/lib/roles";
 import { finishStripeConnect } from "@/lib/stripe-connect";
 
 export async function GET(request: Request) {
-  const context = await getCurrentUserOrNull();
+  const context = await getActiveUserOrNull();
   const destination = new URL("/settings", getAppEnv().APP_URL);
   if (!context || !canManageSettings(context.role)) {
     return new Response("Sign in as the workspace owner and restart the Stripe connection.", {

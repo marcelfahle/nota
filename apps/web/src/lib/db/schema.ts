@@ -86,6 +86,8 @@ export const orgs = pgTable("orgs", {
   country: text(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   creditNotePrefix: text("credit_note_prefix").notNull().default("CN"),
+  // Set by an operator to lock the workspace without deleting anything.
+  deactivatedAt: timestamp("deactivated_at"),
   defaultCurrency: text("default_currency").notNull().default("EUR"),
   faviconUrl: text("favicon_url"),
   firstRunCompletedAt: timestamp("first_run_completed_at").defaultNow(),

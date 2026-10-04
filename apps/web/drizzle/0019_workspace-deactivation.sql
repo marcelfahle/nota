@@ -1,0 +1,1 @@
+ALTER TABLE "orgs" ADD COLUMN "deactivated_at" timestamp;

@@ -108,7 +108,7 @@ const responseModule = await import("@/lib/api-response");
 let signedIn = false;
 mock.module("@/lib/auth", () => ({
   ...authModule,
-  getCurrentUserOrNull: async () => (signedIn ? auth : null),
+  getActiveUserOrNull: async () => (signedIn ? auth : null),
 }));
 mock.module("@/lib/api-response", () => ({
   ...responseModule,

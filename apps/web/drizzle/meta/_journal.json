@@ -134,6 +134,13 @@
       "when": 1791131921287,
       "tag": "0018_first-run-invoice",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1791134814139,
+      "tag": "0019_workspace-deactivation",
+      "breakpoints": true
     }
   ]
 }

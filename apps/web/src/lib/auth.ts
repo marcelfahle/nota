@@ -43,8 +43,18 @@ export async function getCurrentUser(): Promise<AuthenticatedUserContext> {
   if (!user) {
     redirect("/login");
   }
+  // A deactivated workspace keeps its data but its members cannot use the app.
+  if (user.org.deactivatedAt) {
+    redirect("/deactivated");
+  }
 
   return user;
+}
+
+/** For API routes: a member of a deactivated workspace is treated as signed out. */
+export async function getActiveUserOrNull() {
+  const user = await getCurrentUserOrNull();
+  return user && !user.org.deactivatedAt ? user : null;
 }
 
 export async function getCurrentOrg() {

@@ -91,6 +91,7 @@ export async function getAdminOverview() {
       .select({
         clientCount: sql<number>`(select count(*)::int from ${clients} c where c.org_id = "workspace"."id")`,
         createdAt: workspace.createdAt,
+        deactivatedAt: workspace.deactivatedAt,
         id: workspace.id,
         invoiceCount: sql<number>`(select count(*)::int from ${invoices} i where i.org_id = "workspace"."id" and i.kind = 'invoice')`,
         invoicesLast30Days: sql<number>`(select count(*)::int from ${invoices} i where i.org_id = "workspace"."id" and i.kind = 'invoice' and i.created_at >= ${thirtyDaysAgo})`,

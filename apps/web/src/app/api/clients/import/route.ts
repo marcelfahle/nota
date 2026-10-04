@@ -1,8 +1,8 @@
-import { getCurrentUserOrNull } from "@/lib/auth";
+import { getActiveUserOrNull } from "@/lib/auth";
 import { handleClientImport } from "@/lib/client-import-http";
 
 export async function POST(request: Request) {
-  const auth = await getCurrentUserOrNull();
+  const auth = await getActiveUserOrNull();
   if (!auth) {
     return Response.json({ error: "Unauthorized" }, { status: 401 });
   }

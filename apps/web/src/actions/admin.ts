@@ -179,3 +179,23 @@ export async function deleteWorkspaceAsAdmin(
   revalidatePath("/admin");
   redirect("/admin");
 }
+
+/** Locks a workspace out, or lets it back in. Nothing is deleted and billing is not touched. */
+export async function setWorkspaceActive(formData: FormData) {
+  const admin = await requireSuperAdmin();
+  const orgId = z.string().uuid().parse(formData.get("orgId"));
+  const active = formData.get("active") === "true";
+  const [workspace] = await db
+    .update(orgs)
+    .set({ deactivatedAt: active ? null : new Date() })
+    .where(eq(orgs.id, orgId))
+    .returning({ name: orgs.name });
+  if (workspace) {
+    // eslint-disable-next-line no-console -- The record of who locked or unlocked a workspace.
+    console.info(
+      `[admin] ${admin.email} ${active ? "reactivated" : "deactivated"} workspace "${workspace.name}" (${orgId})`,
+    );
+  }
+  revalidatePath("/admin");
+  revalidatePath(`/admin/workspaces/${orgId}`);
+}
