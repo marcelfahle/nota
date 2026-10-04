@@ -489,6 +489,17 @@
     background-position: right;
   }
 }
+@keyframes dock-rise {
+  from {
+    transform: translateY(1.5rem);
+    opacity: 0;
+  }
+}
+@keyframes dock-fade {
+  from {
+    opacity: 0;
+  }
+}
 @keyframes onboarding-pulse {
   50% {
     opacity: 0.45;

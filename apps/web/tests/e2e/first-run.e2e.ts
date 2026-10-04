@@ -44,6 +44,21 @@ for (const viewport of viewports) {
     await expect(paper).toContainText(clientName, { timeout: 45_000 });
     await expect(paper).toContainText("Design");
     await expect(paper).toContainText("€1,800.00");
+    // Drafted values arrive under the highlighter; what loaded with the page does not.
+    await expect(paper.locator(".onboarding-land").filter({ hasText: clientName })).toBeVisible();
+
+    if (viewport.label === "phone") {
+      // The draft lands on the invoice; the page stays one scroll with Nota docked.
+      const conversation = page.getByRole("region", { name: "Conversation with Nota" });
+      await expect(conversation).toHaveCount(0);
+      expect(await page.evaluate(() => document.body.style.overflow)).toBe("");
+      await page.getByRole("button", { name: /Show conversation/ }).click();
+      await expect(conversation).toContainText(clientName);
+      await page.getByRole("button", { name: "Back to invoice" }).click();
+      await expect(conversation).toHaveCount(0);
+      expect(await page.evaluate(() => document.body.style.overflow)).toBe("");
+      await expect(page.getByRole("button", { name: "Next: your legal details" })).toBeVisible();
+    }
 
     await page.getByRole("button", { name: /Legal name and address/ }).click();
     await page.getByLabel("Legal name").fill("First Run Studio SL");
