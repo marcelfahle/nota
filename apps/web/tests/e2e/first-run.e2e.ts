@@ -32,6 +32,11 @@ for (const viewport of viewports) {
       expect(paperBox).not.toBeNull();
       expect(questionBox).not.toBeNull();
       expect(paperBox!.y).toBeLessThan(questionBox!.y);
+      // The screen is a pane: the document never scrolls and Nota is its footer.
+      const dock = await page.getByRole("region", { name: "Ask Nota" }).boundingBox();
+      expect(Math.round(dock!.y + dock!.height)).toBe(viewport.height);
+      await page.mouse.wheel(0, 2000);
+      expect(await page.evaluate(() => scrollY)).toBe(0);
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
         true,
       );

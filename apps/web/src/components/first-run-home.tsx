@@ -251,6 +251,7 @@ export function FirstRunHome({ data }: { data: FirstRunHomeData }) {
   const router = useRouter();
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const editorRef = useRef<HTMLDivElement>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
   const sendRef = useRef<HTMLElement>(null);
   const [settled] = useState(() => {
     let done = false;
@@ -316,7 +317,7 @@ export function FirstRunHome({ data }: { data: FirstRunHomeData }) {
   function showPaper() {
     if (window.matchMedia("(max-width: 1023px)").matches) {
       setEditor(null);
-      window.scrollTo({ behavior: "smooth", top: 0 });
+      scrollRef.current?.scrollTo({ behavior: "smooth", top: 0 });
     }
   }
 
@@ -386,11 +387,19 @@ export function FirstRunHome({ data }: { data: FirstRunHomeData }) {
 
   return (
     <Settled value={settled}>
-      <div className="mx-auto max-w-[1120px] max-lg:pb-44">
-        <div className="grid items-start gap-7 lg:grid-cols-[minmax(0,1.35fr)_minmax(320px,0.65fr)] lg:gap-10">
+      {/* On a phone this is a pane, not a page: the invoice scrolls above, Nota
+          sits below as a footer, and nothing moves underneath either. */}
+      <div
+        className="mx-auto max-w-[1120px] max-lg:relative max-lg:flex max-lg:min-h-0 max-lg:w-full max-lg:max-w-none max-lg:flex-1 max-lg:flex-col lg:grid lg:grid-cols-[minmax(0,1.35fr)_minmax(320px,0.65fr)] lg:grid-rows-[auto_auto_auto_1fr] lg:items-start lg:gap-x-10 lg:gap-y-5"
+        data-first-run
+      >
+        <div
+          className="max-lg:min-h-0 max-lg:flex-1 max-lg:space-y-7 max-lg:overflow-y-auto max-lg:overscroll-contain max-lg:px-[max(1rem,env(safe-area-inset-left))] max-lg:pt-6 max-lg:pb-10 sm:max-lg:px-8 lg:contents"
+          ref={scrollRef}
+        >
           <article
             aria-label="Your first invoice"
-            className="invoice-paper order-1 overflow-hidden border border-black/10 p-5 text-[#1f1b16] shadow-[0_24px_70px_-42px_rgb(31_27_22/55%)] sm:p-8 lg:sticky lg:top-6"
+            className="invoice-paper overflow-hidden border border-black/10 p-5 text-[#1f1b16] shadow-[0_24px_70px_-42px_rgb(31_27_22/55%)] sm:p-8 lg:sticky lg:top-6 lg:col-start-1 lg:row-span-4 lg:row-start-1"
             data-testid="first-run-invoice"
           >
             <header className="flex items-start justify-between gap-4 border-b border-black/10 pb-5 sm:pb-6">
@@ -535,163 +544,162 @@ export function FirstRunHome({ data }: { data: FirstRunHomeData }) {
             </button>
           </article>
 
-          <div className="order-2 min-w-0 space-y-5 max-lg:contents">
-            <div className="space-y-2 max-lg:hidden">
-              <p className="nota-label">Your first invoice</p>
-              <h1 className="!text-[2rem] !leading-[1.05]">Who’s the first one for?</h1>
-              <p className="max-w-md text-sm leading-6 text-muted-foreground">
-                One sentence is enough. Include who, what you did, the price, and their email.
-              </p>
-            </div>
-            <ChatPanel
-              dockAction={nextStep}
-              inputRef={inputRef}
-              mode="first-run"
-              onOpenChange={setChatOpen}
-              open={chatOpen}
-              prompt={
-                invoice
-                  ? {
-                      label: "Change anything",
-                      placeholder: "Make it 4 days, due in 30",
-                      question: "Who’s the first one for?",
-                      submitLabel: "Update",
-                    }
-                  : {
-                      label: "Client, work, price, email",
-                      placeholder: "Acme GmbH, 3 days of design at €600, billing@acme.com",
-                      question: "Who’s the first one for?",
-                      submitLabel: "Draft it",
-                    }
-              }
-              starterPrompts={[]}
-            />
+          <div className="min-w-0 space-y-2 max-lg:hidden lg:col-start-2 lg:row-start-1">
+            <p className="nota-label">Your first invoice</p>
+            <h1 className="!text-[2rem] !leading-[1.05]">Who’s the first one for?</h1>
+            <p className="max-w-md text-sm leading-6 text-muted-foreground">
+              One sentence is enough. Include who, what you did, the price, and their email.
+            </p>
+          </div>
 
-            <section
-              aria-labelledby="finish-invoice-heading"
-              className="order-2 border-t pt-5 max-lg:min-w-0"
-            >
-              <h2 className="nota-label text-foreground" id="finish-invoice-heading">
-                Finish on the invoice
-              </h2>
-              <div className="mt-3 divide-y">
-                <button
-                  className="flex min-h-12 w-full items-center justify-between gap-3 py-3 text-left text-sm hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
-                  onClick={() => setEditor(editor === "profile" ? null : "profile")}
-                  type="button"
-                >
-                  <span className="flex items-center gap-2.5">
-                    <span
-                      className={cn(
-                        "grid size-5 place-items-center rounded-full border",
-                        legalReady && "bg-primary text-primary-foreground",
-                      )}
-                    >
-                      {legalReady ? <Check className="size-3" /> : "1"}
-                    </span>
-                    Legal name and address
-                  </span>
-                  <ChevronDown
-                    className={cn(
-                      "size-4 transition-transform",
-                      editor === "profile" && "rotate-180",
-                    )}
-                  />
-                </button>
-                <button
-                  className="flex min-h-12 w-full items-center justify-between gap-3 py-3 text-left text-sm hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
-                  onClick={() => setEditor(editor === "bank" ? null : "bank")}
-                  type="button"
-                >
-                  <span className="flex items-center gap-2.5">
-                    <span
-                      className={cn(
-                        "grid size-5 place-items-center rounded-full border",
-                        bankReady && "bg-primary text-primary-foreground",
-                      )}
-                    >
-                      {bankReady ? <Check className="size-3" /> : "2"}
-                    </span>
-                    Bank details
-                  </span>
-                  <ChevronDown
-                    className={cn("size-4 transition-transform", editor === "bank" && "rotate-180")}
-                  />
-                </button>
-              </div>
-
-              {editor ? (
-                <div
-                  className="mt-4 scroll-mt-24 rounded-lg border bg-card p-4 sm:p-5"
-                  ref={editorRef}
-                >
-                  {editor === "profile" ? (
-                    <ProfileForm onSaved={showPaper} org={data.org} />
-                  ) : (
-                    <BankForm bankAccount={data.bankAccount} onSaved={showPaper} />
-                  )}
-                </div>
-              ) : null}
-            </section>
-
-            <section
-              aria-label="Send your first invoice"
-              className="order-2 space-y-3 border-t pt-5 max-lg:min-w-0"
-              ref={sendRef}
-            >
-              <Button
-                className="w-full"
-                disabled={!readyForTest || pending || testSent}
-                onClick={sendTest}
+          <section
+            aria-labelledby="finish-invoice-heading"
+            className="min-w-0 border-t pt-5 lg:col-start-2 lg:row-start-3"
+          >
+            <h2 className="nota-label text-foreground" id="finish-invoice-heading">
+              Finish on the invoice
+            </h2>
+            <div className="mt-3 divide-y">
+              <button
+                className="flex min-h-12 w-full items-center justify-between gap-3 py-3 text-left text-sm hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+                onClick={() => setEditor(editor === "profile" ? null : "profile")}
                 type="button"
               >
-                {testSent ? <Check /> : <Mail />}
-                {testSent ? "Test copy sent" : "Send it to me first"}
+                <span className="flex items-center gap-2.5">
+                  <span
+                    className={cn(
+                      "grid size-5 place-items-center rounded-full border",
+                      legalReady && "bg-primary text-primary-foreground",
+                    )}
+                  >
+                    {legalReady ? <Check className="size-3" /> : "1"}
+                  </span>
+                  Legal name and address
+                </span>
+                <ChevronDown
+                  className={cn(
+                    "size-4 transition-transform",
+                    editor === "profile" && "rotate-180",
+                  )}
+                />
+              </button>
+              <button
+                className="flex min-h-12 w-full items-center justify-between gap-3 py-3 text-left text-sm hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+                onClick={() => setEditor(editor === "bank" ? null : "bank")}
+                type="button"
+              >
+                <span className="flex items-center gap-2.5">
+                  <span
+                    className={cn(
+                      "grid size-5 place-items-center rounded-full border",
+                      bankReady && "bg-primary text-primary-foreground",
+                    )}
+                  >
+                    {bankReady ? <Check className="size-3" /> : "2"}
+                  </span>
+                  Bank details
+                </span>
+                <ChevronDown
+                  className={cn("size-4 transition-transform", editor === "bank" && "rotate-180")}
+                />
+              </button>
+            </div>
+
+            {editor ? (
+              <div
+                className="mt-4 scroll-mt-24 rounded-lg border bg-card p-4 sm:p-5"
+                ref={editorRef}
+              >
+                {editor === "profile" ? (
+                  <ProfileForm onSaved={showPaper} org={data.org} />
+                ) : (
+                  <BankForm bankAccount={data.bankAccount} onSaved={showPaper} />
+                )}
+              </div>
+            ) : null}
+          </section>
+
+          <section
+            aria-label="Send your first invoice"
+            className="min-w-0 space-y-3 border-t pt-5 lg:col-start-2 lg:row-start-4"
+            ref={sendRef}
+          >
+            <Button
+              className="w-full"
+              disabled={!readyForTest || pending || testSent}
+              onClick={sendTest}
+              type="button"
+            >
+              {testSent ? <Check /> : <Mail />}
+              {testSent ? "Test copy sent" : "Send it to me first"}
+            </Button>
+            {!readyForTest ? (
+              <p className="text-xs leading-5 text-muted-foreground">
+                Fill the highlighted client, work, legal, and bank details to send a test copy.
+              </p>
+            ) : null}
+            {testSent ? (
+              <Button
+                className="w-full"
+                disabled={pending}
+                onClick={sendRealInvoice}
+                type="button"
+                variant="outline"
+              >
+                <Send /> Send invoice
               </Button>
-              {!readyForTest ? (
-                <p className="text-xs leading-5 text-muted-foreground">
-                  Fill the highlighted client, work, legal, and bank details to send a test copy.
+            ) : null}
+
+            {verificationOpen ? (
+              <div
+                className="space-y-3 rounded-lg border bg-card p-4"
+                data-testid="first-run-verify"
+              >
+                <p className="text-sm font-semibold">Confirm {data.email}</p>
+                <p className="text-sm leading-6 text-muted-foreground">
+                  We’ll send a one-time link. Come back here after confirming, then send the
+                  invoice.
                 </p>
-              ) : null}
-              {testSent ? (
-                <Button
-                  className="w-full"
-                  disabled={pending}
-                  onClick={sendRealInvoice}
-                  type="button"
-                  variant="outline"
-                >
-                  <Send /> Send invoice
+                <Button disabled={pending} onClick={requestVerification} size="sm" type="button">
+                  Send confirmation link
                 </Button>
-              ) : null}
+              </div>
+            ) : null}
 
-              {verificationOpen ? (
-                <div
-                  className="space-y-3 rounded-lg border bg-card p-4"
-                  data-testid="first-run-verify"
-                >
-                  <p className="text-sm font-semibold">Confirm {data.email}</p>
-                  <p className="text-sm leading-6 text-muted-foreground">
-                    We’ll send a one-time link. Come back here after confirming, then send the
-                    invoice.
-                  </p>
-                  <Button disabled={pending} onClick={requestVerification} size="sm" type="button">
-                    Send confirmation link
-                  </Button>
-                </div>
-              ) : null}
-
-              {notice ? (
-                <p
-                  className={cn("text-sm", notice.kind === "error" && "text-destructive")}
-                  role={notice.kind === "error" ? "alert" : "status"}
-                >
-                  {notice.text}
-                </p>
-              ) : null}
-            </section>
-          </div>
+            {notice ? (
+              <p
+                className={cn("text-sm", notice.kind === "error" && "text-destructive")}
+                role={notice.kind === "error" ? "alert" : "status"}
+              >
+                {notice.text}
+              </p>
+            ) : null}
+          </section>
         </div>
+        <ChatPanel
+          dockAction={nextStep}
+          inputRef={inputRef}
+          mode="first-run"
+          onDockSubmit={() => scrollRef.current?.scrollTo({ behavior: "smooth", top: 0 })}
+          onOpenChange={setChatOpen}
+          open={chatOpen}
+          prompt={
+            invoice
+              ? {
+                  label: "Change anything",
+                  placeholder: "Make it 4 days, due in 30",
+                  question: "Who’s the first one for?",
+                  submitLabel: "Update",
+                }
+              : {
+                  label: "Client, work, price, email",
+                  placeholder: "Acme GmbH, 3 days of design at €600, billing@acme.com",
+                  question: "Who’s the first one for?",
+                  submitLabel: "Draft it",
+                }
+          }
+          starterPrompts={[]}
+        />
       </div>
     </Settled>
   );
