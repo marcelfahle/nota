@@ -5,6 +5,7 @@ import { DefaultChatTransport, isTextUIPart, isToolOrDynamicToolUIPart, type UIM
 import {
   ArrowLeft,
   ArrowRight,
+  ChevronUp,
   Download,
   FileArchive,
   LoaderCircle,
@@ -108,6 +109,13 @@ const transport = new DefaultChatTransport({
   api: "/api/chat",
   credentials: "same-origin",
 });
+
+// Below this width the first-run chat docks to the bottom edge, under the invoice.
+const DOCK_QUERY = "(max-width: 1023px)";
+
+function isDocked(mode: "first-run" | "home" | "panel") {
+  return mode === "first-run" && window.matchMedia(DOCK_QUERY).matches;
+}
 
 function getPageContextLabel(pathname: string) {
   if (pathname === "/invoices/new") {
@@ -469,6 +477,7 @@ function MessageBubble({ message }: { message: UIMessage }) {
 }
 
 export function ChatPanel({
+  dockAction,
   inputRef,
   mode,
   onOpenChange,
@@ -476,11 +485,13 @@ export function ChatPanel({
   prompt,
   starterPrompts = STARTER_PROMPTS,
 }: {
+  /** First run only: the one next step, offered in the phone dock. */
+  dockAction?: { label: string; onClick: () => void };
   inputRef: React.RefObject<HTMLTextAreaElement | null>;
   mode: "first-run" | "home" | "panel";
   onOpenChange: (open: boolean) => void;
   open: boolean;
-  prompt?: { label: string; placeholder: string; submitLabel: string };
+  prompt?: { label: string; placeholder: string; question?: string; submitLabel: string };
   starterPrompts?: ReadonlyArray<string>;
 }) {
   const router = useRouter();
@@ -502,12 +513,18 @@ export function ChatPanel({
   useEffect(() => {
     const panel = dialog.current;
     if (!panel) {
+      // Docked, focusing the composer would raise the keyboard over the transcript.
+      const docked = isDocked(mode);
       if (mode !== "panel" && open) {
         wasOpen.current = true;
-        inputRef.current?.focus();
+        if (!docked) {
+          inputRef.current?.focus();
+        }
       }
       if (!open && wasOpen.current) {
-        (mode !== "panel" && !csvFile ? inputRef.current : toggleButton.current)?.focus();
+        if (!docked) {
+          (mode !== "panel" && !csvFile ? inputRef.current : toggleButton.current)?.focus();
+        }
         wasOpen.current = false;
       }
       return;
@@ -546,12 +563,14 @@ export function ChatPanel({
   }, [csvFile, inputRef, mode, open]);
 
   useEffect(() => {
-    if (!open) {
+    // The first-run dock tracks the keyboard even while the transcript is closed.
+    const docked = mode === "first-run";
+    if (!open && !docked) {
       return;
     }
 
     const container = mode === "panel" ? dialog.current : conversationContainer.current;
-    const mobile = window.matchMedia("(max-width: 639px)");
+    const mobile = window.matchMedia(docked ? DOCK_QUERY : "(max-width: 639px)");
     const viewport = window.visualViewport;
     if (!container || !mobile.matches) {
       return;
@@ -566,6 +585,15 @@ export function ChatPanel({
         : 0;
       container?.style.setProperty("--chat-viewport-height", `${height}px`);
       container?.style.setProperty("--chat-viewport-top", `${offsetTop}px`);
+      if (docked && container) {
+        // Fixed elements sit behind the on-screen keyboard; lift the dock above it.
+        const keyboard =
+          viewport && viewport.scale === 1
+            ? Math.max(0, document.documentElement.clientHeight - height - offsetTop)
+            : 0;
+        container.style.setProperty("--chat-dock-bottom", `${keyboard}px`);
+        container.dataset.keyboard = String(keyboard > 120);
+      }
       requestAnimationFrame(() => {
         if (messages) {
           messages.scrollTop = messages.scrollHeight - messages.clientHeight - distanceFromBottom;
@@ -574,13 +602,20 @@ export function ChatPanel({
     }
 
     const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
+    if (open) {
+      document.body.style.overflow = "hidden";
+      if (docked && messagesContainer.current) {
+        messagesContainer.current.scrollTop = messagesContainer.current.scrollHeight;
+      }
+    }
     syncViewport();
     viewport?.addEventListener("resize", syncViewport);
     viewport?.addEventListener("scroll", syncViewport);
     window.addEventListener("resize", syncViewport);
     return () => {
-      document.body.style.overflow = previousOverflow;
+      if (open) {
+        document.body.style.overflow = previousOverflow;
+      }
       viewport?.removeEventListener("resize", syncViewport);
       viewport?.removeEventListener("scroll", syncViewport);
       window.removeEventListener("resize", syncViewport);
@@ -591,6 +626,16 @@ export function ChatPanel({
     experimental_throttle: 50,
     transport,
   });
+
+  // A failed request hands the words back rather than losing them.
+  const lastSent = useRef("");
+  useEffect(() => {
+    if (error && lastSent.current) {
+      const sent = lastSent.current;
+      lastSent.current = "";
+      setInput((current) => current || sent);
+    }
+  }, [error]);
 
   const isBusy = !historyLoaded || status === "submitted" || status === "streaming" || importBusy;
 
@@ -649,16 +694,25 @@ export function ChatPanel({
     }
 
     clearError();
-    onOpenChange(true);
+    if (!open && isDocked(mode)) {
+      // Stay on the invoice: put the keyboard away so the draft is seen landing.
+      inputRef.current?.blur();
+      window.scrollTo({ behavior: "smooth", top: 0 });
+    } else {
+      onOpenChange(true);
+    }
 
     try {
       const entityId = pathname.match(/^\/(?:clients|invoices)\/([\da-f-]{36})(?:\/|$)/i)?.[1];
+      // Clear at once so the sent words do not sit in the composer while Nota works.
+      lastSent.current = value;
+      setInput("");
       await sendMessage(
         { text: trimmedValue },
         { body: { pageContext: { entityId, route: pathname } } },
       );
-      setInput("");
     } catch {
+      setInput(value);
       // useChat exposes the request failure via `error`; swallow here to avoid an unhandled rejection
     }
   }
@@ -673,22 +727,34 @@ export function ChatPanel({
     setTimeout(() => toggleButton.current?.focus());
   }
 
-  function renderComposer(homePrompt = false) {
+  function renderComposer(variant: "dock" | "home" | "panel" = "panel") {
     if (csvFile) {
       return null;
     }
+    // The dock is one composer for both layouts: a slim row on a phone, and on
+    // a wide screen the home prompt until the conversation opens.
+    const dock = variant === "dock";
+    const homePrompt = variant === "home" || (dock && !open);
 
     return (
       <form
         className={cn(
-          "shrink-0 bg-card focus-within:ring-2 focus-within:ring-ring/30",
-          homePrompt
-            ? "rounded-[14px] border p-4 shadow-[0_16px_40px_-28px_rgb(25_21_16/55%)]"
-            : "p-3 pb-[max(.75rem,env(safe-area-inset-bottom))]",
+          "shrink-0 bg-card",
+          dock
+            ? "grid grid-cols-[minmax(0,1fr)_auto] items-end gap-2 px-3 pt-2 pb-[max(.75rem,env(safe-area-inset-bottom))] lg:block lg:focus-within:ring-2 lg:focus-within:ring-ring/30"
+            : "focus-within:ring-2 focus-within:ring-ring/30",
+          dock && (open ? "lg:p-3" : "lg:rounded-[14px] lg:border lg:p-4"),
+          dock && !open && "lg:shadow-[0_16px_40px_-28px_rgb(25_21_16/55%)]",
+          variant === "home" &&
+            "rounded-[14px] border p-4 shadow-[0_16px_40px_-28px_rgb(25_21_16/55%)]",
+          variant === "panel" && "p-3 pb-[max(.75rem,env(safe-area-inset-bottom))]",
         )}
         onSubmit={handleSubmit}
       >
-        <label className="nota-label block px-2 text-foreground" htmlFor="nota-chat-input">
+        <label
+          className={cn("nota-label block px-2 text-foreground", dock && "max-lg:sr-only")}
+          htmlFor="nota-chat-input"
+        >
           {homePrompt ? (prompt?.label ?? "What did you do?") : "Say what you did"}
         </label>
         <textarea
@@ -696,7 +762,11 @@ export function ChatPanel({
           className={cn(
             "w-full resize-none border-0 bg-transparent px-2 py-2 leading-6 text-foreground placeholder:text-muted-foreground",
             "focus-visible:outline-none",
-            homePrompt ? "min-h-24 font-voice text-xl" : "text-base sm:text-sm",
+            dock &&
+              "max-lg:field-sizing-content max-lg:max-h-32 max-lg:min-h-12 max-lg:rounded-lg max-lg:border max-lg:bg-background max-lg:px-3 max-lg:font-voice max-lg:text-lg max-lg:focus-visible:border-foreground",
+            dock && (open ? "lg:text-sm" : "lg:min-h-24 lg:font-voice lg:text-xl"),
+            variant === "home" && "min-h-24 font-voice text-xl",
+            variant === "panel" && "text-base sm:text-sm",
           )}
           data-testid="chat-panel-input"
           id="nota-chat-input"
@@ -718,7 +788,7 @@ export function ChatPanel({
           value={input}
         />
         {homePrompt ? (
-          <div className="mb-3 flex flex-wrap gap-1.5 px-2">
+          <div className={cn("mb-3 flex flex-wrap gap-1.5 px-2", dock && "max-lg:hidden")}>
             {starterPrompts.map((prompt) => (
               <button
                 className="min-h-11 rounded-full border px-3 text-sm hover:bg-accent active:bg-accent sm:min-h-8 sm:text-xs"
@@ -732,7 +802,12 @@ export function ChatPanel({
             ))}
           </div>
         ) : null}
-        <div className="flex items-center justify-between gap-3 px-2 pb-1">
+        <div
+          className={cn(
+            "flex items-center justify-between gap-3 px-2 pb-1",
+            dock && "max-lg:contents",
+          )}
+        >
           <input
             accept=".csv,text/csv"
             aria-label="Client CSV file"
@@ -748,6 +823,7 @@ export function ChatPanel({
           />
           <Button
             aria-label="Attach client CSV"
+            className={cn(dock && "max-lg:hidden")}
             disabled={isBusy}
             onClick={() => fileInput.current?.click()}
             size="icon-sm"
@@ -756,10 +832,20 @@ export function ChatPanel({
           >
             <Paperclip />
           </Button>
-          <span className="hidden font-mono text-[11px] text-muted-foreground sm:inline">
+          <span
+            className={cn(
+              "hidden font-mono text-[11px] text-muted-foreground",
+              dock ? "lg:inline" : "sm:inline",
+            )}
+          >
             {homePrompt ? "Enter to send" : "⌘J from anywhere"}
           </span>
-          <Button disabled={!input.trim() || isBusy} size="sm" type="submit">
+          <Button
+            className={cn(dock && "max-lg:h-12 max-lg:px-4")}
+            disabled={!input.trim() || isBusy}
+            size="sm"
+            type="submit"
+          >
             <Send />
             {homePrompt ? (prompt?.submitLabel ?? "Draft it") : "Send"}
           </Button>
@@ -768,7 +854,7 @@ export function ChatPanel({
     );
   }
 
-  const conversation = (
+  const header = (
     <>
       <header className="flex items-center justify-between gap-4 border-b px-5 pt-[max(1rem,env(safe-area-inset-top))] pb-4 sm:py-4">
         {mode !== "panel" ? (
@@ -796,9 +882,14 @@ export function ChatPanel({
           </Button>
         ) : null}
       </header>
+    </>
+  );
 
+  function renderMessages(hidden = false) {
+    return (
       <div
-        className="min-h-0 flex-1 space-y-4 overflow-x-hidden overflow-y-auto px-4 py-5 [overflow-wrap:anywhere]"
+        className="min-h-0 flex-1 space-y-4 overflow-x-hidden overflow-y-auto overscroll-contain px-4 py-5 [overflow-wrap:anywhere]"
+        hidden={hidden}
         ref={messagesContainer}
       >
         {activity.length > 0 ? (
@@ -875,20 +966,122 @@ export function ChatPanel({
           </div>
         ) : null}
       </div>
+    );
+  }
 
+  const conversation = (
+    <>
+      {header}
+      {renderMessages()}
       {csvFile ? null : renderComposer()}
     </>
   );
 
-  if (mode === "home" || mode === "first-run") {
-    const firstRun = mode === "first-run";
+  if (mode === "first-run") {
+    const working = status === "submitted" || status === "streaming";
+    const lastReply = [...messages].reverse().find((message) => message.role === "assistant");
+    const lastReplyText =
+      status === "submitted"
+        ? ""
+        : (lastReply?.parts
+            .filter((part) => isTextUIPart(part))
+            .map((part) => part.text)
+            .join(" ")
+            .replaceAll(/[*_`#>]/g, "")
+            .trim() ?? "");
+    const quiet = messages.length === 0 && !working && !error;
+
     return (
       <>
+        {open ? (
+          <div
+            aria-hidden="true"
+            className="fixed inset-0 z-20 animate-[dock-fade_180ms_ease-out] bg-background/70 lg:hidden"
+            onClick={() => onOpenChange(false)}
+          />
+        ) : null}
         <section
-          aria-label="Ask Nota"
-          className={cn(!firstRun && "mx-auto mt-8 max-w-[700px]")}
-          hidden={open}
+          aria-label={open ? "Conversation with Nota" : "Ask Nota"}
+          className={cn(
+            "flex flex-col bg-card",
+            // On a phone the invoice is the page and Nota docks under the thumb:
+            // one line of reply, the composer, and the transcript a tap away.
+            "max-lg:fixed max-lg:inset-x-0 max-lg:bottom-[var(--chat-dock-bottom,0px)] max-lg:z-30 max-lg:rounded-t-2xl max-lg:border-t max-lg:shadow-[0_-18px_40px_-28px_rgb(25_21_16/55%)]",
+            // Another field has the keyboard: get out of its way.
+            "max-lg:[&[data-keyboard=true]:not(:focus-within)]:hidden",
+            open &&
+              "overflow-hidden max-lg:h-[min(36rem,calc(var(--chat-viewport-height,100dvh)-4.5rem))] max-lg:animate-[dock-rise_220ms_cubic-bezier(0.16,1,0.3,1)] lg:h-[min(660px,calc(100dvh-8rem))] lg:rounded-lg lg:border",
+          )}
+          ref={conversationContainer}
         >
+          {open ? header : null}
+          {open || csvFile ? renderMessages(!open) : null}
+          {prompt?.question ? (
+            <h1
+              className={cn(
+                "px-4 pt-3 !text-[1.375rem] !leading-7 lg:hidden",
+                (open || !quiet) && "sr-only",
+              )}
+            >
+              {prompt.question}
+            </h1>
+          ) : null}
+          {open || quiet ? null : (
+            <button
+              className="flex min-h-11 w-full items-start gap-2.5 px-4 pt-3 text-left lg:hidden"
+              onClick={() => onOpenChange(true)}
+              type="button"
+            >
+              {working ? (
+                <LoaderCircle className="mt-0.5 size-4 shrink-0 animate-spin" />
+              ) : (
+                <NotaGlyph className="mt-0.5 h-4 shrink-0" />
+              )}
+              <span
+                className={cn(
+                  "line-clamp-2 min-w-0 flex-1 font-voice text-base leading-5",
+                  error && "text-destructive",
+                )}
+              >
+                {error?.message || lastReplyText || (working ? "Drafting…" : "Nota replied.")}
+              </span>
+              <span className="sr-only">Show conversation</span>
+              <ChevronUp className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
+            </button>
+          )}
+          {dockAction && !open ? (
+            <button
+              className="mx-3 mt-2 flex min-h-11 items-center justify-between gap-3 rounded-lg bg-primary px-4 text-left text-sm font-semibold text-primary-foreground active:brightness-90 lg:hidden"
+              onClick={dockAction.onClick}
+              type="button"
+            >
+              {dockAction.label}
+              <ArrowRight className="size-4 shrink-0" />
+            </button>
+          ) : null}
+          {csvFile && !open ? (
+            <Button
+              className="m-3 lg:m-0"
+              onClick={() => onOpenChange(true)}
+              ref={toggleButton}
+              type="button"
+              variant="outline"
+            >
+              <NotaGlyph />
+              Continue importing {csvFile.name}
+            </Button>
+          ) : (
+            renderComposer("dock")
+          )}
+        </section>
+      </>
+    );
+  }
+
+  if (mode === "home") {
+    return (
+      <>
+        <section aria-label="Ask Nota" className="mx-auto mt-8 max-w-[700px]" hidden={open}>
           {csvFile ? (
             <Button
               onClick={() => onOpenChange(true)}
@@ -900,20 +1093,13 @@ export function ChatPanel({
               Continue importing {csvFile.name}
             </Button>
           ) : (
-            renderComposer(true)
+            renderComposer("home")
           )}
         </section>
         {open || csvFile ? (
           <section
             aria-label="Conversation with Nota"
-            className={cn(
-              "flex flex-col overflow-hidden border bg-card",
-              // First run keeps the conversation beside the invoice; everywhere
-              // else it takes the phone's whole screen above the keyboard.
-              firstRun
-                ? "h-[min(660px,calc(100dvh-8rem))] rounded-lg"
-                : "fixed inset-x-0 top-[var(--chat-viewport-top,0px)] z-50 mx-auto h-[var(--chat-viewport-height,100dvh)] max-w-[700px] sm:static sm:h-[calc(100dvh-10rem)] sm:rounded-lg",
-            )}
+            className="fixed inset-x-0 top-[var(--chat-viewport-top,0px)] z-50 mx-auto flex h-[var(--chat-viewport-height,100dvh)] max-w-[700px] flex-col overflow-hidden border bg-card sm:static sm:h-[calc(100dvh-10rem)] sm:rounded-lg"
             hidden={!open}
             ref={conversationContainer}
           >
