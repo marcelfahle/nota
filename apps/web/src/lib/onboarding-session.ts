@@ -5,7 +5,7 @@ import { eq, lt } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { onboardingSessions, orgs } from "@/lib/db/schema";
 import { storeOrgImage } from "@/lib/logo-storage";
-import { fromDataUrl } from "@/lib/site-reader/logo";
+import { fromDataUrl } from "@/lib/site-reader/data-url";
 import {
   PROFILE_FIELDS,
   type ProfileFieldKey,

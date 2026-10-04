@@ -1,8 +1,24 @@
-import sharp from "sharp";
-
+import { toDataUrl } from "./data-url";
 import { safeFetch, type SafeFetchOptions } from "./safe-fetch";
 
 const MAX_SOURCE_BYTES = 2 * 1024 * 1024;
+
+// Loaded on first use. sharp is a native module: if it cannot load on a host,
+// the reader loses logos and nothing else in the app is affected.
+let sharpModule: Promise<typeof import("sharp") | null> | null = null;
+function loadSharp() {
+  sharpModule ??= import("sharp")
+    .then((module) => module.default)
+    .catch((error: unknown) => {
+      // eslint-disable-next-line no-console -- A host without sharp must be visible in logs.
+      console.error(
+        "[reader] sharp is unavailable:",
+        error instanceof Error ? error.message : error,
+      );
+      return null;
+    });
+  return sharpModule;
+}
 
 /**
  * Re-encodes any fetched image as a small PNG. We never store or serve a
@@ -10,6 +26,10 @@ const MAX_SOURCE_BYTES = 2 * 1024 * 1024;
  */
 export async function reencodeImage(source: Buffer, size: number) {
   try {
+    const sharp = await loadSharp();
+    if (!sharp) {
+      return null;
+    }
     const image = sharp(source, { density: 192, limitInputPixels: 24_000_000 });
     const metadata = await image.metadata();
     if (!metadata.width || !metadata.height) {
@@ -28,6 +48,10 @@ export async function reencodeImage(source: Buffer, size: number) {
 /** The most common saturated colours in an image, strongest first, as hex. */
 export async function dominantColors(png: Buffer) {
   try {
+    const sharp = await loadSharp();
+    if (!sharp) {
+      return [];
+    }
     const { data } = await sharp(png)
       .resize(48, 48, { fit: "inside" })
       .ensureAlpha()
@@ -67,14 +91,6 @@ export async function dominantColors(png: Buffer) {
   } catch {
     return [];
   }
-}
-
-export function toDataUrl(png: Buffer) {
-  return `data:image/png;base64,${png.toString("base64")}`;
-}
-
-export function fromDataUrl(dataUrl: string) {
-  return Buffer.from(dataUrl.slice(dataUrl.indexOf(",") + 1), "base64");
 }
 
 /** First candidate that downloads and decodes, as a PNG data URL. */
