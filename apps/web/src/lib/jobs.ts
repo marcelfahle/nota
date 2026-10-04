@@ -197,9 +197,13 @@ async function sendInvoiceEmail(invoiceId: string, recipient?: string) {
       invoiceNumber: invoice.number,
       invoiceUrl: getPublicInvoiceUrl(invoice.publicToken),
       paymentLinkUrl: invoice.stripePaymentLinkUrl,
+      testCopy: Boolean(recipient),
       total: invoice.total ?? "0",
     }),
-    subject: `Invoice ${invoice.number} from ${businessName}`,
+    // A copy sent to the sender is labelled as one in the subject and the body.
+    subject: recipient
+      ? `Test copy: Invoice ${invoice.number} from ${businessName}`
+      : `Invoice ${invoice.number} from ${businessName}`,
     to: [recipient ?? client.email],
   });
   if (result.error) {

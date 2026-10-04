@@ -1,6 +1,6 @@
 "use server";
 
-import { and, eq } from "drizzle-orm";
+import { and, count, eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
@@ -18,6 +18,8 @@ import {
   canSendInvoice,
   getInsufficientPermissionsError,
 } from "@/lib/roles";
+
+const MAX_UNCONFIRMED_TEST_COPIES = 3;
 
 const profileSchema = z.object({
   city: z.string().trim().min(1, "City is required").max(250),
@@ -147,6 +149,19 @@ export async function sendFirstRunTestInvoice(invoiceId: string) {
     .limit(1);
   if (!bank) {
     return { error: "Add your bank details first." };
+  }
+
+  // Until the address is confirmed it could be someone else's, so an
+  // unconfirmed account gets a few labelled test copies and no more.
+  if (!currentUser.user.emailVerified) {
+    const [{ sent }] = await db
+      .select({ sent: count() })
+      .from(jobs)
+      .innerJoin(invoices, eq(invoices.id, jobs.invoiceId))
+      .where(and(eq(invoices.orgId, currentUser.org.id), eq(jobs.type, "send_invoice_test_email")));
+    if (sent >= MAX_UNCONFIRMED_TEST_COPIES) {
+      return { error: "Confirm your email address to send more test copies." };
+    }
   }
 
   await db.insert(jobs).values({
