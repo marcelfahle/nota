@@ -23,12 +23,16 @@ const tabs = ["claude", "chatgpt", "terminal"] as const;
 type Tab = (typeof tabs)[number];
 
 function CopyButton({ label = "Copy", value }: { label?: string; value: string }) {
-  const [copied, setCopied] = useState(false);
+  const [status, setStatus] = useState<"idle" | "copied" | "error">("idle");
 
   async function copy() {
-    await navigator.clipboard.writeText(value);
-    setCopied(true);
-    window.setTimeout(() => setCopied(false), 1500);
+    try {
+      await navigator.clipboard.writeText(value);
+      setStatus("copied");
+      window.setTimeout(() => setStatus("idle"), 1500);
+    } catch {
+      setStatus("error");
+    }
   }
 
   return (
@@ -37,8 +41,8 @@ function CopyButton({ label = "Copy", value }: { label?: string; value: string }
       onClick={() => void copy()}
       type="button"
     >
-      {copied ? <CheckIcon aria-hidden="true" /> : <Copy aria-hidden="true" />}
-      {copied ? "Copied" : label}
+      {status === "copied" ? <CheckIcon aria-hidden="true" /> : <Copy aria-hidden="true" />}
+      {status === "copied" ? "Copied" : status === "error" ? "Copy manually" : label}
     </button>
   );
 }
@@ -111,23 +115,17 @@ function formatLastUsed(app: ConnectedApp) {
   }).format(lastUsedAt)}`;
 }
 
-function ConnectionStatus({ app, onRemoved }: { app?: ConnectedApp; onRemoved: () => void }) {
+function ConnectionStatus({ app, onRemoved }: { app: ConnectedApp; onRemoved: () => void }) {
   const [pending, startTransition] = useTransition();
-
-  if (!app) {
-    return (
-      <div className="flex items-center gap-2 border-t py-4 font-mono text-xs text-muted-foreground">
-        <span aria-hidden="true" className="size-2 animate-pulse rounded-full bg-foreground" />
-        Waiting for a connection. This page updates itself when one appears.
-      </div>
-    );
-  }
 
   return (
     <div className="flex flex-wrap items-center justify-between gap-3 border-t py-3.5">
-      <p className="font-mono text-xs">
-        Connected {formatConnected(app.connectedAt)} · {formatLastUsed(app)}
-      </p>
+      <div>
+        <p className="font-semibold">{app.name ?? "Connected client"}</p>
+        <p className="font-mono text-xs">
+          Connected {formatConnected(app.connectedAt)} · {formatLastUsed(app)}
+        </p>
+      </div>
       <Button
         className="border-destructive text-destructive hover:bg-destructive/10"
         disabled={pending}
@@ -144,6 +142,27 @@ function ConnectionStatus({ app, onRemoved }: { app?: ConnectedApp; onRemoved: (
       </Button>
     </div>
   );
+}
+
+function ConnectionStatuses({
+  apps,
+  onRemoved,
+}: {
+  apps: Array<ConnectedApp>;
+  onRemoved: (clientId: string) => void;
+}) {
+  if (apps.length === 0) {
+    return (
+      <div className="flex items-center gap-2 border-t py-4 font-mono text-xs text-muted-foreground">
+        <span aria-hidden="true" className="size-2 animate-pulse rounded-full bg-foreground" />
+        Waiting for a connection. This page updates itself when one appears.
+      </div>
+    );
+  }
+
+  return apps.map((app) => (
+    <ConnectionStatus app={app} key={app.clientId} onRemoved={() => onRemoved(app.clientId)} />
+  ));
 }
 
 function ExamplesAndPermissions() {
@@ -199,8 +218,9 @@ function ExamplesAndPermissions() {
 export function AgentConnections({ initialApps }: { initialApps: Array<ConnectedApp> }) {
   const [activeTab, setActiveTab] = useState<Tab>("claude");
   const [apps, setApps] = useState(initialApps);
-  const claude = apps.find((app) => provider(app) === "claude");
-  const chatgpt = apps.find((app) => provider(app) === "chatgpt");
+  const claude = apps.filter((app) => provider(app) === "claude");
+  const chatgpt = apps.filter((app) => provider(app) === "chatgpt");
+  const other = apps.filter((app) => provider(app) === null);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -301,7 +321,7 @@ export function AgentConnections({ initialApps }: { initialApps: Array<Connected
             role="tabpanel"
           >
             <ol>
-              <Step complete={Boolean(claude)} number={1}>
+              <Step complete={claude.length > 0} number={1}>
                 <h2 className="font-semibold">Add Nota to Claude</h2>
                 <p className="text-muted-foreground">
                   Copy Nota’s server address, open Claude’s custom connector form, and paste it with
@@ -314,14 +334,14 @@ export function AgentConnections({ initialApps }: { initialApps: Array<Connected
                   </a>
                 </Button>
               </Step>
-              <Step complete={Boolean(claude)} number={2}>
+              <Step complete={claude.length > 0} number={2}>
                 <h2 className="font-semibold">Sign in when Claude asks</h2>
                 <p className="text-muted-foreground">
                   Use your Nota account. Nothing else to copy and no API key to share.
                 </p>
               </Step>
             </ol>
-            <ConnectionStatus app={claude} onRemoved={() => claude && remove(claude.clientId)} />
+            <ConnectionStatuses apps={claude} onRemoved={remove} />
             <details className="border-t py-3.5">
               <summary className="min-h-7 cursor-pointer font-semibold">
                 Using Claude Code or Claude Desktop?
@@ -341,13 +361,13 @@ export function AgentConnections({ initialApps }: { initialApps: Array<Connected
             role="tabpanel"
           >
             <ol>
-              <Step complete={Boolean(chatgpt)} number={1}>
+              <Step complete={chatgpt.length > 0} number={1}>
                 <h2 className="font-semibold">Turn on Developer mode in ChatGPT</h2>
                 <p className="text-muted-foreground">
                   Open Settings → Security and login, then turn on Developer mode.
                 </p>
               </Step>
-              <Step complete={Boolean(chatgpt)} number={2}>
+              <Step complete={chatgpt.length > 0} number={2}>
                 <h2 className="font-semibold">Create an app with this address</h2>
                 <p className="text-muted-foreground">
                   Name it Nota, use OAuth, and enter Nota’s MCP server URL.
@@ -359,12 +379,12 @@ export function AgentConnections({ initialApps }: { initialApps: Array<Connected
                   </a>
                 </Button>
               </Step>
-              <Step complete={Boolean(chatgpt)} number={3}>
+              <Step complete={chatgpt.length > 0} number={3}>
                 <h2 className="font-semibold">Sign in when ChatGPT asks</h2>
                 <p className="text-muted-foreground">Use your Nota account.</p>
               </Step>
             </ol>
-            <ConnectionStatus app={chatgpt} onRemoved={() => chatgpt && remove(chatgpt.clientId)} />
+            <ConnectionStatuses apps={chatgpt} onRemoved={remove} />
           </div>
 
           <div
@@ -397,6 +417,21 @@ export function AgentConnections({ initialApps }: { initialApps: Array<Connected
               .
             </p>
           </div>
+
+          {other.length > 0 ? (
+            <section aria-labelledby="other-connections" className="border-t py-4">
+              <h2 className="nota-label pb-2" id="other-connections">
+                Other connections
+              </h2>
+              {other.map((app) => (
+                <ConnectionStatus
+                  app={app}
+                  key={app.clientId}
+                  onRemoved={() => remove(app.clientId)}
+                />
+              ))}
+            </section>
+          ) : null}
         </section>
 
         <ExamplesAndPermissions />

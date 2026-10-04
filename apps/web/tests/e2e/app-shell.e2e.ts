@@ -72,7 +72,25 @@ test("shell navigation, account themes, paper invoice and chat dock", async ({ b
   });
   await expect(page.getByText("1 connected")).toBeVisible({ timeout: 7000 });
   await page.getByRole("tab", { name: "Claude" }).click();
+  await expect(page.getByText("Claude browser fixture")).toBeVisible();
   await expect(page.getByText(/Connected .*not used yet/)).toBeVisible();
+
+  const customClientId = `custom-${uniqueSuffix()}`;
+  await db.insert(oauthClients).values({
+    clientId: customClientId,
+    name: "Custom browser fixture",
+    redirectUris: ["https://custom.test/callback"],
+  });
+  await db.insert(oauthConsents).values({
+    clientId: customClientId,
+    scopes: ["nota"],
+    userId: registeredUser!.id,
+  });
+  await expect(page.getByText("2 connected")).toBeVisible({ timeout: 7000 });
+  await expect(page.getByText("Custom browser fixture")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Remove access" })).toHaveCount(2);
+  await page.getByRole("button", { name: "Remove access" }).first().click();
+  await expect(page.getByText("1 connected")).toBeVisible();
   await page.getByRole("button", { name: "Remove access" }).click();
   await expect(page.getByText("0 connected")).toBeVisible();
 
