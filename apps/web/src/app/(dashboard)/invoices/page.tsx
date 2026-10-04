@@ -212,7 +212,7 @@ export default async function InvoicesPage({
           style={{ contain: "layout paint" }}
         >
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[1040px] border-collapse text-sm">
+            <table className="w-full min-w-[960px] border-collapse text-sm">
               <thead>
                 <tr className="nota-label text-left text-muted-foreground">
                   <th className="w-[100px] px-3 py-2 font-medium">Number</th>
@@ -221,7 +221,7 @@ export default async function InvoicesPage({
                   <th className="w-[105px] px-3 py-2 font-medium">Due</th>
                   <th className="w-[110px] px-3 py-2 font-medium">Status</th>
                   <th className="w-[100px] px-3 py-2 font-medium">Made in</th>
-                  <th className="w-[310px] px-3 py-2 text-right font-medium">Amount</th>
+                  <th className="w-[280px] px-3 py-2 text-right font-medium">Amount</th>
                 </tr>
               </thead>
               <tbody>

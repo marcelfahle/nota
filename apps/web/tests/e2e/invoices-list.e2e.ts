@@ -81,6 +81,15 @@ test("invoice list supports its richer statuses, filters, search, actions, and p
   await expect(page.getByText("9 days ago", { exact: true })).toBeVisible();
   await expect(page.getByText("Claude", { exact: true })).toBeVisible();
   await expect(page.getByText("Nota chat", { exact: true })).toBeVisible();
+  const table = page.getByRole("table");
+  await expect(table).toBeVisible();
+  const desktopTableWidths = await table.evaluate((element) => ({
+    client: element.parentElement?.clientWidth ?? 0,
+    scroll: element.parentElement?.scrollWidth ?? 0,
+  }));
+  expect(desktopTableWidths.scroll - desktopTableWidths.client).toBeLessThanOrEqual(1);
+  const amountHeaderBox = await page.getByRole("columnheader", { name: "Amount" }).boundingBox();
+  expect(amountHeaderBox && amountHeaderBox.x + amountHeaderBox.width <= 1280).toBe(true);
 
   const statusNav = page.getByRole("navigation", { name: "Invoice status" });
   await statusNav.getByRole("link", { name: "Open 2" }).click();
@@ -104,8 +113,6 @@ test("invoice list supports its richer statuses, filters, search, actions, and p
   await expect(paidFilter).toBeVisible();
   const paidFilterBox = await paidFilter.boundingBox();
   expect(paidFilterBox && paidFilterBox.x + paidFilterBox.width <= 390).toBe(true);
-  const table = page.getByRole("table");
-  await expect(table).toBeVisible();
   expect(
     await table.evaluate((element) => {
       const container = element.parentElement;
