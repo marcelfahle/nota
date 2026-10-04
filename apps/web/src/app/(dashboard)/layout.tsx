@@ -8,7 +8,7 @@ import { db } from "@/lib/db";
 import { clients, invoices, jobs } from "@/lib/db/schema";
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
-  const { org } = await getCurrentUser();
+  const { org, user } = await getCurrentUser();
   let domain: string | null = null;
   if (org.website) {
     try {
@@ -101,6 +101,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
         updatedAt: item.updatedAt?.toISOString() ?? null,
       }))}
       usage={usage}
+      userId={user.id}
     >
       {children}
     </DashboardShell>

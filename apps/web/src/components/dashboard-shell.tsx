@@ -3,7 +3,7 @@
 import { Menu, Plus, X } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { ChatPanel } from "@/components/chat-panel";
 import {
@@ -30,6 +30,7 @@ export function DashboardShell({
   logoUrl,
   stripeDockItems,
   usage,
+  userId,
 }: {
   brandName: string;
   children: React.ReactNode;
@@ -39,25 +40,40 @@ export function DashboardShell({
   logoUrl: string | null;
   stripeDockItems: Array<StripeDockItem>;
   usage: { limit: number | null; plan: string; sent: number };
+  userId: string;
 }) {
   const pathname = usePathname();
+  const isHome = pathname === "/home";
   const [menuOpen, setMenuOpen] = useState(false);
-  const [chatOpen, setChatOpen] = useState(false);
+  const [homeChatOpen, setHomeChatOpen] = useState(false);
+  const [panelOpen, setPanelOpen] = useState(false);
   const [opsOpen, setOpsOpen] = useState(false);
   const [imageFailed, setImageFailed] = useState(false);
   const chatInput = useRef<HTMLTextAreaElement>(null);
 
-  function focusChat() {
-    if (chatInput.current) {
-      chatInput.current.focus();
+  const focusChat = useCallback(() => {
+    if (isHome) {
+      setHomeChatOpen(true);
     } else {
-      setChatOpen(true);
+      setPanelOpen(true);
+      localStorage.setItem(`nota:chat-open:${userId}`, "true");
     }
-  }
+    requestAnimationFrame(() => chatInput.current?.focus());
+  }, [isHome, userId]);
+
+  useEffect(() => {
+    setPanelOpen(localStorage.getItem(`nota:chat-open:${userId}`) === "true");
+  }, [userId]);
+
+  useEffect(() => {
+    if (!isHome) {
+      setHomeChatOpen(false);
+    }
+  }, [isHome]);
 
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
-      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "j") {
         event.preventDefault();
         focusChat();
       }
@@ -67,7 +83,18 @@ export function DashboardShell({
     }
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, []);
+  }, [focusChat]);
+
+  function setChatOpen(open: boolean) {
+    if (isHome) {
+      setHomeChatOpen(open);
+      return;
+    }
+    setPanelOpen(open);
+    localStorage.setItem(`nota:chat-open:${userId}`, String(open));
+  }
+
+  const chatOpen = isHome ? homeChatOpen : panelOpen;
 
   return (
     <div className="app-shell min-h-dvh bg-background text-foreground md:grid md:grid-cols-[248px_minmax(0,1fr)]">
@@ -123,13 +150,10 @@ export function DashboardShell({
           >
             <button
               className="flex min-h-10 items-center justify-between rounded-md border bg-card px-3 text-left text-sm text-muted-foreground"
-              onClick={() => {
-                setMenuOpen(false);
-                focusChat();
-              }}
+              onClick={() => setMenuOpen(false)}
               type="button"
             >
-              Ask or search <kbd className="font-mono text-[11px]">⌘K</kbd>
+              Search <kbd className="font-mono text-[11px]">⌘K</kbd>
             </button>
             <nav
               aria-label="Main"
@@ -214,7 +238,7 @@ export function DashboardShell({
           </div>
         </div>
       </aside>
-      <div className={cn("min-w-0", chatOpen && "xl:pr-[400px]")}>
+      <div className={cn("min-w-0", !isHome && chatOpen && "xl:pr-[340px]")}>
         <div className="flex justify-end px-4 pt-5 sm:px-8">
           <Button asChild size="sm">
             <Link href="/invoices/new">
@@ -224,13 +248,18 @@ export function DashboardShell({
           </Button>
         </div>
         <main
-          className="mx-auto max-w-6xl px-4 py-6 pb-56 sm:px-8 sm:py-8 sm:pb-56"
+          className="mx-auto max-w-6xl px-4 py-6 pb-20 sm:px-8 sm:py-8 sm:pb-20"
           id="main-content"
           tabIndex={-1}
         >
-          {children}
+          <div hidden={isHome && homeChatOpen}>{children}</div>
+          <ChatPanel
+            inputRef={chatInput}
+            mode={isHome ? "home" : "panel"}
+            onOpenChange={setChatOpen}
+            open={chatOpen}
+          />
         </main>
-        <ChatPanel inputRef={chatInput} onOpenChange={setChatOpen} open={chatOpen} />
       </div>
       {opsOpen ? (
         <StripeDevDock items={stripeDockItems} jobs={emailJobItems} jobSummary={emailJobSummary} />
