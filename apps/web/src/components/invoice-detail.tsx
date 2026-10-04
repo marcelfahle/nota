@@ -43,6 +43,7 @@ import {
   canDeleteInvoice,
   canMarkInvoicePaid,
   canSendInvoice,
+  canSendInvoiceReminder,
 } from "@/lib/roles";
 import { formatCurrency } from "@/lib/utils";
 
@@ -113,11 +114,12 @@ const ACTIVITY_LABELS: Record<string, string> = {
   viewed: "Invoice opened",
 };
 
-function formatDate(value: string, withYear = true) {
+function formatDate(value: string) {
   return new Intl.DateTimeFormat("en-GB", {
     day: "numeric",
     month: "short",
-    ...(withYear ? { year: "numeric" } : {}),
+    timeZone: "UTC",
+    year: "numeric",
   }).format(new Date(value));
 }
 
@@ -221,13 +223,14 @@ export function InvoiceDetailView({ activities, business, invoice, role }: Invoi
 
   async function handleDuplicate() {
     setPending("duplicate");
-    const id = await duplicateInvoice(invoice.id);
-    if (typeof id !== "string") {
-      setMessage({ kind: "error", text: "The invoice could not be duplicated." });
+    setMessage(null);
+    const result = await duplicateInvoice(invoice.id);
+    if ("error" in result) {
+      setMessage({ kind: "error", text: result.error });
       setPending(null);
       return;
     }
-    router.push(`/invoices/${id}`);
+    router.push(`/invoices/${result.invoiceId}`);
   }
 
   async function handleCreditNote() {
@@ -265,13 +268,17 @@ export function InvoiceDetailView({ activities, business, invoice, role }: Invoi
   }
 
   const stamp =
-    invoice.settlementStatus === "partially_paid"
-      ? "Part paid"
-      : invoice.settlementStatus === "paid"
-        ? "Paid"
-        : status === "cancelled"
-          ? "Cancelled"
-          : null;
+    invoice.kind === "credit_note"
+      ? status === "cancelled"
+        ? "Cancelled"
+        : null
+      : invoice.settlementStatus === "partially_paid"
+        ? "Part paid"
+        : invoice.settlementStatus === "paid"
+          ? "Paid"
+          : status === "cancelled"
+            ? "Cancelled"
+            : null;
 
   return (
     <article aria-labelledby="invoice-title" className="space-y-6">
@@ -329,24 +336,26 @@ export function InvoiceDetailView({ activities, business, invoice, role }: Invoi
                   </Link>
                 </Button>
                 {canSendInvoice(role) ? (
-                  <Button
-                    data-testid="invoice-send"
-                    disabled={pending !== null}
-                    onClick={() => runAction("send", () => sendInvoice(invoice.id))}
-                    size="sm"
-                  >
-                    <Send /> {pending === "send" ? "Sending…" : "Send invoice"}
-                  </Button>
+                  <>
+                    <Button
+                      data-testid="invoice-send"
+                      disabled={pending !== null}
+                      onClick={() => runAction("send", () => sendInvoice(invoice.id))}
+                      size="sm"
+                    >
+                      <Send /> {pending === "send" ? "Sending…" : "Send invoice"}
+                    </Button>
+                    <Button
+                      data-testid="invoice-mark-sent"
+                      disabled={pending !== null}
+                      onClick={() => runAction("mark-sent", () => markInvoiceSent(invoice.id))}
+                      size="sm"
+                      variant="outline"
+                    >
+                      {pending === "mark-sent" ? "Marking…" : "Mark sent"}
+                    </Button>
+                  </>
                 ) : null}
-                <Button
-                  data-testid="invoice-mark-sent"
-                  disabled={pending !== null}
-                  onClick={() => runAction("mark-sent", () => markInvoiceSent(invoice.id))}
-                  size="sm"
-                  variant="outline"
-                >
-                  {pending === "mark-sent" ? "Marking…" : "Mark sent"}
-                </Button>
               </>
             ) : canRecordPayment ? (
               <Button
@@ -493,13 +502,15 @@ export function InvoiceDetailView({ activities, business, invoice, role }: Invoi
                 {invoice.notes}
               </p>
             ) : null}
-            <div
-              className="absolute right-7 bottom-7 left-7 flex items-center justify-between rounded-md px-5 py-4 text-sm font-semibold text-white sm:right-12 sm:left-12"
-              style={{ backgroundColor: business.brandColor || "#1f1b16" }}
-            >
-              <span>{balance > 0 ? `${formatCurrency(balance, currency)} due` : "Settled"}</span>
-              <span aria-hidden="true">→</span>
-            </div>
+            {invoice.kind === "invoice" ? (
+              <div
+                className="absolute right-7 bottom-7 left-7 flex items-center justify-between rounded-md px-5 py-4 text-sm font-semibold text-white sm:right-12 sm:left-12"
+                style={{ backgroundColor: business.brandColor || "#1f1b16" }}
+              >
+                <span>{balance > 0 ? `${formatCurrency(balance, currency)} due` : "Settled"}</span>
+                <span aria-hidden="true">→</span>
+              </div>
+            ) : null}
           </div>
         </section>
 
@@ -519,11 +530,13 @@ export function InvoiceDetailView({ activities, business, invoice, role }: Invoi
             <div className="mt-2 flex justify-between font-mono text-[11px] text-muted-foreground">
               <span>{formatCurrency(paid, currency)} paid</span>
               <span>
-                {remainingDays < 0
-                  ? `${Math.abs(remainingDays)} days overdue`
-                  : remainingDays === 0
-                    ? "Due today"
-                    : `${remainingDays} days until due`}
+                {balance <= 0 || status === "cancelled"
+                  ? "Settled"
+                  : remainingDays < 0
+                    ? `${Math.abs(remainingDays)} days overdue`
+                    : remainingDays === 0
+                      ? "Due today"
+                      : `${remainingDays} days until due`}
               </span>
             </div>
           </section>
@@ -587,7 +600,7 @@ export function InvoiceDetailView({ activities, business, invoice, role }: Invoi
             ) : (
               <p className="mt-4 text-sm text-muted-foreground">No activity yet.</p>
             )}
-            {status === "sent" || status === "overdue" ? (
+            {(status === "sent" || status === "overdue") && canSendInvoiceReminder(role) ? (
               <Button
                 className="mt-6"
                 disabled={pending !== null}

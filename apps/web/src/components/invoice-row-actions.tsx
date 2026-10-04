@@ -151,13 +151,13 @@ export function InvoiceRowActions({ invoice, role }: InvoiceRowActionsProps) {
     setPendingAction("duplicate");
     setError(null);
     try {
-      const newId = await duplicateInvoice(invoice.id);
-      if (!/^[0-9a-f-]{36}$/i.test(newId)) {
-        setError(newId || "Invoice could not be duplicated");
+      const result = await duplicateInvoice(invoice.id);
+      if ("error" in result) {
+        setError(result.error);
         return;
       }
 
-      router.push(`/invoices/${newId}`);
+      router.push(`/invoices/${result.invoiceId}`);
     } catch {
       setError("Invoice could not be duplicated. Please try again.");
     } finally {

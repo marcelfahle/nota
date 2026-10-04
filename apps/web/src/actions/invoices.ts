@@ -42,6 +42,13 @@ const invoiceSchema = z.object({
   taxRate: z.coerce.number().min(0).max(100).default(0),
 });
 
+const paymentSchema = z.object({
+  amount: z.number().positive("Payment amount must be positive"),
+  invoiceId: z.string().uuid("Invalid invoice"),
+  method: z.enum(["bank_transfer", "other"]),
+  note: z.string().trim().max(500, "Note is too long").optional(),
+});
+
 function parseInvoiceFormData(formData: FormData) {
   return {
     clientId: formData.get("clientId") as string,
@@ -147,15 +154,17 @@ export async function sendReminder(invoiceId: string) {
   return { success: true };
 }
 
-export async function duplicateInvoice(invoiceId: string) {
+export async function duplicateInvoice(
+  invoiceId: string,
+): Promise<{ error: string } | { invoiceId: string }> {
   const currentUser = await getCurrentUser();
   const serviceResult = await duplicateInvoiceService(buildServiceContext(currentUser), invoiceId);
   if ("error" in serviceResult) {
-    return serviceResult.error;
+    return { error: serviceResult.error };
   }
 
   revalidatePath("/invoices");
-  return serviceResult.invoiceId;
+  return { invoiceId: serviceResult.invoiceId };
 }
 
 export async function markInvoiceSent(invoiceId: string) {
@@ -212,11 +221,16 @@ export async function recordInvoicePayment(
   invoiceId: string,
   input: { amount: number; method: "bank_transfer" | "other"; note?: string },
 ) {
+  const parsed = paymentSchema.safeParse({ invoiceId, ...input });
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0].message };
+  }
   const currentUser = await getCurrentUser();
+  const { invoiceId: validatedInvoiceId, ...payment } = parsed.data;
   const serviceResult = await recordInvoicePaymentService(
     buildServiceContext(currentUser),
-    invoiceId,
-    input,
+    validatedInvoiceId,
+    payment,
   );
   if ("error" in serviceResult) {
     return { error: serviceResult.error };
@@ -235,6 +249,7 @@ export async function createCreditNote(invoiceId: string) {
   }
 
   revalidatePath("/invoices");
+  revalidatePath(`/invoices/${invoiceId}`);
   return { invoiceId: serviceResult.invoiceId, success: true };
 }
 
