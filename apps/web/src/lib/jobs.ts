@@ -5,7 +5,7 @@ import { InvoicePdf } from "@/components/invoice-pdf";
 import { InvoiceSentEmail } from "@/emails/invoice-sent";
 import { PaymentReceivedEmail } from "@/emails/payment-received";
 import { APP_NAME, DEFAULT_FROM_EMAIL } from "@/lib/app-brand";
-import { getPdfLogoSrc } from "@/lib/branding";
+import { formatOrgAddress, getPdfLogoSrc } from "@/lib/branding";
 import { db } from "@/lib/db";
 import {
   activityLog,
@@ -27,12 +27,14 @@ const JOB_LOCK_TIMEOUT_MS = 1000 * 60 * 10;
 
 type EmailJobType =
   | "send_invoice_email"
+  | "send_invoice_test_email"
   | "send_invoice_reminder_email"
   | "send_payment_received_email";
 
 type EmailJobPayload = {
   invoiceId: string;
   proposalId?: string;
+  recipient?: string;
   reminder?: ReturnType<typeof reminderPayloadSchema.parse>;
   source?: "api" | "chat" | "cli" | "mcp" | "system" | "web";
   sourceClient?: string | null;
@@ -53,6 +55,7 @@ function parseEmailJobPayload(payload: Record<string, unknown>): EmailJobPayload
   return {
     invoiceId: payload.invoiceId,
     proposalId: typeof payload.proposalId === "string" ? payload.proposalId : undefined,
+    recipient: typeof payload.recipient === "string" ? payload.recipient : undefined,
     reminder: reminder.success ? reminder.data : undefined,
     source:
       typeof payload.source === "string" &&
@@ -124,17 +127,17 @@ async function getInvoiceEmailContext(invoiceId: string) {
   };
 }
 
-async function sendInvoiceEmail(invoiceId: string) {
+async function sendInvoiceEmail(invoiceId: string, recipient?: string) {
   const { bankDetails, client, invoice, items, logoSrc, org } =
     await getInvoiceEmailContext(invoiceId);
 
   const pdfBuffer = await renderToBuffer(
     InvoicePdf({
       business: {
-        address: org.businessAddress,
+        address: formatOrgAddress(org),
         bankDetails,
         logoSrc,
-        name: org.businessName ?? org.name,
+        name: org.legalName ?? org.businessName ?? org.name,
         vatNumber: org.vatNumber,
       },
       client: {
@@ -167,9 +170,9 @@ async function sendInvoiceEmail(invoiceId: string) {
   );
 
   const fromEmail = getEmailEnv().RESEND_FROM_EMAIL ?? DEFAULT_FROM_EMAIL;
-  const businessName = org.businessName ?? org.name ?? APP_NAME;
+  const businessName = org.legalName ?? org.businessName ?? org.name ?? APP_NAME;
 
-  await getResend().emails.send({
+  const result = await getResend().emails.send({
     attachments: [
       {
         content: pdfBuffer.toString("base64"),
@@ -197,8 +200,11 @@ async function sendInvoiceEmail(invoiceId: string) {
       total: invoice.total ?? "0",
     }),
     subject: `Invoice ${invoice.number} from ${businessName}`,
-    to: [client.email],
+    to: [recipient ?? client.email],
   });
+  if (result.error) {
+    throw new Error(result.error.message);
+  }
 }
 
 async function sendInvoiceReminderEmail(
@@ -270,7 +276,7 @@ async function sendInvoiceReminderEmail(
   const { bankDetails, client, invoice, org } = await getInvoiceEmailContext(invoiceId);
 
   const fromEmail = getEmailEnv().RESEND_FROM_EMAIL ?? DEFAULT_FROM_EMAIL;
-  const businessName = org.businessName ?? org.name ?? APP_NAME;
+  const businessName = org.legalName ?? org.businessName ?? org.name ?? APP_NAME;
 
   await getResend().emails.send({
     from: fromEmail,
@@ -352,6 +358,12 @@ async function performEmailJob(type: EmailJobType, payload: EmailJobPayload) {
   switch (type) {
     case "send_invoice_email":
       await sendInvoiceEmail(payload.invoiceId);
+      return;
+    case "send_invoice_test_email":
+      if (!payload.recipient) {
+        throw new Error("Test invoice recipient is missing");
+      }
+      await sendInvoiceEmail(payload.invoiceId, payload.recipient);
       return;
     case "send_invoice_reminder_email":
       await sendInvoiceReminderEmail(payload.invoiceId, payload.reminder, payload);

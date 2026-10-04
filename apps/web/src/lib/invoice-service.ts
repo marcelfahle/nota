@@ -16,6 +16,7 @@ import {
   orgs,
   payments,
   proposals,
+  users,
 } from "@/lib/db/schema";
 import { getStripeMode } from "@/lib/env";
 import { resolveDueDateChange } from "@/lib/invoice-due-date";
@@ -79,6 +80,9 @@ export type InvoiceMutationSuccess = {
 };
 
 export type InvoiceMutationResult = InvoiceMutationError | InvoiceMutationSuccess;
+
+export const EMAIL_VERIFICATION_REQUIRED =
+  "Confirm your email address before sending your first invoice.";
 
 export type InvoiceDetail = NonNullable<Awaited<ReturnType<typeof getInvoiceDetail>>>;
 
@@ -525,6 +529,16 @@ export async function sendInvoice(
       if (!org) {
         return { error: "Organization not found" };
       }
+      if (!org.firstRunCompletedAt) {
+        const [sender] = await tx
+          .select({ emailVerified: users.emailVerified })
+          .from(users)
+          .where(eq(users.id, context.userId))
+          .limit(1);
+        if (!sender?.emailVerified) {
+          return { error: EMAIL_VERIFICATION_REQUIRED };
+        }
+      }
       const [invoice] = await tx
         .select()
         .from(invoices)
@@ -607,6 +621,12 @@ export async function sendInvoice(
         invoiceId,
         ...sourceFields(context),
       });
+      if (!org.firstRunCompletedAt) {
+        await tx
+          .update(orgs)
+          .set({ firstRunCompletedAt: sentAt })
+          .where(eq(orgs.id, context.orgId));
+      }
       if (invoice.kind === "credit_note" && invoice.creditsInvoiceId) {
         const [original] = await tx
           .select()
