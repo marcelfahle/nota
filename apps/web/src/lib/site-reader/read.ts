@@ -1,6 +1,7 @@
 import { pickBrandColors } from "./colors";
+import { fromDataUrl } from "./data-url";
 import { visibleText } from "./html";
-import { dominantColors, fetchImage, fromDataUrl } from "./logo";
+import { dominantColors, fetchImage } from "./logo";
 import { modelConfigured, readLocation, readSiteFacts, type SiteFacts } from "./model";
 import { extractPages, parallelConfigured, searchWeb, type ParallelPage } from "./parallel";
 import { safeFetch, UnsafeUrlError, type SafeFetchOptions } from "./safe-fetch";
