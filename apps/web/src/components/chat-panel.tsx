@@ -502,6 +502,7 @@ export function ChatPanel({
   const [historyLoaded, setHistoryLoaded] = useState(false);
   const [importBusy, setImportBusy] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
+  const backButton = useRef<HTMLButtonElement>(null);
   const closeButton = useRef<HTMLButtonElement>(null);
   const conversationContainer = useRef<HTMLElement>(null);
   const messagesContainer = useRef<HTMLDivElement>(null);
@@ -517,9 +518,7 @@ export function ChatPanel({
       const docked = isDocked(mode);
       if (mode !== "panel" && open) {
         wasOpen.current = true;
-        if (!docked) {
-          inputRef.current?.focus();
-        }
+        (docked ? backButton.current : inputRef.current)?.focus();
       }
       if (!open && wasOpen.current) {
         if (!docked) {
@@ -712,7 +711,7 @@ export function ChatPanel({
         { body: { pageContext: { entityId, route: pathname } } },
       );
     } catch {
-      setInput(value);
+      setInput((current) => current || value);
       // useChat exposes the request failure via `error`; swallow here to avoid an unhandled rejection
     }
   }
@@ -858,7 +857,13 @@ export function ChatPanel({
     <>
       <header className="flex items-center justify-between gap-4 border-b px-5 pt-[max(1rem,env(safe-area-inset-top))] pb-4 sm:py-4">
         {mode !== "panel" ? (
-          <Button onClick={() => onOpenChange(false)} size="sm" type="button" variant="ghost">
+          <Button
+            onClick={() => onOpenChange(false)}
+            ref={backButton}
+            size="sm"
+            type="button"
+            variant="ghost"
+          >
             <ArrowLeft />
             {mode === "first-run" ? "Back to invoice" : "Back to Home"}
           </Button>
@@ -1012,6 +1017,11 @@ export function ChatPanel({
             open &&
               "overflow-hidden max-lg:h-[min(36rem,calc(var(--chat-viewport-height,100dvh)-4.5rem))] max-lg:animate-[dock-rise_220ms_cubic-bezier(0.16,1,0.3,1)] lg:h-[min(660px,calc(100dvh-8rem))] lg:rounded-lg lg:border",
           )}
+          onKeyDown={(event) => {
+            if (event.key === "Escape" && open) {
+              onOpenChange(false);
+            }
+          }}
           ref={conversationContainer}
         >
           {open ? header : null}

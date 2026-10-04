@@ -44,6 +44,8 @@ for (const viewport of viewports) {
     await expect(paper).toContainText(clientName, { timeout: 45_000 });
     await expect(paper).toContainText("Design");
     await expect(paper).toContainText("€1,800.00");
+    // Drafted values arrive under the highlighter; what loaded with the page does not.
+    await expect(paper.locator(".onboarding-land").filter({ hasText: clientName })).toBeVisible();
 
     if (viewport.label === "phone") {
       // The draft lands on the invoice; the page stays one scroll with Nota docked.
