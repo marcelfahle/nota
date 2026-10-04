@@ -3,9 +3,12 @@ import { NextRequest, NextResponse } from "next/server";
 
 const PUBLIC_PATHS = [
   "/.well-known",
+  // Vercel BotID's challenge script and proxy.
+  "/149e9513-01fa-4fb0-aad4-566afd725d1b",
   "/api/auth",
   "/api/cron",
   "/api/mcp",
+  "/api/onboarding",
   "/api/public/",
   "/api/v1",
   "/api/webhooks",
@@ -16,6 +19,7 @@ const PUBLIC_PATHS = [
   "/oauth",
   "/register",
   "/reset-password",
+  "/start",
 ];
 
 export function proxy(request: NextRequest) {

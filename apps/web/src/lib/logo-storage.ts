@@ -108,6 +108,34 @@ export async function uploadOrgFavicon(orgId: string, file: File): Promise<LogoU
   return uploadOrgImage(buildOrgFaviconPath, orgId, file);
 }
 
+/**
+ * Stores an image we produced ourselves (a re-encoded PNG from onboarding).
+ * Without Blob storage configured, the small PNG is kept inline as a data URL
+ * so self-hosted installs still get their logo.
+ */
+export async function storeOrgImage(kind: "favicon" | "logo", orgId: string, png: Buffer) {
+  if (png.byteLength === 0 || png.byteLength > MAX_LOGO_BYTES) {
+    return null;
+  }
+  const token = getLogoUploadToken();
+  if (typeof token !== "string") {
+    return `data:image/png;base64,${png.toString("base64")}`;
+  }
+  try {
+    const path = (kind === "logo" ? buildOrgLogoPath : buildOrgFaviconPath)(orgId, "png");
+    const uploaded = await put(path, png, {
+      access: "public",
+      addRandomSuffix: true,
+      cacheControlMaxAge: LOGO_CACHE_MAX_AGE,
+      contentType: "image/png",
+      token,
+    });
+    return uploaded.url;
+  } catch {
+    return null;
+  }
+}
+
 async function uploadOrgImage(
   buildPath: (orgId: string, extension: string) => string,
   orgId: string,

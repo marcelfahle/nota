@@ -44,6 +44,19 @@ export type VatResult = {
   vatNumber: string;
 };
 
+// Spain and Germany confirm a number but withhold the details, sent as "---".
+function registryText(value: unknown) {
+  if (typeof value !== "string") {
+    return null;
+  }
+  const text = value.trim();
+  return text && !/^-+$/.test(text) ? text : null;
+}
+
+export function isViesCountry(countryCode: string) {
+  return VIES_COUNTRIES.has(countryCode.toUpperCase());
+}
+
 export function normalizeVatNumber(value: string) {
   return value.replaceAll(/[^a-zA-Z0-9]/g, "").toUpperCase();
 }
@@ -86,10 +99,9 @@ export async function verifyVatNumber(
         throw new Error("Invalid VIES response");
       }
       result = {
-        address:
-          typeof payload.address === "string" && payload.address.trim() ? payload.address : null,
+        address: registryText(payload.address),
         checkedAt: now,
-        name: typeof payload.name === "string" && payload.name.trim() ? payload.name : null,
+        name: registryText(payload.name),
         status: payload.valid ? "valid" : "invalid",
         vatNumber,
       };
