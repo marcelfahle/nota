@@ -14,7 +14,7 @@ function argument(name: string) {
 
 const email = (argument("email") ?? process.env.SUPER_ADMIN_EMAIL)?.trim().toLowerCase();
 const name = (argument("name") ?? process.env.SUPER_ADMIN_NAME ?? "Nota operator").trim();
-const suppliedPassword = argument("password") ?? process.env.SUPER_ADMIN_TEMP_PASSWORD;
+const suppliedPassword = process.env.SUPER_ADMIN_TEMP_PASSWORD;
 const temporaryPassword = suppliedPassword ?? randomBytes(18).toString("base64url");
 
 if (!email) {

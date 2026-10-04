@@ -1,18 +1,21 @@
 "use server";
 
-import { and, eq } from "drizzle-orm";
+import { and, eq, ne } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
+import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 
 import { isAllowedModel, MODEL_FEATURES } from "@/lib/ai-usage";
 import { requireSuperAdmin } from "@/lib/auth";
+import { auth } from "@/lib/better-auth";
 import { db } from "@/lib/db";
 import {
   accounts,
   aiModelChanges,
   aiModelSettings,
   aiWorkspaceModelOverrides,
+  sessions,
   users,
 } from "@/lib/db/schema";
 import { hashPassword, verifyPassword } from "@/lib/password";
@@ -25,8 +28,9 @@ export async function changeTemporaryPassword(
   _state: AdminActionState,
   formData: FormData,
 ): Promise<AdminActionState> {
+  const currentSession = await auth.api.getSession({ headers: await headers() });
   const user = await requireSuperAdmin({ allowPasswordChange: true });
-  if (!user.mustChangePassword) {
+  if (!currentSession || !user.mustChangePassword) {
     redirect("/admin");
   }
   const currentPassword = String(formData.get("currentPassword") ?? "");
@@ -55,6 +59,9 @@ export async function changeTemporaryPassword(
       .update(users)
       .set({ mustChangePassword: false, updatedAt: new Date() })
       .where(eq(users.id, user.id));
+    await tx
+      .delete(sessions)
+      .where(and(eq(sessions.userId, user.id), ne(sessions.id, currentSession.session.id)));
   });
   redirect("/admin");
 }

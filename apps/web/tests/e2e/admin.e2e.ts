@@ -14,7 +14,17 @@ import {
 } from "../../src/lib/db/schema";
 import { logout, registerAccount, uniqueSuffix } from "./helpers";
 
+function assertLocalTestDatabase() {
+  const database = new URL(process.env.DATABASE_URL ?? "");
+  const localHost = database.hostname === "localhost" || database.hostname === "127.0.0.1";
+  const testDatabase = database.pathname === "/nota_amp" || database.pathname === "/nota_ci";
+  if (!localHost || !testDatabase) {
+    throw new Error("Admin E2E cleanup requires the local nota_amp or nota_ci database");
+  }
+}
+
 test("super admin changes the temporary password, sees accounts, and changes models", async ({
+  browser,
   page,
 }) => {
   const suffix = uniqueSuffix();
@@ -22,6 +32,7 @@ test("super admin changes the temporary password, sees accounts, and changes mod
   const temporaryPassword = `Temporary-${suffix}`;
   const permanentPassword = `Permanent-${suffix}`;
 
+  assertLocalTestDatabase();
   await db.delete(aiModelChanges);
   await db.delete(aiWorkspaceModelOverrides);
   await db.delete(aiModelSettings);
@@ -49,11 +60,11 @@ test("super admin changes the temporary password, sees accounts, and changes mod
   expect(forbidden?.status()).toBe(404);
   await logout(page);
 
-  const command = spawnSync(
-    "bun",
-    ["run", "admin:create", "--", "--email", adminEmail, "--password", temporaryPassword],
-    { cwd: process.cwd(), encoding: "utf8", env: process.env },
-  );
+  const command = spawnSync("bun", ["run", "admin:create", "--", "--email", adminEmail], {
+    cwd: process.cwd(),
+    encoding: "utf8",
+    env: { ...process.env, SUPER_ADMIN_TEMP_PASSWORD: temporaryPassword },
+  });
   expect(command.status, command.stderr).toBe(0);
   expect(command.stdout).not.toContain(temporaryPassword);
 
@@ -64,11 +75,22 @@ test("super admin changes the temporary password, sees accounts, and changes mod
   await expect(page).toHaveURL(/\/admin\/password$/);
   await expect(page.getByText("Choose a permanent password")).toBeVisible();
 
+  const otherContext = await browser.newContext();
+  const otherPage = await otherContext.newPage();
+  await otherPage.goto("/login");
+  await otherPage.getByTestId("login-email").fill(adminEmail);
+  await otherPage.getByTestId("login-password").fill(temporaryPassword);
+  await otherPage.getByTestId("login-submit").click();
+  await expect(otherPage).toHaveURL(/\/admin\/password$/);
+
   await page.getByLabel("Temporary password").fill(temporaryPassword);
   await page.getByLabel("New password", { exact: true }).fill(permanentPassword);
   await page.getByLabel("Confirm new password").fill(permanentPassword);
   await page.getByRole("button", { name: "Set password" }).click();
   await expect(page).toHaveURL(/\/admin$/);
+  const revokedSession = await otherPage.goto("/admin");
+  expect(revokedSession?.status()).toBe(404);
+  await otherContext.close();
   await expect(page.getByTestId("admin-workspaces")).toContainText(`Admin flow ${suffix}`);
   const missingWorkspace = await page.goto("/admin/workspaces/not-a-uuid");
   expect(missingWorkspace?.status()).toBe(404);
@@ -83,7 +105,7 @@ test("super admin changes the temporary password, sees accounts, and changes mod
     userId: normalUser.id,
   });
   await page.reload();
-  await expect(page.getByTestId("admin-workspaces")).toContainText("$4.50");
+  await expect(page.getByTestId("admin-workspaces")).toContainText("$3.00");
 
   await page.goto("/admin/ai");
   await page.getByLabel("Model for In-app chat").selectOption("claude-haiku-4-5-20251001");

@@ -1,3 +1,4 @@
+/* eslint-disable no-console */
 // Parallel (parallel.ai) fetches and searches on our behalf, so page text for
 // the model never passes through our own network.
 
@@ -34,8 +35,13 @@ async function call<T>(
     if (!response.ok) {
       return null;
     }
-    await recordAiUsage({ feature, modelId: `parallel/${path.slice(1)}` });
-    return (await response.json()) as T;
+    const payload = (await response.json()) as T;
+    try {
+      await recordAiUsage({ feature, modelId: `parallel/${path.slice(1)}` });
+    } catch (error) {
+      console.error("[reader] failed to record Parallel usage", error);
+    }
+    return payload;
   } catch {
     return null;
   }

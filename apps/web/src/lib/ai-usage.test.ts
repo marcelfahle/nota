@@ -8,10 +8,10 @@ describe("AI usage pricing", () => {
       estimatedCost({
         feature: "chat",
         inputTokens: 2_000_000,
-        modelId: "claude-haiku-4-5-20251001",
+        modelId: "claude-sonnet-5-5",
         outputTokens: 500_000,
       }),
-    ).toBe(4.5);
+    ).toBe(9);
   });
 
   test("prices each successful Parallel request", () => {

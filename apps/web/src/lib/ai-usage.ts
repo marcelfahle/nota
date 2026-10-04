@@ -1,3 +1,4 @@
+/* eslint-disable no-console */
 import { and, eq } from "drizzle-orm";
 
 import { db } from "@/lib/db";
@@ -19,9 +20,9 @@ export const MODEL_PRICES = {
     outputPerMillion: 15,
   },
   "claude-sonnet-5-5": {
-    inputPerMillion: 3,
+    inputPerMillion: 2,
     label: "Claude Sonnet 5.5",
-    outputPerMillion: 15,
+    outputPerMillion: 10,
   },
 } as const;
 
@@ -100,14 +101,25 @@ export async function resolveModel(feature: ModelFeature, orgId?: string | null)
 }
 
 export async function recordAiUsage(context: UsageContext, usage: ModelUsage = {}) {
-  await db.insert(aiUsage).values({
+  const values = {
     feature: context.feature,
+    id: crypto.randomUUID(),
     inputTokens: usage.inputTokens ?? 0,
     modelId: context.modelId,
     orgId: context.orgId ?? null,
     outputTokens: usage.outputTokens ?? 0,
     userId: context.userId ?? null,
-  });
+  };
+  try {
+    await db.insert(aiUsage).values(values).onConflictDoNothing({ target: aiUsage.id });
+  } catch {
+    try {
+      await db.insert(aiUsage).values(values).onConflictDoNothing({ target: aiUsage.id });
+    } catch (error) {
+      console.error("[ai-usage] failed to record model usage after retry", error);
+      throw error;
+    }
+  }
 }
 
 export async function trackedModelCall<T>(
