@@ -125,8 +125,10 @@
   * {
     @apply border-border;
   }
+  html,
   body {
     @apply bg-background text-foreground font-sans;
+    min-height: 100%;
     font-variation-settings: "wdth" 100;
   }
   :focus-visible {
@@ -137,6 +139,29 @@
 
 /* Compatibility for existing page content. Layouts migrate independently of the shell. */
 @layer utilities {
+  @media (max-width: 767px) {
+    .app-shell {
+      overflow-x: clip;
+    }
+    .app-shell
+      input:not([type="checkbox"]):not([type="file"]):not([type="hidden"]):not([type="radio"]),
+    .app-shell textarea,
+    .app-shell select,
+    .app-shell [data-slot="select-trigger"] {
+      font-size: 1rem;
+    }
+    .app-shell [data-slot="button"],
+    .app-shell button,
+    .app-shell [role="tab"] {
+      min-height: 2.75rem;
+    }
+    .app-shell button {
+      min-width: 2.75rem;
+    }
+    .app-shell [data-slot="button"][data-size^="icon"] {
+      min-width: 2.75rem;
+    }
+  }
   .app-shell,
   .auth-shell,
   [data-slot="dialog-content"],
@@ -196,6 +221,11 @@
     line-height: 1.1;
     font-weight: 650;
     font-variation-settings: "wdth" 78;
+  }
+  @media (max-width: 767px) {
+    .app-shell main h1 {
+      font-size: 2.25rem;
+    }
   }
   .nota-label {
     font-size: 0.6875rem;

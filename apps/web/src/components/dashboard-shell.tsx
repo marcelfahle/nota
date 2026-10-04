@@ -90,6 +90,21 @@ export function DashboardShell({
   }, [userId]);
 
   useEffect(() => {
+    setMenuOpen(false);
+  }, [pathname]);
+
+  useEffect(() => {
+    if (!menuOpen || !window.matchMedia("(max-width: 767px)").matches) {
+      return;
+    }
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [menuOpen]);
+
+  useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "j") {
         event.preventDefault();
@@ -118,7 +133,7 @@ export function DashboardShell({
       >
         Skip to content
       </a>
-      <aside className="border-b bg-sidebar md:sticky md:top-0 md:h-dvh md:overflow-y-auto md:border-r md:border-b-0">
+      <aside className="sticky top-0 z-40 border-b bg-sidebar pt-[env(safe-area-inset-top)] md:h-dvh md:overflow-y-auto md:border-r md:border-b-0 md:pt-0">
         <div className="flex h-full flex-col gap-5 p-4">
           <div className="flex items-center justify-between gap-2">
             <Link className="flex min-w-0 items-center gap-3 px-2 py-1" href="/home">
@@ -159,11 +174,14 @@ export function DashboardShell({
             </Button>
           </div>
           <div
-            className={cn("flex-1 flex-col gap-5", menuOpen ? "flex" : "hidden md:flex")}
+            className={cn(
+              "absolute inset-x-0 top-full max-h-[calc(100dvh-4.5rem-env(safe-area-inset-top))] flex-1 flex-col gap-5 overflow-y-auto border-b bg-sidebar px-4 pt-1 pb-[max(1rem,env(safe-area-inset-bottom))] shadow-lg md:static md:max-h-none md:overflow-visible md:border-0 md:bg-transparent md:p-0 md:shadow-none",
+              menuOpen ? "flex" : "hidden md:flex",
+            )}
             id="workspace-navigation"
           >
             <button
-              className="flex min-h-10 items-center justify-between rounded-md border bg-card px-3 text-left text-sm text-muted-foreground"
+              className="flex min-h-11 items-center justify-between rounded-md border bg-card px-3 text-left text-sm text-muted-foreground active:bg-accent"
               onClick={() => setMenuOpen(false)}
               type="button"
             >
@@ -178,13 +196,13 @@ export function DashboardShell({
                 <Link
                   aria-current={pathname.startsWith(href) ? "page" : undefined}
                   className={cn(
-                    "rounded-md border border-transparent px-3 py-2.5 text-sm hover:bg-card",
+                    "flex min-h-11 items-center rounded-md border border-transparent px-3 py-2.5 text-sm hover:bg-card active:bg-card",
                     pathname.startsWith(href) && "border-border bg-card font-semibold",
                   )}
                   href={href}
                   key={href}
                 >
-                  <span className="flex items-center justify-between gap-2">
+                  <span className="flex w-full min-w-0 items-center justify-between gap-2">
                     {label}
                     {meta ? (
                       <span
@@ -208,7 +226,7 @@ export function DashboardShell({
               <Link
                 aria-current={pathname === "/agents" ? "page" : undefined}
                 className={cn(
-                  "rounded-md border border-transparent px-3 py-2.5 text-sm hover:bg-card",
+                  "flex min-h-11 items-center rounded-md border border-transparent px-3 py-2.5 text-sm hover:bg-card active:bg-card",
                   pathname === "/agents" && "border-border bg-card font-semibold",
                 )}
                 href="/agents"
@@ -218,7 +236,7 @@ export function DashboardShell({
               <Link
                 aria-current={pathname === "/settings" ? "page" : undefined}
                 className={cn(
-                  "rounded-md border border-transparent px-3 py-2.5 text-sm hover:bg-card",
+                  "flex min-h-11 items-center rounded-md border border-transparent px-3 py-2.5 text-sm hover:bg-card active:bg-card",
                   pathname === "/settings" && "border-border bg-card font-semibold",
                 )}
                 href="/settings"
@@ -267,7 +285,7 @@ export function DashboardShell({
                 Nota<span className="text-primary">.</span>
               </span>
               <button
-                className="text-xs text-muted-foreground"
+                className="min-h-11 text-sm text-muted-foreground"
                 onClick={() => setOpsOpen(!opsOpen)}
                 type="button"
               >
@@ -280,7 +298,7 @@ export function DashboardShell({
       <div className={cn("min-w-0", !isHome && chatOpen && "xl:pr-[340px]")}>
         <div
           className={cn(
-            "justify-end px-4 pt-5 sm:px-8",
+            "justify-end pt-5 pr-[max(1rem,env(safe-area-inset-right))] pl-[max(1rem,env(safe-area-inset-left))] sm:px-8",
             isHome || isInvoiceList ? "hidden" : "flex",
           )}
         >
@@ -293,7 +311,7 @@ export function DashboardShell({
         </div>
         <main
           className={cn(
-            "mx-auto max-w-6xl px-4 pb-20 sm:px-8 sm:pb-20",
+            "mx-auto max-w-6xl pr-[max(1rem,env(safe-area-inset-right))] pb-[max(5rem,env(safe-area-inset-bottom))] pl-[max(1rem,env(safe-area-inset-left))] sm:px-8 sm:pb-20",
             isHome ? "py-12 sm:py-[72px]" : "py-6 sm:py-8",
           )}
           id="main-content"

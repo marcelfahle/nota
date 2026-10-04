@@ -24,7 +24,7 @@ export function SignOutButton() {
   return (
     <button
       aria-label="Sign out"
-      className="grid size-9 shrink-0 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-card hover:text-foreground disabled:opacity-50"
+      className="grid size-11 shrink-0 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-card hover:text-foreground active:bg-card disabled:opacity-50 md:size-9"
       data-testid="logout-button"
       disabled={pending}
       onClick={signOut}
