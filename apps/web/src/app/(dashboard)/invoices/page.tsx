@@ -4,35 +4,51 @@ import Link from "next/link";
 
 import { InvoiceArchiveMenu } from "@/components/invoice-archive-menu";
 import { InvoiceRowActions } from "@/components/invoice-row-actions";
-import { StatCard } from "@/components/stat-card";
 import { StatusBadge } from "@/components/status-badge";
 import { Button } from "@/components/ui/button";
 import { getCurrentUser } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { clients, invoices } from "@/lib/db/schema";
+import {
+  formatInvoiceDueDate,
+  getInvoiceListStatus,
+  matchesInvoiceSearch,
+} from "@/lib/invoice-list";
 import { formatCurrency } from "@/lib/utils";
 
-const FILTER_STATUSES = ["all", "draft", "sent", "paid", "overdue", "cancelled"] as const;
+const FILTERS = [
+  { key: "all", label: "All" },
+  { key: "draft", label: "Draft" },
+  { key: "open", label: "Open" },
+  { key: "overdue", label: "Overdue" },
+  { key: "paid", label: "Paid" },
+] as const;
+
+type FilterKey = (typeof FILTERS)[number]["key"];
 
 export default async function InvoicesPage({
   searchParams,
 }: {
-  searchParams: Promise<{ status?: string }>;
+  searchParams: Promise<{ q?: string | string[]; status?: string | string[] }>;
 }) {
-  const { status: filterStatus } = await searchParams;
+  const params = await searchParams;
+  const filterStatus = first(params.status);
+  const query = first(params.q)?.trim() ?? "";
   const { org, role } = await getCurrentUser();
 
   const invoiceList = await db
     .select({
       balance: sql<string>`greatest(coalesce(${invoices.total}::numeric, 0) - coalesce((select sum(p.amount) from payments p where p.invoice_id = ${invoices.id}), 0) - abs(coalesce((select sum(c.total::numeric) from invoices c where c.credits_invoice_id = ${invoices.id} and c.kind = 'credit_note' and c.status in ('sent', 'overdue', 'paid')), 0)), 0)`,
-      clientEmail: clients.email,
       clientName: clients.name,
       currency: invoices.currency,
       dueAt: invoices.dueAt,
       id: invoices.id,
       issuedAt: invoices.issuedAt,
       number: invoices.number,
+      openCount: sql<number>`(select count(*)::int from activity_log a where a.invoice_id = ${invoices.id} and a.action = 'viewed')`,
       paidAmount: sql<string>`coalesce((select sum(p.amount) from payments p where p.invoice_id = ${invoices.id}), 0)`,
+      source: invoices.source,
+      sourceClient: invoices.sourceClient,
       status: invoices.status,
       stripePaymentLinkUrl: invoices.stripePaymentLinkUrl,
       total: invoices.total,
@@ -40,97 +56,148 @@ export default async function InvoicesPage({
     .from(invoices)
     .leftJoin(clients, and(eq(invoices.clientId, clients.id), eq(clients.orgId, org.id)))
     .where(eq(invoices.orgId, org.id))
-    .orderBy(desc(invoices.issuedAt));
+    .orderBy(desc(invoices.issuedAt), desc(invoices.createdAt));
 
-  let outstanding = 0;
-  let totalPaid = 0;
-  let overdueAmount = 0;
-  let overdueCount = 0;
-  const statusCounts = {
-    cancelled: 0,
+  const activeFilter = FILTERS.some(({ key }) => key === filterStatus)
+    ? (filterStatus as FilterKey)
+    : "all";
+  const statusCounts: Record<FilterKey, number> = {
+    all: invoiceList.length,
     draft: 0,
+    open: 0,
     overdue: 0,
     paid: 0,
-    sent: 0,
   };
+  let totalOwed = 0;
 
-  for (const inv of invoiceList) {
-    const amount = Number(inv.balance);
-    const paidAmount = Number(inv.paidAmount);
-    const status = inv.status ?? "draft";
-    statusCounts[status] += 1;
-    if (inv.status === "sent" || inv.status === "overdue") {
-      outstanding += amount;
+  for (const invoice of invoiceList) {
+    if (invoice.status === "draft") {
+      statusCounts.draft++;
     }
-    totalPaid += paidAmount;
-    if (inv.status === "overdue") {
-      overdueAmount += amount;
-      overdueCount++;
+    if (invoice.status === "sent") {
+      statusCounts.open++;
+    }
+    if (invoice.status === "overdue") {
+      statusCounts.overdue++;
+    }
+    if (invoice.status === "paid") {
+      statusCounts.paid++;
+    }
+    if (invoice.status === "sent" || invoice.status === "overdue") {
+      totalOwed += Number(invoice.balance);
     }
   }
 
-  const activeFilter =
-    filterStatus && FILTER_STATUSES.includes(filterStatus as (typeof FILTER_STATUSES)[number])
-      ? filterStatus
-      : "all";
-
-  const filtered =
-    activeFilter === "all" ? invoiceList : invoiceList.filter((inv) => inv.status === activeFilter);
-
-  const filterCounts = { all: invoiceList.length, ...statusCounts };
+  const filtered = invoiceList.filter((invoice) => {
+    const matchesStatus =
+      activeFilter === "all" ||
+      (activeFilter === "open" ? invoice.status === "sent" : invoice.status === activeFilter);
+    return matchesStatus && matchesInvoiceSearch(invoice, query);
+  });
+  const filteredOwed = filtered.reduce(
+    (sum, invoice) =>
+      invoice.status === "sent" || invoice.status === "overdue"
+        ? sum + Number(invoice.balance)
+        : sum,
+    0,
+  );
+  const defaultCurrency = org.defaultCurrency ?? "EUR";
+  const exportStatus = activeFilter === "open" ? "sent" : activeFilter;
 
   return (
-    <div>
-      <div className="mb-8 flex items-center justify-between gap-4">
-        <h1 className="text-lg font-semibold tracking-tight">Invoices</h1>
-        <InvoiceArchiveMenu status={activeFilter === "all" ? undefined : activeFilter} />
-      </div>
+    <div className="flex min-w-0 flex-col gap-6">
+      <header className="flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <p className="nota-label mb-2.5">
+            {invoiceList.length} {invoiceList.length === 1 ? "invoice" : "invoices"}{" "}
+            <span className="opacity-40">/</span> {formatCurrency(totalOwed, defaultCurrency)} owed
+          </p>
+          <h1>Invoices</h1>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <InvoiceArchiveMenu status={exportStatus === "all" ? undefined : exportStatus} />
+          <Button asChild className="min-h-11 sm:min-h-8" size="sm">
+            <Link href="/invoices/new">
+              <Plus />
+              New invoice
+            </Link>
+          </Button>
+        </div>
+      </header>
 
-      <div className="mb-8 grid grid-cols-1 gap-4 sm:grid-cols-3 sm:gap-8">
-        <StatCard label="Outstanding" value={formatCurrency(outstanding)} />
-        <StatCard label="Total Paid" value={formatCurrency(totalPaid)} />
-        <StatCard
-          label="Overdue"
-          sub={
-            overdueCount > 0 ? `${overdueCount} invoice${overdueCount === 1 ? "" : "s"}` : undefined
-          }
-          value={formatCurrency(overdueAmount)}
-        />
-      </div>
+      <div className="flex min-w-0 flex-wrap items-center justify-between gap-3 border-b pb-3">
+        <nav aria-label="Invoice status" className="flex max-w-full min-w-0 flex-wrap gap-1">
+          {FILTERS.map(({ key, label }) => (
+            <Link
+              aria-current={activeFilter === key ? "page" : undefined}
+              className={
+                activeFilter === key
+                  ? "inline-flex min-h-9 shrink-0 items-center gap-1.5 rounded-md border border-foreground bg-foreground px-3 text-sm font-medium text-background"
+                  : "inline-flex min-h-9 shrink-0 items-center gap-1.5 rounded-md border border-transparent px-3 text-sm font-medium hover:bg-card"
+              }
+              href={filterHref(key, query)}
+              key={key}
+            >
+              {label}
+              <span
+                className={`font-mono text-[11px] ${
+                  key === "overdue" && activeFilter !== key ? "text-destructive" : "opacity-70"
+                }`}
+              >
+                {statusCounts[key]}
+              </span>
+            </Link>
+          ))}
+        </nav>
 
-      <div className="mb-6 flex gap-1 overflow-x-auto">
-        {FILTER_STATUSES.map((s) => (
-          <Link
-            className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
-              activeFilter === s ? "bg-zinc-100 text-zinc-900" : "text-zinc-500 hover:text-zinc-700"
-            }`}
-            href={s === "all" ? "/invoices" : `/invoices?status=${s}`}
-            key={s}
-          >
-            <span>{s.charAt(0).toUpperCase() + s.slice(1)}</span>
-            <span className="ml-1.5 text-xs text-zinc-400 tabular-nums">{filterCounts[s]}</span>
-          </Link>
-        ))}
+        <form
+          action="/invoices"
+          className="flex min-h-9 w-full items-center rounded-md border bg-card px-3 sm:w-[300px]"
+        >
+          {activeFilter !== "all" ? (
+            <input name="status" type="hidden" value={activeFilter} />
+          ) : null}
+          <label className="nota-label mr-2.5" htmlFor="invoice-search">
+            Find
+          </label>
+          <input
+            className="min-w-0 flex-1 border-0 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
+            defaultValue={query}
+            id="invoice-search"
+            name="q"
+            placeholder="client, number, amount"
+            type="search"
+          />
+          <button className="sr-only" type="submit">
+            Search invoices
+          </button>
+        </form>
       </div>
 
       {filtered.length === 0 ? (
-        <div className="flex flex-col items-center justify-center py-16">
-          <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-zinc-100">
-            <FileText className="h-6 w-6 text-zinc-400" />
+        <div className="flex flex-col items-center justify-center py-16 text-center">
+          <div className="mb-4 flex size-12 items-center justify-center rounded-full bg-muted">
+            <FileText className="size-6 text-muted-foreground" />
           </div>
-          <p className="mb-1 text-sm font-medium text-zinc-900">
-            {activeFilter === "all" ? "No invoices yet" : `No ${activeFilter} invoices`}
+          <p className="mb-1 text-sm font-medium">
+            {query
+              ? "No matching invoices"
+              : activeFilter === "all"
+                ? "No invoices yet"
+                : `No ${activeFilter} invoices`}
           </p>
-          <p className="mb-4 text-sm text-zinc-500">
-            {activeFilter === "all"
-              ? "Create your first invoice to get started."
-              : "Try another status or return to all invoices."}
+          <p className="mb-4 text-sm text-muted-foreground">
+            {query
+              ? "Try a different client, number, or amount."
+              : activeFilter === "all"
+                ? "Create your first invoice to get started."
+                : "Try another status or return to all invoices."}
           </p>
-          {activeFilter === "all" ? (
+          {activeFilter === "all" && !query ? (
             <Button asChild size="sm">
               <Link href="/invoices/new">
                 <Plus />
-                Create Invoice
+                Create invoice
               </Link>
             </Button>
           ) : (
@@ -140,91 +207,162 @@ export default async function InvoicesPage({
           )}
         </div>
       ) : (
-        <div className="@container">
-          <div className="hidden grid-cols-[minmax(7rem,0.8fr)_minmax(12rem,1.5fr)_minmax(7rem,0.7fr)_minmax(6rem,0.6fr)_minmax(7.5rem,0.8fr)_auto] gap-4 border-b border-zinc-100 pb-3 text-xs font-medium tracking-wide text-zinc-400 uppercase @4xl:grid">
-            <span>Invoice</span>
-            <span>Client</span>
-            <span className="text-right">Amount</span>
-            <span>Status</span>
-            <span>Due</span>
-            <span className="text-right">Actions</span>
+        <div
+          className="w-[calc(100vw-2rem)] max-w-full overflow-hidden rounded-md border border-border/70 bg-background sm:w-full"
+          style={{ contain: "layout paint" }}
+        >
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[1040px] border-collapse text-sm">
+              <thead>
+                <tr className="nota-label text-left text-muted-foreground">
+                  <th className="w-[100px] px-3 py-2 font-medium">Number</th>
+                  <th className="min-w-[180px] px-3 py-2 font-medium">Client</th>
+                  <th className="w-[90px] px-3 py-2 font-medium">Issued</th>
+                  <th className="w-[105px] px-3 py-2 font-medium">Due</th>
+                  <th className="w-[110px] px-3 py-2 font-medium">Status</th>
+                  <th className="w-[100px] px-3 py-2 font-medium">Made in</th>
+                  <th className="w-[310px] px-3 py-2 text-right font-medium">Amount</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filtered.map((invoice) => {
+                  const displayStatus = getInvoiceListStatus(invoice);
+                  const href = `/invoices/${invoice.id}`;
+                  return (
+                    <tr
+                      className="border-t border-border/50 transition-colors hover:bg-card"
+                      data-testid="invoice-list-row"
+                      key={invoice.id}
+                    >
+                      <td className="px-3 py-2.5">
+                        <Link className="font-mono text-xs font-medium hover:underline" href={href}>
+                          {invoice.number}
+                        </Link>
+                      </td>
+                      <td className="max-w-[260px] px-3 py-2.5">
+                        <Link className="block truncate font-semibold" href={href}>
+                          {invoice.clientName ?? "Unknown client"}
+                          {Number(invoice.paidAmount) > 0 && Number(invoice.balance) > 0 ? (
+                            <span className="ml-1 font-normal text-muted-foreground">
+                              {formatCurrency(
+                                Number(invoice.paidAmount),
+                                invoice.currency ?? defaultCurrency,
+                              )}{" "}
+                              received
+                            </span>
+                          ) : null}
+                        </Link>
+                      </td>
+                      <td className="px-3 py-2.5 font-mono text-xs text-muted-foreground">
+                        <Link href={href}>
+                          {invoice.status === "draft" ? "—" : formatDate(invoice.issuedAt)}
+                        </Link>
+                      </td>
+                      <td
+                        className={`px-3 py-2.5 font-mono text-xs ${
+                          invoice.status === "overdue"
+                            ? "font-medium text-destructive"
+                            : "text-muted-foreground"
+                        }`}
+                      >
+                        <Link href={href}>
+                          {invoice.status === "draft"
+                            ? "—"
+                            : formatInvoiceDueDate(invoice.dueAt, invoice.status)}
+                        </Link>
+                      </td>
+                      <td className="px-3 py-2.5">
+                        <Link className="inline-flex" href={href}>
+                          <StatusBadge openCount={invoice.openCount} status={displayStatus} />
+                        </Link>
+                      </td>
+                      <td className="px-3 py-2.5 font-mono text-[11px] text-muted-foreground">
+                        <Link href={href}>{sourceLabel(invoice.source, invoice.sourceClient)}</Link>
+                      </td>
+                      <td className="py-1.5 pr-1 pl-3">
+                        <div className="flex items-center justify-end gap-2">
+                          <Link className="font-mono font-medium" href={href}>
+                            {formatCurrency(
+                              Number(invoice.total ?? 0),
+                              invoice.currency ?? defaultCurrency,
+                            )}
+                          </Link>
+                          <InvoiceRowActions
+                            invoice={{
+                              id: invoice.id,
+                              number: invoice.number,
+                              status: invoice.status,
+                              stripePaymentLinkUrl: invoice.stripePaymentLinkUrl,
+                            }}
+                            role={role}
+                          />
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+              <tfoot>
+                <tr className="border-t">
+                  <td className="nota-label px-3 py-3 text-foreground" colSpan={6}>
+                    Showing {filtered.length} of {invoiceList.length}{" "}
+                    <span className="opacity-40">/</span> owed on this page
+                  </td>
+                  <td className="px-3 py-3 text-right font-mono text-lg font-semibold">
+                    {formatCurrency(filteredOwed, defaultCurrency)}
+                  </td>
+                </tr>
+              </tfoot>
+            </table>
           </div>
-          <ul className="divide-y divide-zinc-100">
-            {filtered.map((inv) => (
-              <li
-                className="group grid grid-cols-[minmax(0,1fr)_auto] gap-x-4 gap-y-3 py-4 @4xl:grid-cols-[minmax(7rem,0.8fr)_minmax(12rem,1.5fr)_minmax(7rem,0.7fr)_minmax(6rem,0.6fr)_minmax(7.5rem,0.8fr)_auto] @4xl:items-center @4xl:gap-4"
-                data-testid="invoice-list-row"
-                key={inv.id}
-              >
-                <div className="min-w-0">
-                  <Link
-                    className="font-mono text-sm font-semibold text-zinc-900 underline-offset-4 group-hover:underline"
-                    href={`/invoices/${inv.id}`}
-                  >
-                    {inv.number}
-                  </Link>
-                  <p className="mt-1 text-xs text-zinc-400">Issued {formatDate(inv.issuedAt)}</p>
-                  <div className="mt-2 @4xl:hidden">
-                    <StatusBadge status={inv.status ?? "draft"} />
-                  </div>
-                </div>
-                <div className="min-w-0 @4xl:col-start-2 @4xl:row-start-1">
-                  <Link className="block min-w-0" href={`/invoices/${inv.id}`}>
-                    <p className="truncate text-sm font-medium text-zinc-900">{inv.clientName}</p>
-                    <p className="truncate text-xs text-zinc-500">{inv.clientEmail}</p>
-                  </Link>
-                </div>
-                <div className="col-start-2 row-start-1 text-right @4xl:col-start-3">
-                  <Link
-                    className="text-sm font-semibold text-zinc-900 tabular-nums"
-                    href={`/invoices/${inv.id}`}
-                  >
-                    {formatCurrency(Number(inv.total ?? 0), inv.currency ?? "EUR")}
-                  </Link>
-                  {Number(inv.paidAmount) > 0 && Number(inv.balance) > 0 ? (
-                    <p className="mt-1 text-xs text-zinc-500">
-                      {formatCurrency(Number(inv.paidAmount), inv.currency ?? "EUR")} paid ·{" "}
-                      {formatCurrency(Number(inv.balance), inv.currency ?? "EUR")} due
-                    </p>
-                  ) : null}
-                </div>
-                <div className="hidden @4xl:col-start-4 @4xl:block">
-                  <Link className="inline-flex" href={`/invoices/${inv.id}`}>
-                    <StatusBadge status={inv.status ?? "draft"} />
-                  </Link>
-                </div>
-                <div className="text-sm text-zinc-500 @4xl:col-start-5">
-                  <Link href={`/invoices/${inv.id}`}>
-                    <span className="@4xl:hidden">Due </span>
-                    <span className={inv.status === "overdue" ? "font-medium text-red-700" : ""}>
-                      {formatDate(inv.dueAt)}
-                    </span>
-                  </Link>
-                </div>
-                <div className="col-span-2 @4xl:col-span-1 @4xl:col-start-6">
-                  <InvoiceRowActions
-                    invoice={{
-                      id: inv.id,
-                      number: inv.number,
-                      status: inv.status,
-                      stripePaymentLinkUrl: inv.stripePaymentLinkUrl,
-                    }}
-                    role={role}
-                  />
-                </div>
-              </li>
-            ))}
-          </ul>
         </div>
       )}
     </div>
   );
 }
 
-function formatDate(dateStr: string): string {
-  return new Date(dateStr).toLocaleDateString("en-US", {
+function first(value: string | string[] | undefined) {
+  return Array.isArray(value) ? value[0] : value;
+}
+
+function filterHref(status: FilterKey, query: string) {
+  const params = new URLSearchParams();
+  if (status !== "all") {
+    params.set("status", status);
+  }
+  if (query) {
+    params.set("q", query);
+  }
+  const search = params.toString();
+  return search ? `/invoices?${search}` : "/invoices";
+}
+
+function formatDate(date: string) {
+  return new Date(`${date}T00:00:00Z`).toLocaleDateString("en-US", {
     day: "numeric",
     month: "short",
-    year: "numeric",
+    timeZone: "UTC",
   });
+}
+
+function sourceLabel(source: string, sourceClient: string | null) {
+  if (sourceClient) {
+    return sourceClient;
+  }
+  if (source === "chat") {
+    return "Nota chat";
+  }
+  if (source === "cli") {
+    return "CLI";
+  }
+  if (source === "mcp") {
+    return "MCP";
+  }
+  if (source === "api") {
+    return "API";
+  }
+  if (source === "system") {
+    return "System";
+  }
+  return "Web";
 }
