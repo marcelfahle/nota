@@ -15,12 +15,6 @@ import {
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
-const navItems = [
-  { href: "/home", label: "Home" },
-  { href: "/invoices", label: "Invoices" },
-  { href: "/clients", label: "Clients" },
-];
-
 function readChatOpen(userId: string) {
   try {
     return localStorage.getItem(`nota:chat-open:${userId}`) === "true";
@@ -44,6 +38,7 @@ export function DashboardShell({
   emailJobItems,
   emailJobSummary,
   logoUrl,
+  navCounts,
   stripeDockItems,
   usage,
   userId,
@@ -54,14 +49,23 @@ export function DashboardShell({
   emailJobItems: Array<EmailJobDockItem>;
   emailJobSummary: EmailJobDockSummary;
   logoUrl: string | null;
+  navCounts: { overdue: number; proposals: number };
   stripeDockItems: Array<StripeDockItem>;
   usage: { limit: number | null; plan: string; sent: number };
   userId: string;
 }) {
+  const navItems = [
+    { href: "/home", label: "Home", meta: navCounts.proposals || null },
+    {
+      href: "/invoices",
+      label: "Invoices",
+      meta: navCounts.overdue ? `${navCounts.overdue} late` : null,
+    },
+    { href: "/clients", label: "Clients", meta: null },
+  ];
   const pathname = usePathname();
   const isHome = pathname === "/home";
   const [menuOpen, setMenuOpen] = useState(false);
-  const [homeChatOpen, setHomeChatOpen] = useState(false);
   const [panelOpen, setPanelOpen] = useState(false);
   const [opsOpen, setOpsOpen] = useState(false);
   const [imageFailed, setImageFailed] = useState(false);
@@ -69,7 +73,7 @@ export function DashboardShell({
 
   const focusChat = useCallback(() => {
     if (isHome) {
-      setHomeChatOpen(true);
+      window.dispatchEvent(new Event("nota:open-home-chat"));
     } else {
       setPanelOpen(true);
       writeChatOpen(userId, true);
@@ -80,12 +84,6 @@ export function DashboardShell({
   useEffect(() => {
     setPanelOpen(readChatOpen(userId));
   }, [userId]);
-
-  useEffect(() => {
-    if (!isHome) {
-      setHomeChatOpen(false);
-    }
-  }, [isHome]);
 
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
@@ -102,15 +100,11 @@ export function DashboardShell({
   }, [focusChat]);
 
   function setChatOpen(open: boolean) {
-    if (isHome) {
-      setHomeChatOpen(open);
-      return;
-    }
     setPanelOpen(open);
     writeChatOpen(userId, open);
   }
 
-  const chatOpen = isHome ? homeChatOpen : panelOpen;
+  const chatOpen = panelOpen;
 
   return (
     <div className="app-shell min-h-dvh bg-background text-foreground md:grid md:grid-cols-[248px_minmax(0,1fr)]">
@@ -176,7 +170,7 @@ export function DashboardShell({
               className="flex flex-col gap-1"
               onClick={() => setMenuOpen(false)}
             >
-              {navItems.map(({ href, label }) => (
+              {navItems.map(({ href, label, meta }) => (
                 <Link
                   aria-current={pathname.startsWith(href) ? "page" : undefined}
                   className={cn(
@@ -186,7 +180,19 @@ export function DashboardShell({
                   href={href}
                   key={href}
                 >
-                  {label}
+                  <span className="flex items-center justify-between gap-2">
+                    {label}
+                    {meta ? (
+                      <span
+                        className={cn(
+                          "font-mono text-[11px] font-normal",
+                          href === "/invoices" ? "text-destructive" : "text-muted-foreground",
+                        )}
+                      >
+                        {meta}
+                      </span>
+                    ) : null}
+                  </span>
                 </Link>
               ))}
             </nav>
@@ -255,7 +261,7 @@ export function DashboardShell({
         </div>
       </aside>
       <div className={cn("min-w-0", !isHome && chatOpen && "xl:pr-[340px]")}>
-        <div className="flex justify-end px-4 pt-5 sm:px-8">
+        <div className={cn("justify-end px-4 pt-5 sm:px-8", isHome ? "hidden" : "flex")}>
           <Button asChild size="sm">
             <Link href="/invoices/new">
               <Plus />
@@ -264,17 +270,22 @@ export function DashboardShell({
           </Button>
         </div>
         <main
-          className="mx-auto max-w-6xl px-4 py-6 pb-20 sm:px-8 sm:py-8 sm:pb-20"
+          className={cn(
+            "mx-auto max-w-6xl px-4 pb-20 sm:px-8 sm:pb-20",
+            isHome ? "py-12 sm:py-[72px]" : "py-6 sm:py-8",
+          )}
           id="main-content"
           tabIndex={-1}
         >
-          <div hidden={isHome && homeChatOpen}>{children}</div>
-          <ChatPanel
-            inputRef={chatInput}
-            mode={isHome ? "home" : "panel"}
-            onOpenChange={setChatOpen}
-            open={chatOpen}
-          />
+          {children}
+          {isHome ? null : (
+            <ChatPanel
+              inputRef={chatInput}
+              mode="panel"
+              onOpenChange={setChatOpen}
+              open={chatOpen}
+            />
+          )}
         </main>
       </div>
       {opsOpen ? (

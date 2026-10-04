@@ -9,7 +9,7 @@ export async function login(page: Page, email: string, password: string) {
   await page.getByTestId("login-email").fill(email);
   await page.getByTestId("login-password").fill(password);
   await page.getByTestId("login-submit").click();
-  await expect(page).toHaveURL(/\/invoices$/);
+  await expect(page).toHaveURL(/\/home$/);
 }
 
 export async function logout(page: Page) {
@@ -28,7 +28,7 @@ export async function registerAccount(page: Page, name = "Playwright Owner") {
   await page.getByTestId("register-email").fill(email);
   await page.getByTestId("register-password").fill(password);
   await page.getByTestId("register-submit").click();
-  await expect(page).toHaveURL(/\/invoices$/);
+  await expect(page).toHaveURL(/\/home$/);
 
   return { email, password };
 }
@@ -123,7 +123,7 @@ export async function acceptInvite(
   await page.getByTestId("register-name").fill(name);
   await page.getByTestId("register-password").fill(password);
   await page.getByTestId("register-submit").click();
-  await expect(page).toHaveURL(/\/invoices$/);
+  await expect(page).toHaveURL(/\/home$/);
 
   await context.close();
 }

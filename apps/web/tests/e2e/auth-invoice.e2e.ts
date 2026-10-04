@@ -13,8 +13,8 @@ test("registers, signs out, and signs back in", async ({ page }) => {
   await page.getByTestId("login-password").fill(credentials.password);
   await page.getByTestId("login-submit").click();
 
-  await expect(page).toHaveURL(/\/invoices$/);
-  await expect(page.getByRole("heading", { name: "Invoices" })).toBeVisible();
+  await expect(page).toHaveURL(/\/home$/);
+  await expect(page.getByRole("heading", { name: "Welcome to Nota." })).toBeVisible();
 });
 
 test("updates organization settings and reflects branding", async ({ page }) => {

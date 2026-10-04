@@ -473,11 +473,13 @@ export function ChatPanel({
   mode,
   onOpenChange,
   open,
+  starterPrompts = STARTER_PROMPTS,
 }: {
   inputRef: React.RefObject<HTMLTextAreaElement | null>;
   mode: "home" | "panel";
   onOpenChange: (open: boolean) => void;
   open: boolean;
+  starterPrompts?: ReadonlyArray<string>;
 }) {
   const router = useRouter();
   const pathname = usePathname();
@@ -665,7 +667,7 @@ export function ChatPanel({
         />
         {homePrompt ? (
           <div className="mb-3 flex flex-wrap gap-1.5 px-2">
-            {STARTER_PROMPTS.map((prompt) => (
+            {starterPrompts.map((prompt) => (
               <button
                 className="min-h-8 rounded-full border px-3 text-xs hover:bg-accent"
                 disabled={isBusy}
@@ -758,7 +760,7 @@ export function ChatPanel({
             <p className="font-medium text-foreground">Put Nota to work</p>
             <p className="font-voice text-base">Clients, invoices, and getting paid.</p>
             <div className="flex flex-wrap gap-1.5">
-              {STARTER_PROMPTS.map((prompt) => (
+              {starterPrompts.map((prompt) => (
                 <button
                   className="min-h-8 rounded-full border px-3 text-xs hover:bg-accent"
                   disabled={isBusy}
@@ -826,7 +828,7 @@ export function ChatPanel({
   if (mode === "home") {
     return (
       <>
-        <section aria-label="Ask Nota" className="mx-auto mt-8 max-w-3xl" hidden={open}>
+        <section aria-label="Ask Nota" className="mx-auto mt-8 max-w-[700px]" hidden={open}>
           {csvFile ? (
             <Button
               onClick={() => onOpenChange(true)}
@@ -844,7 +846,7 @@ export function ChatPanel({
         {open || csvFile ? (
           <section
             aria-label="Conversation with Nota"
-            className="mx-auto flex h-[calc(100dvh-10rem)] max-w-3xl flex-col overflow-hidden rounded-lg border bg-card"
+            className="mx-auto flex h-[calc(100dvh-10rem)] max-w-[700px] flex-col overflow-hidden rounded-lg border bg-card"
             hidden={!open}
           >
             {conversation}
