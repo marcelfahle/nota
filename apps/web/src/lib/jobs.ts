@@ -19,7 +19,7 @@ import {
   users,
 } from "@/lib/db/schema";
 import { getResend } from "@/lib/email";
-import { getEmailEnv } from "@/lib/env";
+import { getAppEnv, getEmailEnv } from "@/lib/env";
 import { buildInvoiceFilename } from "@/lib/invoice-filename";
 import { reminderPayloadSchema } from "@/lib/proposal-service";
 
@@ -61,6 +61,10 @@ function parseEmailJobPayload(payload: Record<string, unknown>): EmailJobPayload
         : undefined,
     sourceClient: typeof payload.sourceClient === "string" ? payload.sourceClient : null,
   };
+}
+
+function getPublicInvoiceUrl(token: string | null) {
+  return token ? new URL(`/i/${encodeURIComponent(token)}`, getAppEnv().APP_URL).toString() : null;
 }
 
 async function getInvoiceEmailContext(invoiceId: string) {
@@ -188,6 +192,7 @@ async function sendInvoiceEmail(invoiceId: string) {
       currency: invoice.currency ?? "EUR",
       dueAt: invoice.dueAt,
       invoiceNumber: invoice.number,
+      invoiceUrl: getPublicInvoiceUrl(invoice.publicToken),
       paymentLinkUrl: invoice.stripePaymentLinkUrl,
       total: invoice.total ?? "0",
     }),
@@ -204,7 +209,11 @@ async function sendInvoiceReminderEmail(
   if (stored) {
     const [[invoice], [proposal]] = await Promise.all([
       db
-        .select({ revision: invoices.revision, status: invoices.status })
+        .select({
+          publicToken: invoices.publicToken,
+          revision: invoices.revision,
+          status: invoices.status,
+        })
         .from(invoices)
         .where(eq(invoices.id, invoiceId))
         .limit(1),
@@ -239,6 +248,7 @@ async function sendInvoiceReminderEmail(
         currency: stored.currency,
         dueAt: stored.dueAt,
         invoiceNumber: stored.invoiceNumber,
+        invoiceUrl: getPublicInvoiceUrl(invoice.publicToken),
         paymentLinkUrl: stored.paymentLinkUrl,
         reminder: true,
         total: stored.total,
@@ -271,6 +281,7 @@ async function sendInvoiceReminderEmail(
       currency: invoice.currency ?? "EUR",
       dueAt: invoice.dueAt,
       invoiceNumber: invoice.number,
+      invoiceUrl: getPublicInvoiceUrl(invoice.publicToken),
       paymentLinkUrl: invoice.stripePaymentLinkUrl,
       reminder: true,
       total: invoice.total ?? "0",
