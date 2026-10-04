@@ -40,7 +40,7 @@ test.beforeAll(async () => {
       ],
       stdin: {
         contents:
-          'import React from "react"; import {createRoot} from "react-dom/client"; import {ChatPanel} from "./src/components/chat-panel"; function Fixture() { const [open, setOpen] = React.useState(false); const input = React.useRef(null); return <div className="app-shell"><ChatPanel inputRef={input} open={open} onOpenChange={setOpen} /></div>; } createRoot(document.getElementById("root")).render(<Fixture />);',
+          'import React from "react"; import {createRoot} from "react-dom/client"; import {ChatPanel} from "./src/components/chat-panel"; function Fixture() { const [open, setOpen] = React.useState(false); const input = React.useRef(null); const mode = new URLSearchParams(location.search).get("mode") === "home" ? "home" : "panel"; return <div className="app-shell"><ChatPanel inputRef={input} mode={mode} open={open} onOpenChange={setOpen} /></div>; } createRoot(document.getElementById("root")).render(<Fixture />);',
         loader: "tsx",
         resolveDir: cwd,
       },
@@ -53,7 +53,12 @@ test.beforeAll(async () => {
   html = `<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1"><style>${styles.css}</style><style>body{font-family:Arial,sans-serif;background:#fafafa}</style><div id="root"></div><script>${bundle.outputFiles[0].text.replaceAll("</script", String.raw`<\/script`)}</script>`;
 });
 
-async function openChat(page: Page, stale = false, nonJson?: "preview" | "commit") {
+async function openChat(
+  page: Page,
+  stale = false,
+  nonJson?: "preview" | "commit",
+  mode: "home" | "panel" = "panel",
+) {
   const requests: Array<{ csv: string; mode: string; previewHash?: string }> = [];
   let existing = [{ email: "billing@acme.test", name: "Acme" }];
   await page.route("**/*", async (route) => {
@@ -115,8 +120,10 @@ async function openChat(page: Page, stale = false, nonJson?: "preview" | "commit
     }
     throw new Error(`Unexpected browser request: ${request.url()}`);
   });
-  await page.goto("/csv-proof");
-  await page.getByTestId("chat-panel-toggle").click();
+  await page.goto(`/csv-proof?mode=${mode}`);
+  if (mode === "panel") {
+    await page.getByTestId("chat-panel-toggle").click();
+  }
   return requests;
 }
 
@@ -165,6 +172,26 @@ test("chat CSV preview, billing details, explicit import, and receipt work on de
   ).toBeVisible();
   expect(requests.filter((request) => request.mode === "commit").length).toBe(1);
   await expect(page.getByRole("button", { name: "Attach client CSV" })).toBeEnabled();
+});
+
+test("Home keeps a CSV preview mounted while the conversation is closed", async ({ page }) => {
+  const requests = await openChat(page, false, undefined, "home");
+  await page.getByTestId("client-csv-input").setInputFiles({
+    buffer: Buffer.from(csv),
+    mimeType: "text/csv",
+    name: "freshbooks-clients.csv",
+  });
+  await expect(page.getByText("1 new client ready.")).toBeVisible();
+
+  await page.getByRole("button", { name: "Back to Home" }).click();
+  const resume = page.getByRole("button", {
+    name: "Continue importing freshbooks-clients.csv",
+  });
+  await expect(resume).toBeFocused();
+  await resume.click();
+
+  await expect(page.getByText("1 new client ready.")).toBeVisible();
+  expect(requests.filter((request) => request.mode === "preview").length).toBe(1);
 });
 
 for (const mode of ["preview", "commit"] as const) {

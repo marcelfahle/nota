@@ -3,14 +3,13 @@
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport, isTextUIPart, isToolOrDynamicToolUIPart, type UIMessage } from "ai";
 import {
-  Bot,
+  ArrowLeft,
+  ArrowRight,
   Download,
   FileArchive,
   LoaderCircle,
   Paperclip,
   Send,
-  Sparkles,
-  X,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { usePathname } from "next/navigation";
@@ -18,7 +17,9 @@ import { useEffect, useMemo, useRef, useState } from "react";
 
 import { ChatClientImport } from "@/components/chat-client-import";
 import { ChatMarkdown } from "@/components/chat-markdown";
+import { NotaGlyph } from "@/components/nota-marks";
 import { Button } from "@/components/ui/button";
+import type { ChatActivity } from "@/lib/chat-store";
 import { formatCurrency } from "@/lib/utils";
 import { cn } from "@/lib/utils";
 
@@ -108,9 +109,40 @@ const transport = new DefaultChatTransport({
   credentials: "same-origin",
 });
 
+function getPageContextLabel(pathname: string) {
+  if (pathname === "/invoices/new") {
+    return "a new invoice";
+  }
+  if (/^\/invoices\/[^/]+\/edit$/.test(pathname)) {
+    return "an invoice editor";
+  }
+  if (/^\/invoices\/[^/]+$/.test(pathname)) {
+    return "an invoice";
+  }
+  if (pathname === "/invoices") {
+    return "your invoices";
+  }
+  if (/^\/clients\/[^/]+$/.test(pathname)) {
+    return "a client";
+  }
+  if (pathname === "/clients") {
+    return "your clients";
+  }
+  if (pathname === "/settings") {
+    return "settings";
+  }
+  return "this page";
+}
+
 function getToolLabel(type: string) {
   const raw = type.startsWith("tool-") ? type.slice(5) : type;
   return raw.replaceAll("_", " ").replaceAll(/\b\w/g, (char) => char.toUpperCase());
+}
+
+function formatActivity(activity: ChatActivity) {
+  const action = activity.action.replaceAll("_", " ");
+  const source = activity.sourceClient ?? (activity.source === "cli" ? "Nota CLI" : "an agent");
+  return `${activity.invoiceNumber} · ${action} via ${source}`;
 }
 
 function formatInvoiceAmount(
@@ -438,22 +470,25 @@ function MessageBubble({ message }: { message: UIMessage }) {
 
 export function ChatPanel({
   inputRef,
+  mode,
   onOpenChange,
   open,
 }: {
   inputRef: React.RefObject<HTMLTextAreaElement | null>;
+  mode: "home" | "panel";
   onOpenChange: (open: boolean) => void;
   open: boolean;
 }) {
   const router = useRouter();
   const pathname = usePathname();
+  const [activity, setActivity] = useState<Array<ChatActivity>>([]);
   const [input, setInput] = useState("");
   const [csvFile, setCsvFile] = useState<File | null>(null);
   const [historyLoaded, setHistoryLoaded] = useState(false);
   const [importBusy, setImportBusy] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
   const closeButton = useRef<HTMLButtonElement>(null);
-  const resumeImport = useRef<HTMLButtonElement>(null);
+  const toggleButton = useRef<HTMLButtonElement>(null);
   const wasOpen = useRef(false);
   const dialog = useRef<HTMLDialogElement>(null);
   const refreshedMessages = useRef<Set<string>>(new Set());
@@ -461,30 +496,48 @@ export function ChatPanel({
   useEffect(() => {
     const panel = dialog.current;
     if (!panel) {
+      if (mode === "home" && open) {
+        wasOpen.current = true;
+        inputRef.current?.focus();
+      }
+      if (!open && wasOpen.current) {
+        (mode === "home" && !csvFile ? inputRef.current : toggleButton.current)?.focus();
+        wasOpen.current = false;
+      }
+      return;
+    }
+    if (!open) {
+      if (panel.open) {
+        panel.close();
+      }
+      if (wasOpen.current) {
+        setTimeout(() => toggleButton.current?.focus());
+      }
+      wasOpen.current = false;
       return;
     }
     const desktop = window.matchMedia("(min-width: 1280px)");
     // Keep the composer mounted so minimising chat cannot reset an in-flight import.
     // Native modality contains focus and makes the covered page inert on small screens.
     const syncModality = () => {
-      if (open && !desktop.matches && !panel.matches(":modal")) {
-        panel.close();
+      if (!desktop.matches && !panel.matches(":modal")) {
+        if (panel.open) {
+          panel.close();
+        }
         panel.showModal();
-      } else if ((!open || desktop.matches) && panel.matches(":modal")) {
+      } else if (desktop.matches && panel.matches(":modal")) {
         panel.close();
+        panel.show();
+      } else if (desktop.matches && !panel.open) {
         panel.show();
       }
     };
     syncModality();
-    if (open) {
-      (inputRef.current ?? closeButton.current)?.focus();
-    } else if (wasOpen.current) {
-      (inputRef.current ?? resumeImport.current)?.focus();
-    }
+    (inputRef.current ?? closeButton.current)?.focus();
     wasOpen.current = open;
     desktop.addEventListener("change", syncModality);
     return () => desktop.removeEventListener("change", syncModality);
-  }, [inputRef, open]);
+  }, [csvFile, inputRef, mode, open]);
 
   const { clearError, error, messages, sendMessage, setMessages, status } = useChat({
     experimental_throttle: 50,
@@ -497,7 +550,10 @@ export function ChatPanel({
     let active = true;
     void fetch("/api/chat")
       .then((response) => (response.ok ? response.json() : null))
-      .then((data: { messages?: Array<UIMessage> } | null) => {
+      .then((data: { activity?: Array<ChatActivity>; messages?: Array<UIMessage> } | null) => {
+        if (active && data?.activity) {
+          setActivity(data.activity);
+        }
         if (active && data?.messages) {
           setMessages(data.messages);
         }
@@ -531,12 +587,7 @@ export function ChatPanel({
     router.refresh();
   }, [messages, router]);
 
-  const hasConversation = messages.length > 0;
-  const headerLabel = useMemo(
-    () =>
-      hasConversation ? "Working with live Nota data" : "Clients, invoices, and getting paid.",
-    [hasConversation],
-  );
+  const headerLabel = useMemo(() => getPageContextLabel(pathname), [pathname]);
 
   async function submitInput(value: string) {
     const trimmedValue = value.trim();
@@ -564,222 +615,285 @@ export function ChatPanel({
     await submitInput(input);
   }
 
+  function closePanel() {
+    onOpenChange(false);
+    setTimeout(() => toggleButton.current?.focus());
+  }
+
+  function renderComposer(homePrompt = false) {
+    if (csvFile) {
+      return null;
+    }
+
+    return (
+      <form
+        className={cn(
+          "shrink-0 bg-card focus-within:ring-2 focus-within:ring-ring/30",
+          homePrompt
+            ? "rounded-[14px] border p-4 shadow-[0_16px_40px_-28px_rgb(25_21_16/55%)]"
+            : "p-3",
+        )}
+        onSubmit={handleSubmit}
+      >
+        <label className="nota-label block px-2 text-foreground" htmlFor="nota-chat-input">
+          {homePrompt ? "What did you do?" : "Say what you did"}
+        </label>
+        <textarea
+          aria-label="Ask Nota"
+          className={cn(
+            "w-full resize-none border-0 bg-transparent px-2 py-2 leading-6 text-foreground placeholder:text-muted-foreground",
+            "focus-visible:outline-none",
+            homePrompt ? "font-voice text-xl" : "text-sm",
+          )}
+          data-testid="chat-panel-input"
+          id="nota-chat-input"
+          onChange={(event) => setInput(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === "Enter" && !event.shiftKey && input.trim() && !isBusy) {
+              event.preventDefault();
+              void submitInput(input);
+            }
+          }}
+          placeholder={
+            homePrompt
+              ? "Invoice Oxide for 46 hours of consulting in September, same rate as last time"
+              : "Bill, chase, quote or ask…"
+          }
+          ref={inputRef}
+          rows={homePrompt ? 2 : 3}
+          value={input}
+        />
+        {homePrompt ? (
+          <div className="mb-3 flex flex-wrap gap-1.5 px-2">
+            {STARTER_PROMPTS.map((prompt) => (
+              <button
+                className="min-h-8 rounded-full border px-3 text-xs hover:bg-accent"
+                disabled={isBusy}
+                key={prompt}
+                onClick={() => void submitInput(prompt)}
+                type="button"
+              >
+                {prompt}
+              </button>
+            ))}
+          </div>
+        ) : null}
+        <div className="flex items-center justify-between gap-3 px-2 pb-1">
+          <input
+            accept=".csv,text/csv"
+            aria-label="Client CSV file"
+            className="hidden"
+            data-testid="client-csv-input"
+            onChange={(event) => {
+              onOpenChange(true);
+              setCsvFile(event.target.files?.[0] ?? null);
+              event.target.value = "";
+            }}
+            ref={fileInput}
+            type="file"
+          />
+          <Button
+            aria-label="Attach client CSV"
+            disabled={isBusy}
+            onClick={() => fileInput.current?.click()}
+            size="icon-sm"
+            type="button"
+            variant="ghost"
+          >
+            <Paperclip />
+          </Button>
+          <span className="hidden font-mono text-[11px] text-muted-foreground sm:inline">
+            {homePrompt ? "Enter to send" : "⌘J from anywhere"}
+          </span>
+          <Button disabled={!input.trim() || isBusy} size="sm" type="submit">
+            <Send />
+            {homePrompt ? "Draft it" : "Send"}
+          </Button>
+        </div>
+      </form>
+    );
+  }
+
+  const conversation = (
+    <>
+      <header className="flex items-center justify-between gap-4 border-b px-5 py-4">
+        {mode === "home" ? (
+          <Button onClick={() => onOpenChange(false)} size="sm" type="button" variant="ghost">
+            <ArrowLeft />
+            Back to Home
+          </Button>
+        ) : (
+          <div className="min-w-0">
+            <p className="nota-label truncate text-foreground">
+              Nota <span className="opacity-40">/</span> {headerLabel}
+            </p>
+          </div>
+        )}
+        {mode === "panel" ? (
+          <Button
+            aria-label="Close chat"
+            onClick={closePanel}
+            ref={closeButton}
+            size="icon-sm"
+            type="button"
+            variant="outline"
+          >
+            <ArrowRight />
+          </Button>
+        ) : null}
+      </header>
+
+      <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-4 py-5">
+        {activity.length > 0 ? (
+          <ol aria-label="Recent agent activity" className="space-y-2">
+            {activity.map((item) => (
+              <li className="nota-label text-muted-foreground" key={item.id}>
+                {formatActivity(item)}
+              </li>
+            ))}
+          </ol>
+        ) : null}
+        {messages.length === 0 ? (
+          <div className="space-y-4 rounded-md border border-dashed bg-background p-4 text-sm text-muted-foreground">
+            <p className="font-medium text-foreground">Put Nota to work</p>
+            <p className="font-voice text-base">Clients, invoices, and getting paid.</p>
+            <div className="flex flex-wrap gap-1.5">
+              {STARTER_PROMPTS.map((prompt) => (
+                <button
+                  className="min-h-8 rounded-full border px-3 text-xs hover:bg-accent"
+                  disabled={isBusy}
+                  key={prompt}
+                  onClick={() => void submitInput(prompt)}
+                  type="button"
+                >
+                  {prompt}
+                </button>
+              ))}
+            </div>
+          </div>
+        ) : (
+          messages.map((message) => <MessageBubble key={message.id} message={message} />)
+        )}
+
+        {csvFile ? (
+          <ChatClientImport
+            file={csvFile}
+            key={`${csvFile.name}-${csvFile.lastModified}`}
+            onBusyChange={setImportBusy}
+            onComplete={(result) => {
+              router.refresh();
+              setMessages((previous) => [
+                ...previous,
+                {
+                  id: crypto.randomUUID(),
+                  parts: [{ text: "Import my client CSV.", type: "text" }],
+                  role: "user",
+                },
+                {
+                  id: crypto.randomUUID(),
+                  parts: [
+                    {
+                      text: `Added **${result.added} client${result.added === 1 ? "" : "s"}** from your CSV. Skipped ${result.counts.duplicate} duplicates and ${result.counts.invalid} rows needing attention. No invoices were created or sent.`,
+                      type: "text",
+                    },
+                  ],
+                  role: "assistant",
+                },
+              ]);
+              setCsvFile(null);
+            }}
+            onDismiss={() => setCsvFile(null)}
+          />
+        ) : null}
+
+        {isBusy ? (
+          <div className="flex items-center gap-2 px-2 text-sm text-muted-foreground">
+            <LoaderCircle className="size-4 animate-spin" />
+            Thinking…
+          </div>
+        ) : null}
+        {error ? (
+          <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-3 text-sm text-red-700">
+            {error.message}
+          </div>
+        ) : null}
+      </div>
+
+      {csvFile ? null : renderComposer()}
+    </>
+  );
+
+  if (mode === "home") {
+    return (
+      <>
+        <section aria-label="Ask Nota" className="mx-auto mt-8 max-w-3xl" hidden={open}>
+          {csvFile ? (
+            <Button
+              onClick={() => onOpenChange(true)}
+              ref={toggleButton}
+              type="button"
+              variant="outline"
+            >
+              <NotaGlyph />
+              Continue importing {csvFile.name}
+            </Button>
+          ) : (
+            renderComposer(true)
+          )}
+        </section>
+        {open || csvFile ? (
+          <section
+            aria-label="Conversation with Nota"
+            className="mx-auto flex h-[calc(100dvh-10rem)] max-w-3xl flex-col overflow-hidden rounded-lg border bg-card"
+            hidden={!open}
+          >
+            {conversation}
+          </section>
+        ) : null}
+      </>
+    );
+  }
+
   return (
     <>
+      <button
+        aria-expanded="false"
+        className="fixed right-4 bottom-4 z-20 inline-flex min-h-[46px] items-center gap-2.5 rounded-full border bg-card px-4 pl-3 text-sm font-semibold shadow-[0_14px_30px_-18px_rgb(25_21_16/60%)] hover:bg-accent sm:right-6 sm:bottom-6"
+        data-testid="chat-panel-toggle"
+        hidden={open}
+        onClick={() => onOpenChange(true)}
+        ref={toggleButton}
+        type="button"
+      >
+        <NotaGlyph />
+        {csvFile ? `Continue importing ${csvFile.name}` : "Ask Nota"}
+        {!csvFile ? (
+          <kbd className="font-mono text-[11px] font-normal text-muted-foreground">⌘J</kbd>
+        ) : null}
+      </button>
       <dialog
         aria-label="Nota Chat"
-        className={cn(
-          "fixed z-30 m-0 flex max-h-none max-w-none flex-col overflow-hidden border bg-card p-0 text-foreground backdrop:bg-background/70",
-          open
-            ? "inset-y-0 right-0 left-auto h-dvh w-full sm:w-[400px]"
-            : "inset-x-3 top-auto bottom-3 h-auto w-auto rounded-lg md:right-6 md:left-[272px]",
-        )}
+        className="fixed inset-0 z-30 m-0 h-dvh max-h-none w-screen max-w-none flex-col overflow-hidden border bg-card p-0 text-foreground backdrop:bg-background/70 open:flex sm:inset-y-0 sm:right-0 sm:left-auto sm:w-[340px]"
         onCancel={(event) => {
           event.preventDefault();
-          onOpenChange(false);
+          closePanel();
         }}
         onDragOver={(event) => event.preventDefault()}
         onDrop={(event) => {
           event.preventDefault();
           if (!isBusy && !csvFile) {
-            onOpenChange(true);
             setCsvFile(event.dataTransfer.files[0] ?? null);
           }
         }}
         onKeyDown={(event) => {
-          if (event.key === "Escape" && open) {
+          if (event.key === "Escape") {
             event.preventDefault();
-            onOpenChange(false);
+            closePanel();
           }
         }}
-        open
         ref={dialog}
       >
-        <div className={cn("border-b px-5 py-4", !open && "hidden")}>
-          <div className="flex items-start justify-between gap-4">
-            <div>
-              <div className="flex items-center gap-2 text-zinc-900">
-                <div className="flex size-9 items-center justify-center rounded-md bg-primary text-primary-foreground">
-                  <Bot className="size-4" />
-                </div>
-                <div>
-                  <p className="text-sm font-semibold tracking-tight">Nota Chat</p>
-                  <p className="text-xs text-zinc-500">{headerLabel}</p>
-                </div>
-              </div>
-            </div>
-            <Button
-              aria-label="Close chat"
-              onClick={() => {
-                onOpenChange(false);
-              }}
-              ref={closeButton}
-              size="icon-sm"
-              type="button"
-              variant="ghost"
-            >
-              <X className="size-4" />
-            </Button>
-          </div>
-        </div>
-
-        <div
-          className={cn("min-h-0 flex-1 space-y-4 overflow-y-auto px-4 py-4", !open && "hidden")}
-        >
-          {messages.length === 0 ? (
-            <div className="space-y-4 rounded-md border border-dashed bg-background p-4 text-sm text-muted-foreground">
-              <p className="font-medium text-zinc-900">Put Nota to work</p>
-              <p className="text-xs leading-5">
-                Moving from FreshBooks? Drop your client CSV here or use the paperclip.
-              </p>
-              <div className="divide-y divide-zinc-100 border-y border-zinc-100">
-                {STARTER_PROMPTS.map((prompt) => (
-                  <button
-                    className="flex min-h-11 w-full items-center justify-between gap-3 py-2.5 text-left text-sm text-zinc-700 transition-colors hover:text-zinc-950 focus-visible:ring-2 focus-visible:ring-zinc-400 focus-visible:ring-offset-2 focus-visible:outline-none"
-                    disabled={isBusy}
-                    key={prompt}
-                    onClick={() => submitInput(prompt)}
-                    type="button"
-                  >
-                    <span>{prompt}</span>
-                    <span aria-hidden="true" className="text-zinc-300">
-                      →
-                    </span>
-                  </button>
-                ))}
-              </div>
-            </div>
-          ) : (
-            messages.map((message) => <MessageBubble key={message.id} message={message} />)
-          )}
-
-          {csvFile ? (
-            <ChatClientImport
-              file={csvFile}
-              key={`${csvFile.name}-${csvFile.lastModified}`}
-              onBusyChange={setImportBusy}
-              onComplete={(result) => {
-                router.refresh();
-                setMessages((previous) => [
-                  ...previous,
-                  {
-                    id: crypto.randomUUID(),
-                    parts: [{ text: "Import my client CSV.", type: "text" }],
-                    role: "user",
-                  },
-                  {
-                    id: crypto.randomUUID(),
-                    parts: [
-                      {
-                        text: `Added **${result.added} client${result.added === 1 ? "" : "s"}** from your CSV. Skipped ${result.counts.duplicate} duplicates and ${result.counts.invalid} rows needing attention. No invoices were created or sent.`,
-                        type: "text",
-                      },
-                    ],
-                    role: "assistant",
-                  },
-                ]);
-                setCsvFile(null);
-              }}
-              onDismiss={() => setCsvFile(null)}
-            />
-          ) : null}
-
-          {isBusy ? (
-            <div className="flex items-center gap-2 px-2 text-sm text-zinc-500">
-              <LoaderCircle className="size-4 animate-spin" />
-              Thinking…
-            </div>
-          ) : null}
-
-          {error ? (
-            <div className="rounded-2xl border border-red-200 bg-red-50 px-3 py-3 text-sm text-red-700">
-              {error.message}
-            </div>
-          ) : null}
-        </div>
-
-        {csvFile && !open ? (
-          <button
-            className="p-4 text-left text-sm"
-            onClick={() => onOpenChange(true)}
-            ref={resumeImport}
-            type="button"
-          >
-            Continue importing {csvFile.name}
-          </button>
-        ) : null}
-        {!csvFile ? (
-          <form className="shrink-0 bg-card p-3" onSubmit={handleSubmit}>
-            <div>
-              {!open ? (
-                <div className="mb-1 flex items-center justify-between px-2">
-                  <label className="nota-label" htmlFor="nota-chat-input">
-                    Tell Nota
-                  </label>
-                  <button
-                    aria-expanded={open}
-                    className="flex items-center gap-2 text-xs text-muted-foreground"
-                    data-testid="chat-panel-toggle"
-                    onClick={() => onOpenChange(true)}
-                    type="button"
-                  >
-                    <Sparkles className="size-3" />
-                    Nota Chat
-                  </button>
-                </div>
-              ) : null}
-              <textarea
-                aria-label="Ask Nota"
-                className="w-full resize-none border-0 bg-transparent px-2 py-2 text-sm leading-6 text-foreground placeholder:text-muted-foreground"
-                data-testid="chat-panel-input"
-                id="nota-chat-input"
-                onChange={(event) => setInput(event.target.value)}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter" && !event.shiftKey && input.trim() && !isBusy) {
-                    event.preventDefault();
-                    void submitInput(input);
-                  }
-                }}
-                placeholder="Describe the work, ask about an invoice, or attach a client CSV…"
-                ref={inputRef}
-                rows={open ? 3 : 1}
-                value={input}
-              />
-              <div className="flex items-center justify-between gap-3 px-2 pb-1">
-                <input
-                  accept=".csv,text/csv"
-                  aria-label="Client CSV file"
-                  className="hidden"
-                  data-testid="client-csv-input"
-                  onChange={(event) => {
-                    onOpenChange(true);
-                    setCsvFile(event.target.files?.[0] ?? null);
-                    event.target.value = "";
-                  }}
-                  ref={fileInput}
-                  type="file"
-                />
-                <Button
-                  aria-label="Attach client CSV"
-                  disabled={isBusy || csvFile !== null}
-                  onClick={() => fileInput.current?.click()}
-                  size="icon-sm"
-                  type="button"
-                  variant="ghost"
-                >
-                  <Paperclip className="size-4" />
-                </Button>
-                <p className="text-[11px] text-zinc-400">
-                  Enter to send, Shift+Enter for a new line.
-                </p>
-                <Button disabled={!input.trim() || isBusy} size="sm" type="submit">
-                  <Send className="size-4" />
-                  Send
-                </Button>
-              </div>
-            </div>
-          </form>
-        ) : null}
+        {conversation}
       </dialog>
     </>
   );

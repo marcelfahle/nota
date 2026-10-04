@@ -9,7 +9,12 @@ import {
 } from "ai";
 
 import { getCurrentUserOrNull } from "@/lib/auth";
-import { getChatThread, loadChatMessages, saveChatMessage } from "@/lib/chat-store";
+import {
+  getChatThread,
+  loadChatActivity,
+  loadChatMessages,
+  saveChatMessage,
+} from "@/lib/chat-store";
 import { buildChatSystemContext, buildChatSystemPrompt, createChatTools } from "@/lib/chat-tools";
 import { getAiEnv } from "@/lib/env";
 
@@ -27,7 +32,11 @@ export async function GET() {
     return Response.json({ error: "Unauthorized" }, { status: 401 });
   }
   const thread = await getChatThread({ orgId: auth.org.id, userId: auth.user.id });
-  return Response.json({ messages: await loadChatMessages(thread.id), threadId: thread.id });
+  const [activity, messages] = await Promise.all([
+    loadChatActivity(auth.org.id),
+    loadChatMessages(thread.id),
+  ]);
+  return Response.json({ activity, messages, threadId: thread.id });
 }
 
 export async function POST(request: Request) {

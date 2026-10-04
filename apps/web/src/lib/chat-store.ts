@@ -1,10 +1,19 @@
 import type { UIMessage } from "ai";
-import { and, asc, desc, eq, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
 
 import { db } from "@/lib/db";
-import { chatMessages, chatThreads } from "@/lib/db/schema";
+import { activityLog, chatMessages, chatThreads, invoices } from "@/lib/db/schema";
 
 export type ChatOwner = { orgId: string; userId: string };
+
+export type ChatActivity = {
+  action: string;
+  createdAt: string;
+  id: string;
+  invoiceNumber: string;
+  source: string;
+  sourceClient: string | null;
+};
 
 export async function getChatThread(owner: ChatOwner) {
   return db.transaction(async (tx) => {
@@ -36,6 +45,28 @@ export async function loadChatMessages(threadId: string, limit = 24): Promise<Ar
     id: row.id,
     parts: row.parts as UIMessage["parts"],
     role: row.role as UIMessage["role"],
+  }));
+}
+
+export async function loadChatActivity(orgId: string): Promise<Array<ChatActivity>> {
+  const rows = await db
+    .select({
+      action: activityLog.action,
+      createdAt: activityLog.createdAt,
+      id: activityLog.id,
+      invoiceNumber: invoices.number,
+      source: activityLog.source,
+      sourceClient: activityLog.sourceClient,
+    })
+    .from(activityLog)
+    .innerJoin(invoices, eq(activityLog.invoiceId, invoices.id))
+    .where(and(eq(invoices.orgId, orgId), inArray(activityLog.source, ["mcp", "cli"])))
+    .orderBy(desc(activityLog.createdAt))
+    .limit(8);
+
+  return rows.map((row) => ({
+    ...row,
+    createdAt: row.createdAt?.toISOString() ?? new Date(0).toISOString(),
   }));
 }
 
