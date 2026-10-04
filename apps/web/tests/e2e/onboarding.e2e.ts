@@ -215,10 +215,31 @@ test("the read streams in, and an unreachable site returns to the question", asy
   });
   await page.route("**/api/onboarding/session", (route) => route.fulfill({ status: 204 }));
 
+  // The favicon is fetched by the browser while the address is typed.
+  let iconRequests = 0;
+  await page.route("https://studio.example/**", async (route) => {
+    iconRequests += 1;
+    await route.fulfill({
+      body: Buffer.from(
+        "iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAIAAACQkWg2AAAAFklEQVR4nGNwPraMJMQwqmFUw/DVAAC+ra8QmbUsDQAAAABJRU5ErkJggg==",
+        "base64",
+      ),
+      contentType: "image/png",
+    });
+  });
+
   await page.setViewportSize({ height: 844, width: 390 });
   await page.goto("/start");
   await expect(page.getByTestId("onboarding-read")).toBeDisabled();
+  await page.getByTestId("onboarding-website").fill("studio");
+  await expect(page.getByTestId("onboarding-typed-icon").locator("img")).toHaveCount(0);
+  expect(iconRequests).toBe(0);
   await page.getByTestId("onboarding-website").fill("studio.example");
+  await expect(page.getByTestId("onboarding-typed-icon").locator("img")).toHaveAttribute(
+    "src",
+    /^https:\/\/studio\.example\//,
+  );
+  expect(iconRequests).toBeGreaterThan(0);
   await page.getByTestId("onboarding-read").click();
   await expect(page.getByTestId("onboarding-title")).toHaveText("Nice to meet you, Studio Ruiz.");
   await expect(page.getByTestId("onboarding-status")).toHaveText("From studio.example");

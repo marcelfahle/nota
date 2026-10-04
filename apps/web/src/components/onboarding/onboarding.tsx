@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowLeft, ArrowRight, Check } from "lucide-react";
+import { ArrowLeft, ArrowRight, Check, Globe } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { flushSync } from "react-dom";
@@ -17,6 +17,7 @@ import { cn } from "@/lib/utils";
 import { InvoicePreview } from "./invoice-preview";
 import { Meet } from "./meet";
 import { useSiteRead } from "./use-site-read";
+import { useTypedFavicon } from "./use-typed-favicon";
 
 type Step = "ask" | "meet" | "save";
 
@@ -174,6 +175,7 @@ export function Onboarding({ initialProfile }: { initialProfile: SiteProfile | n
   const read = useSiteRead(initialProfile);
   const [step, setStep] = useState<Step>(initialProfile ? "meet" : "ask");
   const [website, setWebsite] = useState("");
+  const typedIcon = useTypedFavicon(step === "ask" ? website : "");
   const heading = useRef<HTMLHeadingElement>(null);
   const { profile, status } = read;
   const name = profile?.fields.name?.value;
@@ -243,20 +245,40 @@ export function Onboarding({ initialProfile }: { initialProfile: SiteProfile | n
                 Your website address
               </label>
               <div className="flex flex-col gap-2 rounded-xl border border-border bg-card p-2 shadow-[0_1px_0_var(--line)] focus-within:border-foreground sm:flex-row">
-                <input
-                  autoCapitalize="none"
-                  autoComplete="url"
-                  autoCorrect="off"
-                  autoFocus
-                  className="h-12 min-w-0 flex-1 bg-transparent px-3 font-mono text-base outline-none placeholder:text-muted-foreground/60"
-                  data-testid="onboarding-website"
-                  id="onboarding-website"
-                  inputMode="url"
-                  onChange={(event) => setWebsite(event.target.value)}
-                  placeholder="yourstudio.com"
-                  spellCheck={false}
-                  value={website}
-                />
+                <div className="flex min-w-0 flex-1 items-center">
+                  {/* The site's own icon appears as soon as the address is complete. */}
+                  <span
+                    aria-hidden="true"
+                    className="ml-2.5 grid size-7 shrink-0 place-items-center"
+                    data-testid="onboarding-typed-icon"
+                  >
+                    {typedIcon ? (
+                      <img
+                        alt=""
+                        className="onboarding-pop size-6 rounded-[5px] object-contain"
+                        key={typedIcon}
+                        referrerPolicy="no-referrer"
+                        src={typedIcon}
+                      />
+                    ) : (
+                      <Globe className="size-5 text-muted-foreground/50" strokeWidth={1.5} />
+                    )}
+                  </span>
+                  <input
+                    autoCapitalize="none"
+                    autoComplete="url"
+                    autoCorrect="off"
+                    autoFocus
+                    className="h-12 min-w-0 flex-1 bg-transparent px-2.5 font-mono text-base outline-none placeholder:text-muted-foreground/60"
+                    data-testid="onboarding-website"
+                    id="onboarding-website"
+                    inputMode="url"
+                    onChange={(event) => setWebsite(event.target.value)}
+                    placeholder="yourstudio.com"
+                    spellCheck={false}
+                    value={website}
+                  />
+                </div>
                 <Button
                   className="h-12 px-6 text-base font-semibold"
                   data-testid="onboarding-read"
@@ -294,7 +316,7 @@ export function Onboarding({ initialProfile }: { initialProfile: SiteProfile | n
           <div aria-hidden="true" className="mt-14 w-full max-w-[34rem] sm:mt-20">
             <div className="onboarding-peek">
               <HalftoneShadow className="onboarding-invoice">
-                <InvoicePreview profile={null} reading={false} />
+                <InvoicePreview icon={typedIcon} profile={null} reading={false} />
               </HalftoneShadow>
             </div>
           </div>

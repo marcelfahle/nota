@@ -35,11 +35,14 @@ function Slot({
 export function InvoicePreview({
   className,
   compact = false,
+  icon,
   profile,
   reading,
 }: {
   className?: string;
   compact?: boolean;
+  /** A favicon loaded in the browser while the address is still being typed. */
+  icon?: string | null;
   profile: SiteProfile | null;
   reading: boolean;
 }) {
@@ -74,6 +77,14 @@ export function InvoicePreview({
               )}
               data-testid="onboarding-invoice-logo"
               src={profile.logo}
+            />
+          ) : icon ? (
+            <img
+              alt=""
+              className="onboarding-pop size-11 shrink-0 rounded-md object-contain"
+              key={icon}
+              referrerPolicy="no-referrer"
+              src={icon}
             />
           ) : (
             <span
