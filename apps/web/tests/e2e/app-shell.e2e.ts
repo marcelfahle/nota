@@ -23,14 +23,14 @@ test("shell navigation, account themes, paper invoice and chat dock", async ({ b
   );
   await expect(page.getByRole("button", { name: /Ask Nota/ })).toBeHidden();
   await expect(page.getByRole("textbox", { name: "Ask Nota" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Send your first invoice" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Who’s the first one for?" })).toBeVisible();
   await page.keyboard.press("Control+k");
   await expect(page.getByRole("dialog", { name: "Nota Chat" })).toBeHidden();
   await page.keyboard.press("Control+j");
   await expect(page.getByRole("textbox", { name: "Ask Nota" })).toBeFocused();
   await expect(page.getByRole("region", { name: "Conversation with Nota" })).toBeVisible();
-  await page.getByRole("button", { name: "Back to Home" }).click();
-  await expect(page.getByRole("heading", { name: "Welcome to Nota." })).toBeVisible();
+  await page.getByRole("button", { name: "Back to invoice" }).click();
+  await expect(page.getByTestId("first-run-invoice")).toBeVisible();
 
   await page.getByRole("navigation", { name: "Workspace" }).getByText("Connect an agent").click();
   await expect(page).toHaveURL(/\/agents$/);
