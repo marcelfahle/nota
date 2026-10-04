@@ -21,6 +21,22 @@ const navItems = [
   { href: "/clients", label: "Clients" },
 ];
 
+function readChatOpen(userId: string) {
+  try {
+    return localStorage.getItem(`nota:chat-open:${userId}`) === "true";
+  } catch {
+    return false;
+  }
+}
+
+function writeChatOpen(userId: string, open: boolean) {
+  try {
+    localStorage.setItem(`nota:chat-open:${userId}`, String(open));
+  } catch {
+    // Remembering panel state is optional when browser storage is unavailable.
+  }
+}
+
 export function DashboardShell({
   brandName,
   children,
@@ -56,13 +72,13 @@ export function DashboardShell({
       setHomeChatOpen(true);
     } else {
       setPanelOpen(true);
-      localStorage.setItem(`nota:chat-open:${userId}`, "true");
+      writeChatOpen(userId, true);
     }
     requestAnimationFrame(() => chatInput.current?.focus());
   }, [isHome, userId]);
 
   useEffect(() => {
-    setPanelOpen(localStorage.getItem(`nota:chat-open:${userId}`) === "true");
+    setPanelOpen(readChatOpen(userId));
   }, [userId]);
 
   useEffect(() => {
@@ -91,7 +107,7 @@ export function DashboardShell({
       return;
     }
     setPanelOpen(open);
-    localStorage.setItem(`nota:chat-open:${userId}`, String(open));
+    writeChatOpen(userId, open);
   }
 
   const chatOpen = isHome ? homeChatOpen : panelOpen;

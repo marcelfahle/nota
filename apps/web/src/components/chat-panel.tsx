@@ -501,7 +501,7 @@ export function ChatPanel({
         inputRef.current?.focus();
       }
       if (!open && wasOpen.current) {
-        (mode === "home" ? inputRef.current : toggleButton.current)?.focus();
+        (mode === "home" && !csvFile ? inputRef.current : toggleButton.current)?.focus();
         wasOpen.current = false;
       }
       return;
@@ -537,7 +537,7 @@ export function ChatPanel({
     wasOpen.current = open;
     desktop.addEventListener("change", syncModality);
     return () => desktop.removeEventListener("change", syncModality);
-  }, [inputRef, mode, open]);
+  }, [csvFile, inputRef, mode, open]);
 
   const { clearError, error, messages, sendMessage, setMessages, status } = useChat({
     experimental_throttle: 50,
@@ -824,17 +824,33 @@ export function ChatPanel({
   );
 
   if (mode === "home") {
-    return open ? (
-      <section
-        aria-label="Conversation with Nota"
-        className="mx-auto flex h-[calc(100dvh-10rem)] max-w-3xl flex-col overflow-hidden rounded-lg border bg-card"
-      >
-        {conversation}
-      </section>
-    ) : (
-      <section aria-label="Ask Nota" className="mx-auto mt-8 max-w-3xl">
-        {renderComposer(true)}
-      </section>
+    return (
+      <>
+        <section aria-label="Ask Nota" className="mx-auto mt-8 max-w-3xl" hidden={open}>
+          {csvFile ? (
+            <Button
+              onClick={() => onOpenChange(true)}
+              ref={toggleButton}
+              type="button"
+              variant="outline"
+            >
+              <NotaGlyph />
+              Continue importing {csvFile.name}
+            </Button>
+          ) : (
+            renderComposer(true)
+          )}
+        </section>
+        {open || csvFile ? (
+          <section
+            aria-label="Conversation with Nota"
+            className="mx-auto flex h-[calc(100dvh-10rem)] max-w-3xl flex-col overflow-hidden rounded-lg border bg-card"
+            hidden={!open}
+          >
+            {conversation}
+          </section>
+        ) : null}
+      </>
     );
   }
 
