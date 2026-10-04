@@ -1,6 +1,8 @@
+import { existsSync } from "node:fs";
+
 import { defineConfig, devices } from "@playwright/test";
 
-if (!process.env.DATABASE_URL) {
+if (!process.env.DATABASE_URL && existsSync(".env")) {
   process.loadEnvFile?.();
 }
 
