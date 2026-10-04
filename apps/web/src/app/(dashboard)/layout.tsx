@@ -9,7 +9,6 @@ import { clients, invoices, jobs } from "@/lib/db/schema";
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
   const { org } = await getCurrentUser();
-  const usage = await billingStatus(org.id);
   let domain: string | null = null;
   if (org.website) {
     try {
@@ -20,7 +19,8 @@ export default async function DashboardLayout({ children }: { children: React.Re
     }
   }
 
-  const [stripeDockItems, emailJobItems, [emailJobSummary]] = await Promise.all([
+  const [usage, stripeDockItems, emailJobItems, [emailJobSummary]] = await Promise.all([
+    billingStatus(org.id),
     db
       .select({
         clientName: clients.name,

@@ -1,12 +1,13 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useOptimistic, useState, useTransition } from "react";
 
 import { updateTheme } from "@/actions/theme";
 
 export function ThemeSettings({ theme }: { theme: "system" | "light" | "dark" }) {
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState("");
+  const [selectedTheme, setSelectedTheme] = useOptimistic<string>(theme);
 
   return (
     <section aria-labelledby="appearance-heading" className="space-y-3">
@@ -26,6 +27,7 @@ export function ThemeSettings({ theme }: { theme: "system" | "light" | "dark" })
             const value = event.target.value;
             setError("");
             startTransition(async () => {
+              setSelectedTheme(value);
               try {
                 await updateTheme(value);
               } catch {
@@ -33,7 +35,7 @@ export function ThemeSettings({ theme }: { theme: "system" | "light" | "dark" })
               }
             });
           }}
-          value={theme}
+          value={selectedTheme}
         >
           <option value="system">System</option>
           <option value="light">Light</option>
