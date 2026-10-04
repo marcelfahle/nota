@@ -26,7 +26,12 @@ test("updates organization settings and reflects branding", async ({ page }) => 
   await page.goto("/settings");
   await page.getByRole("button", { name: /(?:Add|Edit) Name/ }).click();
   await page.getByPlaceholder("Your business name").fill(businessName);
-  await expect(page.getByTestId("brand-invoice-preview")).toContainText(businessName);
+  const preview = page.getByTestId("brand-invoice-preview");
+  const payButton = preview.getByText("Pay €4,800.00");
+  await expect(preview).toContainText(businessName);
+  await expect(payButton).toHaveCSS("color", "rgb(31, 27, 22)");
+  await page.getByLabel("Custom brand colour").fill("#1F1B16");
+  await expect(payButton).toHaveCSS("color", "rgb(255, 255, 255)");
   await page.getByRole("button", { name: "Save brand" }).click();
 
   await expect(page.getByText("Brand updated.")).toBeVisible();
