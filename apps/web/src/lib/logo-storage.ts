@@ -79,6 +79,10 @@ export function buildOrgLogoPath(orgId: string, extension: string) {
   return `orgs/${orgId}/logo.${extension}`;
 }
 
+export function buildOrgFaviconPath(orgId: string, extension: string) {
+  return `orgs/${orgId}/favicon.${extension}`;
+}
+
 export async function deleteManagedLogo(logoUrl: string | null | undefined) {
   if (!logoUrl || !isManagedLogoUrl(logoUrl)) {
     return;
@@ -97,6 +101,18 @@ export async function deleteManagedLogo(logoUrl: string | null | undefined) {
 }
 
 export async function uploadOrgLogo(orgId: string, file: File): Promise<LogoUploadResult> {
+  return uploadOrgImage(buildOrgLogoPath, orgId, file);
+}
+
+export async function uploadOrgFavicon(orgId: string, file: File): Promise<LogoUploadResult> {
+  return uploadOrgImage(buildOrgFaviconPath, orgId, file);
+}
+
+async function uploadOrgImage(
+  buildPath: (orgId: string, extension: string) => string,
+  orgId: string,
+  file: File,
+): Promise<LogoUploadResult> {
   const validation = validateLogoFile(file);
   if ("error" in validation) {
     return validation;
@@ -108,7 +124,7 @@ export async function uploadOrgLogo(orgId: string, file: File): Promise<LogoUplo
   }
 
   try {
-    const uploaded = await put(buildOrgLogoPath(orgId, validation.extension), file, {
+    const uploaded = await put(buildPath(orgId, validation.extension), file, {
       access: "public",
       addRandomSuffix: true,
       cacheControlMaxAge: LOGO_CACHE_MAX_AGE,

@@ -4,8 +4,10 @@ import { logout } from "@/actions/auth";
 import { listMembers } from "@/actions/members";
 import { ApiKeysSettings } from "@/components/api-keys-settings";
 import { BillingSettings } from "@/components/billing-settings";
+import { BrandSettings } from "@/components/brand-settings";
 import { ConnectedAppsSettings } from "@/components/connected-apps-settings";
-import { SettingsForm } from "@/components/settings-form";
+import { BankAccountsSettings, NumberingSettings } from "@/components/settings-form";
+import { SettingsTabs } from "@/components/settings-tabs";
 import { TeamSettings } from "@/components/team-settings";
 import { ThemeSettings } from "@/components/theme-settings";
 import { Button } from "@/components/ui/button";
@@ -81,62 +83,126 @@ export default async function SettingsPage({
   const teamData = canManageMembers(role) ? await listMembers() : null;
 
   const settings = {
-    businessAddress: org.businessAddress,
-    businessName: org.businessName,
     defaultCurrency: org.defaultCurrency,
     invoiceDigits: org.invoiceDigits,
     invoicePrefix: org.invoicePrefix,
     invoiceSeparator: org.invoiceSeparator,
-    logoUrl: org.logoUrl,
     nextInvoiceNumber: org.nextInvoiceNumber,
-    vatNumber: org.vatNumber,
   };
 
+  const brandSettings = {
+    brandColor: org.brandColor,
+    businessName: org.businessName,
+    city: org.city,
+    contactEmail: org.contactEmail,
+    country: org.country,
+    faviconUrl: org.faviconUrl,
+    invoiceLayout: org.invoiceLayout,
+    legalName: org.legalName,
+    logoUrl: org.logoUrl,
+    name: org.name,
+    postalCode: org.postalCode,
+    profileSources: org.profileSources,
+    region: org.region,
+    street: org.street,
+    vatNumber: org.vatNumber,
+    website: org.website,
+  };
+
+  const canManage = canManageSettings(role);
+
   return (
-    <div className="space-y-8">
-      <div className="flex items-center justify-between gap-3">
-        <h1 className="text-2xl font-semibold tracking-tight">Settings</h1>
-        <form action={logout}>
-          <Button data-testid="logout-button" type="submit" variant="outline">
-            Sign out
-          </Button>
-        </form>
+    <div className="mx-auto max-w-[860px] space-y-6">
+      <div className="flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <p className="nota-label mb-2.5">
+            Settings
+            {org.website ? (
+              <span className="font-normal tracking-normal normal-case opacity-60">
+                {" "}
+                / profile from {org.website.replace(/^https?:\/\//, "").replace(/\/$/, "")}
+              </span>
+            ) : null}
+          </p>
+          <h1>{org.businessName || org.name}</h1>
+        </div>
+        <Button
+          disabled
+          title="Website reading is not available yet"
+          type="button"
+          variant="outline"
+        >
+          Read my site again
+        </Button>
       </div>
 
-      <div className="max-w-4xl space-y-8">
-        <ThemeSettings theme={user.theme} />
-        <SettingsForm
-          bankAccounts={organizationBankAccounts}
-          canManageBankAccounts={canManageBankAccounts(role)}
-          canManageSettings={canManageSettings(role)}
-          lastIssuedNumber={lastInvoice?.number ?? null}
-          settings={settings}
-        />
-
-        <BillingSettings canManage={canManageSettings(role)} notice={notice} status={billing} />
-
-        <section className="scroll-mt-6" id="connected-apps">
-          <ConnectedAppsSettings apps={connectedApps} />
-        </section>
-
-        {canManageApiKeys(role) ? <ApiKeysSettings apiKeys={apiKeyRecords} /> : null}
-
-        {canManageMembers(role) && teamData && !("error" in teamData) ? (
-          <TeamSettings
-            currentUserId={user.id}
-            members={teamData.members}
-            organizationName={teamData.organizationName}
-            pendingInvites={teamData.pendingInvites.map((invite) => ({
-              createdAt: invite.createdAt,
-              email: invite.email,
-              expiresAt: invite.expiresAt,
-              id: invite.id,
-              inviteUrl: getInviteLink(invite.token),
-              role: invite.role,
-            }))}
-          />
-        ) : null}
-      </div>
+      <SettingsTabs
+        panels={{
+          account: (
+            <div className="space-y-8">
+              <ThemeSettings theme={user.theme} />
+              <form action={logout}>
+                <Button data-testid="logout-button" type="submit" variant="outline">
+                  Sign out
+                </Button>
+              </form>
+            </div>
+          ),
+          api: (
+            <div className="space-y-8">
+              <section className="scroll-mt-6" id="connected-apps">
+                <ConnectedAppsSettings apps={connectedApps} />
+              </section>
+              {canManageApiKeys(role) ? <ApiKeysSettings apiKeys={apiKeyRecords} /> : null}
+            </div>
+          ),
+          brand: <BrandSettings canManage={canManage} settings={brandSettings} />,
+          email: (
+            <section className="space-y-2">
+              <h2 className="text-lg font-semibold">Email</h2>
+              <p className="text-sm text-muted-foreground">
+                Invoice email settings will appear here when custom sending is available.
+              </p>
+            </section>
+          ),
+          numbering: (
+            <NumberingSettings
+              canManageSettings={canManage}
+              lastIssuedNumber={lastInvoice?.number ?? null}
+              settings={settings}
+            />
+          ),
+          payments: (
+            <div className="space-y-8">
+              <BankAccountsSettings
+                accounts={organizationBankAccounts}
+                canManageBankAccounts={canManageBankAccounts(role)}
+              />
+              <BillingSettings canManage={canManage} notice={notice} status={billing} />
+            </div>
+          ),
+          team:
+            canManageMembers(role) && teamData && !("error" in teamData) ? (
+              <TeamSettings
+                currentUserId={user.id}
+                members={teamData.members}
+                organizationName={teamData.organizationName}
+                pendingInvites={teamData.pendingInvites.map((invite) => ({
+                  createdAt: invite.createdAt,
+                  email: invite.email,
+                  expiresAt: invite.expiresAt,
+                  id: invite.id,
+                  inviteUrl: getInviteLink(invite.token),
+                  role: invite.role,
+                }))}
+              />
+            ) : (
+              <p className="text-sm text-muted-foreground">
+                Only organization owners can manage the team.
+              </p>
+            ),
+        }}
+      />
     </div>
   );
 }

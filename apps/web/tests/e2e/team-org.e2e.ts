@@ -23,6 +23,7 @@ test("enforces role-scoped actions across owners, admins, and members", async ({
   await registerAccount(page);
 
   await page.goto("/settings");
+  await page.getByRole("tab", { name: "Team" }).click();
   await page.locator('[data-testid^="team-remove-member-"]').first().click();
   await expect(page.getByTestId("team-feedback")).toContainText("Cannot remove the last owner");
 
@@ -41,7 +42,7 @@ test("enforces role-scoped actions across owners, admins, and members", async ({
   await adminPage.goto(sharedInvoice.invoicePath);
   await expect(adminPage.getByTestId("invoice-send")).toBeVisible();
   await adminPage.getByTestId("invoice-mark-sent").click();
-  await expect(adminPage.getByTestId("invoice-status")).toContainText("sent");
+  await expect(adminPage.getByTestId("invoice-status")).toContainText(/sent/i);
   await adminContext.close();
 
   const memberContext = await browser.newContext();
@@ -49,7 +50,9 @@ test("enforces role-scoped actions across owners, admins, and members", async ({
   await login(memberPage, memberEmail, memberPassword);
   await memberPage.goto("/settings");
   await expect(
-    memberPage.getByText("Only organization owners can update these settings."),
+    memberPage
+      .getByRole("tabpanel", { exact: true, name: "Brand" })
+      .getByText("Only organization owners can update these settings."),
   ).toBeVisible();
   await expect(memberPage.getByTestId("team-settings")).toHaveCount(0);
   await expect(memberPage.getByTestId("api-keys-settings")).toHaveCount(0);
@@ -61,7 +64,7 @@ test("enforces role-scoped actions across owners, admins, and members", async ({
     "250",
   );
   await memberPage.goto(memberInvoice.invoicePath);
-  await expect(memberPage.getByTestId("invoice-status")).toContainText("draft");
+  await expect(memberPage.getByTestId("invoice-status")).toContainText(/draft/i);
   await expect(memberPage.getByTestId("invoice-send")).toHaveCount(0);
   await expect(memberPage.getByTestId("invoice-mark-sent")).toHaveCount(0);
   await expect(memberPage.getByTestId("invoice-delete-draft")).toHaveCount(0);

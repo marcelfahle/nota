@@ -2,6 +2,7 @@ import { expect, test } from "bun:test";
 
 import {
   MAX_LOGO_BYTES,
+  buildOrgFaviconPath,
   buildOrgLogoPath,
   isManagedLogoUrl,
   validateLogoFile,
@@ -45,6 +46,7 @@ test("validateLogoFile rejects unsupported formats and oversize files", () => {
 
 test("managed logo helpers only target Blob-hosted assets", () => {
   expect(buildOrgLogoPath("org_123", "png")).toBe("orgs/org_123/logo.png");
+  expect(buildOrgFaviconPath("org_123", "webp")).toBe("orgs/org_123/favicon.webp");
   expect(
     isManagedLogoUrl("https://store.public.blob.vercel-storage.com/orgs/org_123/logo.png"),
   ).toBe(true);
