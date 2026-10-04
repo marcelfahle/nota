@@ -15,6 +15,10 @@ const PUBLIC_PATHS = [
   "/forgot-password",
   "/i/",
   "/login",
+  // The web app manifest and its icons are fetched without the session cookie.
+  "/apple-icon",
+  "/icon-",
+  "/manifest.webmanifest",
   "/mcp",
   "/oauth",
   "/register",
