@@ -473,12 +473,14 @@ export function ChatPanel({
   mode,
   onOpenChange,
   open,
+  prompt,
   starterPrompts = STARTER_PROMPTS,
 }: {
   inputRef: React.RefObject<HTMLTextAreaElement | null>;
-  mode: "home" | "panel";
+  mode: "first-run" | "home" | "panel";
   onOpenChange: (open: boolean) => void;
   open: boolean;
+  prompt?: { label: string; placeholder: string; submitLabel: string };
   starterPrompts?: ReadonlyArray<string>;
 }) {
   const router = useRouter();
@@ -500,12 +502,12 @@ export function ChatPanel({
   useEffect(() => {
     const panel = dialog.current;
     if (!panel) {
-      if (mode === "home" && open) {
+      if (mode !== "panel" && open) {
         wasOpen.current = true;
         inputRef.current?.focus();
       }
       if (!open && wasOpen.current) {
-        (mode === "home" && !csvFile ? inputRef.current : toggleButton.current)?.focus();
+        (mode !== "panel" && !csvFile ? inputRef.current : toggleButton.current)?.focus();
         wasOpen.current = false;
       }
       return;
@@ -625,11 +627,16 @@ export function ChatPanel({
           ),
       );
 
-    if (!latestToolMessage || refreshedMessages.current.has(latestToolMessage.id)) {
+    const completedTools = latestToolMessage?.parts.filter(
+      (part) => isToolOrDynamicToolUIPart(part) && part.state === "output-available",
+    ).length;
+    const refreshKey = latestToolMessage ? `${latestToolMessage.id}:${completedTools}` : null;
+
+    if (!refreshKey || refreshedMessages.current.has(refreshKey)) {
       return;
     }
 
-    refreshedMessages.current.add(latestToolMessage.id);
+    refreshedMessages.current.add(refreshKey);
     router.refresh();
   }, [messages, router]);
 
@@ -682,7 +689,7 @@ export function ChatPanel({
         onSubmit={handleSubmit}
       >
         <label className="nota-label block px-2 text-foreground" htmlFor="nota-chat-input">
-          {homePrompt ? "What did you do?" : "Say what you did"}
+          {homePrompt ? (prompt?.label ?? "What did you do?") : "Say what you did"}
         </label>
         <textarea
           aria-label="Ask Nota"
@@ -702,7 +709,8 @@ export function ChatPanel({
           }}
           placeholder={
             homePrompt
-              ? "Invoice Oxide for 46 hours of consulting in September, same rate as last time"
+              ? (prompt?.placeholder ??
+                "Invoice Oxide for 46 hours of consulting in September, same rate as last time")
               : "Bill, chase, quote or ask…"
           }
           ref={inputRef}
@@ -753,7 +761,7 @@ export function ChatPanel({
           </span>
           <Button disabled={!input.trim() || isBusy} size="sm" type="submit">
             <Send />
-            {homePrompt ? "Draft it" : "Send"}
+            {homePrompt ? (prompt?.submitLabel ?? "Draft it") : "Send"}
           </Button>
         </div>
       </form>
@@ -763,10 +771,10 @@ export function ChatPanel({
   const conversation = (
     <>
       <header className="flex items-center justify-between gap-4 border-b px-5 pt-[max(1rem,env(safe-area-inset-top))] pb-4 sm:py-4">
-        {mode === "home" ? (
+        {mode !== "panel" ? (
           <Button onClick={() => onOpenChange(false)} size="sm" type="button" variant="ghost">
             <ArrowLeft />
-            Back to Home
+            {mode === "first-run" ? "Back to invoice" : "Back to Home"}
           </Button>
         ) : (
           <div className="min-w-0">
@@ -872,10 +880,15 @@ export function ChatPanel({
     </>
   );
 
-  if (mode === "home") {
+  if (mode === "home" || mode === "first-run") {
+    const firstRun = mode === "first-run";
     return (
       <>
-        <section aria-label="Ask Nota" className="mx-auto mt-8 max-w-[700px]" hidden={open}>
+        <section
+          aria-label="Ask Nota"
+          className={cn(!firstRun && "mx-auto mt-8 max-w-[700px]")}
+          hidden={open}
+        >
           {csvFile ? (
             <Button
               onClick={() => onOpenChange(true)}
@@ -893,7 +906,14 @@ export function ChatPanel({
         {open || csvFile ? (
           <section
             aria-label="Conversation with Nota"
-            className="fixed inset-x-0 top-[var(--chat-viewport-top,0px)] z-50 mx-auto flex h-[var(--chat-viewport-height,100dvh)] max-w-[700px] flex-col overflow-hidden border bg-card sm:static sm:h-[calc(100dvh-10rem)] sm:rounded-lg"
+            className={cn(
+              "flex flex-col overflow-hidden border bg-card",
+              // First run keeps the conversation beside the invoice; everywhere
+              // else it takes the phone's whole screen above the keyboard.
+              firstRun
+                ? "h-[min(660px,calc(100dvh-8rem))] rounded-lg"
+                : "fixed inset-x-0 top-[var(--chat-viewport-top,0px)] z-50 mx-auto h-[var(--chat-viewport-height,100dvh)] max-w-[700px] sm:static sm:h-[calc(100dvh-10rem)] sm:rounded-lg",
+            )}
             hidden={!open}
             ref={conversationContainer}
           >

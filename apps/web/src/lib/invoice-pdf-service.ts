@@ -14,6 +14,7 @@ export type InvoicePdfOrg = {
   city: string | null;
   country: string | null;
   id: string;
+  legalName: string | null;
   logoUrl: string | null;
   name: string;
   postalCode: string | null;
@@ -111,7 +112,7 @@ export async function renderInvoicePdfForOrg(
         brandColor: org.brandColor,
         iban: bankAccount?.iban ?? null,
         logoSrc,
-        name: org.businessName ?? org.name,
+        name: org.legalName ?? org.businessName ?? org.name,
         vatNumber: org.vatNumber,
       },
       client: {

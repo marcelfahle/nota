@@ -1,19 +1,87 @@
-import { and, desc, eq, gt, gte, isNull, lt, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gt, gte, isNull, lt, or, sql } from "drizzle-orm";
 import Link from "next/link";
 
+import { FirstRunHome, type FirstRunHomeData } from "@/components/first-run-home";
 import { HomeContent } from "@/components/home-content";
 import { HomeProposal } from "@/components/home-proposal";
 import { HighlighterSwipe } from "@/components/nota-marks";
 import { StatusBadge } from "@/components/status-badge";
 import { getCurrentUser } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { clients, invoices, payments, proposals } from "@/lib/db/schema";
+import { bankAccounts, clients, invoices, jobs, payments, proposals } from "@/lib/db/schema";
+import { getInvoiceDetail } from "@/lib/invoice-service";
 import { formatCurrency } from "@/lib/utils";
 
 const balance = sql<string>`greatest(coalesce(${invoices.total}::numeric, 0) - coalesce((select sum(p.amount) from payments p where p.invoice_id = ${invoices.id}), 0) - abs(coalesce((select sum(c.total::numeric) from invoices c where c.credits_invoice_id = ${invoices.id} and c.kind = 'credit_note' and c.status in ('sent', 'overdue', 'paid')), 0)), 0)`;
 
 export default async function HomePage() {
-  const { org } = await getCurrentUser();
+  const { org, user } = await getCurrentUser();
+
+  if (!org.firstRunCompletedAt) {
+    const [firstInvoice, [bankAccount]] = await Promise.all([
+      db
+        .select({ id: invoices.id })
+        .from(invoices)
+        .where(and(eq(invoices.orgId, org.id), eq(invoices.kind, "invoice")))
+        .orderBy(asc(invoices.createdAt))
+        .limit(1),
+      db
+        .select({
+          bic: bankAccounts.bic,
+          details: bankAccounts.details,
+          iban: bankAccounts.iban,
+          name: bankAccounts.name,
+        })
+        .from(bankAccounts)
+        .where(and(eq(bankAccounts.orgId, org.id), eq(bankAccounts.isDefault, true)))
+        .limit(1),
+    ]);
+    const invoice = firstInvoice[0] ? await getInvoiceDetail(org.id, firstInvoice[0].id) : null;
+    const [testJob] = invoice
+      ? await db
+          .select({ id: jobs.id })
+          .from(jobs)
+          .where(and(eq(jobs.invoiceId, invoice.id), eq(jobs.type, "send_invoice_test_email")))
+          .limit(1)
+      : [];
+    const data: FirstRunHomeData = {
+      bankAccount: bankAccount ?? null,
+      email: user.email,
+      emailVerified: user.emailVerified,
+      invoice: invoice
+        ? {
+            client: invoice.client ?? { email: "", name: "Unknown client" },
+            currency: invoice.currency ?? org.defaultCurrency ?? "EUR",
+            dueAt: invoice.dueAt,
+            id: invoice.id,
+            issuedAt: invoice.issuedAt,
+            lineItems: invoice.lineItems.map((item) => ({
+              amount: item.amount,
+              description: item.description,
+              id: item.id,
+              quantity: item.quantity,
+            })),
+            number: invoice.number,
+            total: invoice.total ?? "0.00",
+          }
+        : null,
+      org: {
+        brandColor: org.brandColor,
+        businessName: org.businessName,
+        city: org.city,
+        country: org.country,
+        legalName: org.legalName,
+        logoUrl: org.logoUrl,
+        name: org.name,
+        postalCode: org.postalCode,
+        street: org.street,
+        vatNumber: org.vatNumber,
+      },
+      testSent: Boolean(testJob),
+    };
+    return <FirstRunHome data={data} />;
+  }
+
   const now = new Date();
   const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
   const nextMonth = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1));

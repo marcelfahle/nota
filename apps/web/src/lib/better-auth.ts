@@ -9,6 +9,7 @@ import { jwt } from "better-auth/plugins";
 import { and, eq, gt, isNull } from "drizzle-orm";
 
 import { PasswordResetEmail } from "@/emails/password-reset";
+import { VerificationEmail } from "@/emails/verification";
 import { DEFAULT_FROM_EMAIL } from "@/lib/app-brand";
 import { getAuthIssuer, getMcpResource } from "@/lib/auth-config";
 import { db } from "@/lib/db";
@@ -97,6 +98,7 @@ async function joinOrCreateWorkspace(
       .insert(orgs)
       .values({
         ...(profile ? orgValuesFromProfile(profile) : {}),
+        firstRunCompletedAt: null,
         name: profile?.fields.name?.value ?? `${user.name}'s Workspace`,
       })
       .returning({ id: orgs.id });
@@ -175,6 +177,18 @@ export const auth = betterAuth({
         from: getEmailEnv().RESEND_FROM_EMAIL ?? DEFAULT_FROM_EMAIL,
         react: PasswordResetEmail({ name: user.name, resetUrl: url }),
         subject: "Reset your nota password",
+        to: [user.email],
+      });
+    },
+  },
+  emailVerification: {
+    expiresIn: 60 * 60,
+    sendOnSignUp: false,
+    sendVerificationEmail: async ({ url, user }) => {
+      await getResend().emails.send({
+        from: getEmailEnv().RESEND_FROM_EMAIL ?? DEFAULT_FROM_EMAIL,
+        react: VerificationEmail({ name: user.name, verificationUrl: url }),
+        subject: "Confirm your email to send invoices",
         to: [user.email],
       });
     },

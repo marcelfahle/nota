@@ -23,6 +23,8 @@ type InvoiceSentEmailProps = {
   invoiceUrl: string | null;
   paymentLinkUrl: string | null;
   reminder?: boolean;
+  /** A copy the sender mailed to themselves. It must never pass for a real invoice. */
+  testCopy?: boolean;
   total: string;
 };
 
@@ -51,6 +53,7 @@ export function InvoiceSentEmail({
   invoiceUrl,
   paymentLinkUrl,
   reminder = false,
+  testCopy = false,
   total,
 }: InvoiceSentEmailProps) {
   const actionUrl = invoiceUrl ?? paymentLinkUrl;
@@ -67,6 +70,13 @@ export function InvoiceSentEmail({
           <Section style={styles.logoSection}>
             <Text style={styles.logo}>{APP_NAME}</Text>
           </Section>
+
+          {testCopy ? (
+            <Text style={styles.testCopy}>
+              Test copy. You sent this to yourself from {APP_NAME} to see what your client will
+              receive. Nobody else has received it, and nothing is owed.
+            </Text>
+          ) : null}
 
           <Heading style={styles.heading}>{reminder ? "Payment Reminder" : "New Invoice"}</Heading>
 
@@ -205,6 +215,15 @@ const styles = {
   },
   logoSection: {
     textAlign: "center" as const,
+  },
+  testCopy: {
+    backgroundColor: "#d1fd39",
+    color: "#1f1b16",
+    fontSize: "14px",
+    fontWeight: 600,
+    lineHeight: "20px",
+    margin: "0 0 20px",
+    padding: "12px 14px",
   },
   text: {
     color: "#3f3f46",

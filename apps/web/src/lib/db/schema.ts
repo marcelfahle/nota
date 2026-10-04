@@ -88,6 +88,7 @@ export const orgs = pgTable("orgs", {
   creditNotePrefix: text("credit_note_prefix").notNull().default("CN"),
   defaultCurrency: text("default_currency").notNull().default("EUR"),
   faviconUrl: text("favicon_url"),
+  firstRunCompletedAt: timestamp("first_run_completed_at").defaultNow(),
   id: uuid().defaultRandom().primaryKey(),
   invoiceDigits: integer("invoice_digits").notNull().default(4),
   invoiceLayout: text("invoice_layout").notNull().default("classic"),
@@ -258,6 +259,7 @@ export const invoiceStatusEnum = pgEnum("invoice_status", [
 export const jobStatusEnum = pgEnum("job_status", ["pending", "processing", "completed", "dead"]);
 export const jobTypeEnum = pgEnum("job_type", [
   "send_invoice_email",
+  "send_invoice_test_email",
   "send_invoice_reminder_email",
   "send_payment_received_email",
 ]);

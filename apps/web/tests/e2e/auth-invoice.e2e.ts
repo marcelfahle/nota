@@ -14,7 +14,8 @@ test("registers, signs out, and signs back in", async ({ page }) => {
   await page.getByTestId("login-submit").click();
 
   await expect(page).toHaveURL(/\/home$/);
-  await expect(page.getByRole("heading", { name: "Welcome to Nota." })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Who’s the first one for?" })).toBeVisible();
+  await expect(page.getByTestId("first-run-invoice")).toContainText("Your first client");
 });
 
 test("updates organization settings and reflects branding", async ({ page }) => {

@@ -2,7 +2,15 @@ import { expect, test } from "@playwright/test";
 import { eq } from "drizzle-orm";
 
 import { db } from "../../src/lib/db";
-import { invoices, jobs, orgMembers, payments, proposals, users } from "../../src/lib/db/schema";
+import {
+  invoices,
+  jobs,
+  orgMembers,
+  orgs,
+  payments,
+  proposals,
+  users,
+} from "../../src/lib/db/schema";
 import { createReminderProposal } from "../../src/lib/proposal-service";
 import { createClient, createDraftInvoice, registerAccount, uniqueSuffix } from "./helpers";
 
@@ -24,6 +32,8 @@ test("Home reflects derived balances and sends an approved reminder", async ({ p
   if (!context) {
     throw new Error("Expected the registered account context");
   }
+
+  await db.update(orgs).set({ firstRunCompletedAt: new Date() }).where(eq(orgs.id, context.orgId));
 
   const dueAt = new Date();
   dueAt.setUTCDate(dueAt.getUTCDate() - 9);

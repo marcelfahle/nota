@@ -1,5 +1,8 @@
 import { expect, test } from "@playwright/test";
+import { eq } from "drizzle-orm";
 
+import { db } from "../../src/lib/db";
+import { orgMembers, orgs, users } from "../../src/lib/db/schema";
 import { registerAccount } from "./helpers";
 
 async function expectNoHorizontalOverflow(page: import("@playwright/test").Page) {
@@ -25,7 +28,16 @@ async function expectVisibleFieldsDoNotTriggerIosZoom(page: import("@playwright/
 test("signed-in phone shell fits, keeps chat usable, and avoids input zoom", async ({ page }) => {
   await page.setViewportSize({ height: 844, width: 390 });
   await page.emulateMedia({ colorScheme: "light", reducedMotion: "reduce" });
-  await registerAccount(page, "Mobile Studio");
+  const account = await registerAccount(page, "Mobile Studio");
+  // This spec is about the everyday shell, so skip the first-run Home a new
+  // account starts on (covered by first-run.e2e.ts).
+  const [member] = await db
+    .select({ orgId: orgMembers.orgId })
+    .from(users)
+    .innerJoin(orgMembers, eq(orgMembers.userId, users.id))
+    .where(eq(users.email, account.email));
+  await db.update(orgs).set({ firstRunCompletedAt: new Date() }).where(eq(orgs.id, member.orgId));
+  await page.reload();
 
   await expectNoHorizontalOverflow(page);
   await expectVisibleFieldsDoNotTriggerIosZoom(page);

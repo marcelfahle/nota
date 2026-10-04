@@ -6,7 +6,7 @@ import { z } from "zod";
 
 import { getCurrentUser } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { activityLog, invoices } from "@/lib/db/schema";
+import { activityLog, invoices, orgs } from "@/lib/db/schema";
 import { canSendInvoice as canSendInvoiceStatus } from "@/lib/invoice-lifecycle";
 import {
   cancelInvoice as cancelInvoiceService,
@@ -198,6 +198,7 @@ export async function markInvoiceSent(invoiceId: string) {
     invoiceId,
     metadata: { manual: true },
   });
+  await db.update(orgs).set({ firstRunCompletedAt: sentAt }).where(eq(orgs.id, currentUser.org.id));
 
   revalidatePath("/invoices");
   revalidatePath(`/invoices/${invoiceId}`);
