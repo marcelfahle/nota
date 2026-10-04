@@ -20,6 +20,7 @@ type InvoiceSentEmailProps = {
   currency: string;
   dueAt: string;
   invoiceNumber: string;
+  invoiceUrl: string | null;
   paymentLinkUrl: string | null;
   reminder?: boolean;
   total: string;
@@ -47,10 +48,12 @@ export function InvoiceSentEmail({
   currency,
   dueAt,
   invoiceNumber,
+  invoiceUrl,
   paymentLinkUrl,
   reminder = false,
   total,
 }: InvoiceSentEmailProps) {
+  const actionUrl = invoiceUrl ?? paymentLinkUrl;
   const subject = reminder
     ? `Reminder: Invoice ${invoiceNumber} — ${formatCurrencyEmail(total, currency)} due`
     : `Invoice ${invoiceNumber} from ${businessName}`;
@@ -82,10 +85,10 @@ export function InvoiceSentEmail({
             <Text style={styles.invoiceDue}>Due {formatDateEmail(dueAt)}</Text>
           </Section>
 
-          {paymentLinkUrl ? (
+          {actionUrl ? (
             <Section style={styles.buttonSection}>
-              <Button href={paymentLinkUrl} style={styles.button}>
-                Pay Now
+              <Button href={actionUrl} style={styles.button}>
+                View invoice
               </Button>
             </Section>
           ) : (
