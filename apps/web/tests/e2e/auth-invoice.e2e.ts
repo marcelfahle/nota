@@ -34,6 +34,7 @@ test("updates organization settings and reflects branding", async ({ page }) => 
   await expect(payButton).toHaveCSS("color", "rgb(255, 255, 255)");
   await page.getByLabel("Custom brand colour").fill("#797979");
   await expect(payButton).toHaveCSS("color", "rgb(255, 255, 255)");
+  await expect(payButton).toHaveCSS("background-color", "rgb(121, 121, 121)");
   await page.getByRole("button", { name: "Save brand" }).click();
 
   await expect(page.getByText("Brand updated.")).toBeVisible();
