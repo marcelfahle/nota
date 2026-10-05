@@ -218,6 +218,29 @@ describe("generateXRechnung", () => {
     expect(xml).toContain("<cbc:Percent>19.00</cbc:Percent>");
   });
 
+  test("preserves fractional quantities, unit prices, and three-decimal money", () => {
+    const data = baseData();
+    Object.assign(data.invoice, {
+      currency: "BHD",
+      subtotal: "0.417",
+      taxAmount: "0.021",
+      taxRate: "5.125",
+      total: "0.438",
+    });
+    data.invoice.lineItems[0] = {
+      amount: "0.417",
+      description: "Fractional service",
+      quantity: "1.250000",
+      unitPrice: "0.333600",
+    };
+
+    const xml = generateXRechnung(data);
+    expect(xml).toContain('<cbc:InvoicedQuantity unitCode="C62">1.25</cbc:InvoicedQuantity>');
+    expect(xml).toContain('<cbc:PriceAmount currencyID="BHD">0.3336</cbc:PriceAmount>');
+    expect(xml).toContain('<cbc:PayableAmount currencyID="BHD">0.438</cbc:PayableAmount>');
+    expect(xml).toContain("<cbc:Percent>5.125</cbc:Percent>");
+  });
+
   test("produces valid XML structure", () => {
     const xml = generateXRechnung(baseData());
     expect(xml).toStartWith('<?xml version="1.0" encoding="UTF-8"?>');
