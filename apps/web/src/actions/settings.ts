@@ -16,6 +16,7 @@ const settingsSchema = z.object({
   invoicePrefix: z.string().optional().default("INV"),
   invoiceSeparator: z.enum(["-", "/", ".", ""]).default("-"),
   nextInvoiceNumber: z.coerce.number().int().min(1).optional(),
+  originalNextInvoiceNumber: z.coerce.number().int().min(1),
 });
 
 const brandFieldSchema = z.enum([
@@ -164,6 +165,7 @@ export async function updateSettings(
         ? ""
         : ((formData.get("invoiceSeparator") as string) ?? "-"),
     nextInvoiceNumber: (formData.get("nextInvoiceNumber") as string) || undefined,
+    originalNextInvoiceNumber: formData.get("originalNextInvoiceNumber") as string,
   };
 
   const result = settingsSchema.safeParse(raw);
@@ -179,35 +181,55 @@ export async function updateSettings(
 
   try {
     await db.transaction(async (tx) => {
-      await tx.update(orgs).set(result.data).where(eq(orgs.id, org.id));
-      if (
-        result.data.nextInvoiceNumber !== undefined &&
-        result.data.nextInvoiceNumber !== org.nextInvoiceNumber
-      ) {
+      const [lockedOrg] = await tx
+        .select({
+          invoiceDigits: orgs.invoiceDigits,
+          invoicePrefix: orgs.invoicePrefix,
+          invoiceSeparator: orgs.invoiceSeparator,
+          nextInvoiceNumber: orgs.nextInvoiceNumber,
+        })
+        .from(orgs)
+        .where(eq(orgs.id, org.id))
+        .for("update");
+      if (!lockedOrg) {
+        throw new Error("Organization not found");
+      }
+      const { originalNextInvoiceNumber, ...submitted } = result.data;
+      const staleUneditedCounter =
+        submitted.nextInvoiceNumber === originalNextInvoiceNumber &&
+        lockedOrg.nextInvoiceNumber !== originalNextInvoiceNumber;
+      const nextInvoiceNumber = staleUneditedCounter
+        ? lockedOrg.nextInvoiceNumber
+        : submitted.nextInvoiceNumber;
+      await tx
+        .update(orgs)
+        .set({ ...submitted, nextInvoiceNumber })
+        .where(eq(orgs.id, org.id));
+      if (nextInvoiceNumber !== undefined && nextInvoiceNumber !== lockedOrg.nextInvoiceNumber) {
         await tx.insert(invoiceNumberEvents).values({
           action: "counter_changed",
           kind: "invoice",
           metadata: {
             changedBy: user.id,
-            from: org.nextInvoiceNumber,
-            to: result.data.nextInvoiceNumber,
+            from: lockedOrg.nextInvoiceNumber,
+            to: nextInvoiceNumber,
           },
-          number: String(result.data.nextInvoiceNumber),
+          number: String(nextInvoiceNumber),
           orgId: org.id,
           source: "web",
         });
       }
       const formatChanges = {
-        invoiceDigits: [org.invoiceDigits, result.data.invoiceDigits],
-        invoicePrefix: [org.invoicePrefix, result.data.invoicePrefix],
-        invoiceSeparator: [org.invoiceSeparator, result.data.invoiceSeparator],
+        invoiceDigits: [lockedOrg.invoiceDigits, submitted.invoiceDigits],
+        invoicePrefix: [lockedOrg.invoicePrefix, submitted.invoicePrefix],
+        invoiceSeparator: [lockedOrg.invoiceSeparator, submitted.invoiceSeparator],
       };
       if (Object.values(formatChanges).some(([from, to]) => from !== to)) {
         await tx.insert(invoiceNumberEvents).values({
           action: "format_changed",
           kind: "invoice",
           metadata: { changedBy: user.id, changes: formatChanges },
-          number: String(result.data.nextInvoiceNumber ?? org.nextInvoiceNumber),
+          number: String(nextInvoiceNumber ?? lockedOrg.nextInvoiceNumber),
           orgId: org.id,
           source: "web",
         });

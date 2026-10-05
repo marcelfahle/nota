@@ -529,16 +529,26 @@ export async function deleteInvoice(
     return { error: getInsufficientPermissionsError() };
   }
 
-  const invoice = await getOwnedInvoice(context.orgId, invoiceId);
-  if (!invoice) {
-    return { error: "Invoice not found" };
-  }
-
-  if (invoice.status !== "draft") {
-    return { error: "Only draft invoices can be deleted" };
-  }
-
-  await db.transaction(async (tx) => {
+  return db.transaction(async (tx) => {
+    const [organization] = await tx
+      .select({ id: orgs.id })
+      .from(orgs)
+      .where(eq(orgs.id, context.orgId))
+      .for("update");
+    if (!organization) {
+      return { error: "Organization not found" };
+    }
+    const [invoice] = await tx
+      .select()
+      .from(invoices)
+      .where(and(eq(invoices.id, invoiceId), eq(invoices.orgId, context.orgId)))
+      .for("update");
+    if (!invoice) {
+      return { error: "Invoice not found" };
+    }
+    if (invoice.status !== "draft") {
+      return { error: "Only draft invoices can be deleted" };
+    }
     await tx.insert(invoiceNumberEvents).values({
       action: "draft_deleted",
       invoiceId,
@@ -552,9 +562,8 @@ export async function deleteInvoice(
     await tx
       .delete(invoices)
       .where(and(eq(invoices.id, invoiceId), eq(invoices.orgId, context.orgId)));
+    return { invoiceId, success: true };
   });
-
-  return { invoiceId, success: true };
 }
 
 export async function sendInvoice(
