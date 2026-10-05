@@ -46,8 +46,10 @@ export const getBetterAuthEnv = createEnvGetter(
 
 export const getEmailEnv = createEnvGetter(
   z.object({
-    RESEND_API_KEY: z.string().min(1, "RESEND_API_KEY is required"),
-    RESEND_FROM_EMAIL: z.string().min(1).optional(),
+    EMAIL_FROM_ADDRESS: z.email("EMAIL_FROM_ADDRESS must be a verified sender email"),
+    EMAIL_FROM_NAME: z.string().min(1).default("Nota"),
+    HELO_API_KEY: z.string().min(1, "HELO_API_KEY is required"),
+    HELO_CHANNEL_ID: z.uuid("HELO_CHANNEL_ID must be a channel UUID"),
   }),
 );
 

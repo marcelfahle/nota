@@ -3,15 +3,14 @@ import { fetchClientMetadataResource } from "@better-auth/cimd/node";
 import { mcp } from "@better-auth/mcp";
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
-import { APIError } from "better-auth/api";
+import { APIError, getOAuthState } from "better-auth/api";
 import { nextCookies } from "better-auth/next-js";
 import { jwt } from "better-auth/plugins";
 import { and, eq, gt, isNull } from "drizzle-orm";
 
 import { PasswordResetEmail } from "@/emails/password-reset";
 import { VerificationEmail } from "@/emails/verification";
-import { DEFAULT_FROM_EMAIL } from "@/lib/app-brand";
-import { getAuthIssuer, getMcpResource } from "@/lib/auth-config";
+import { getApiResource, getAuthIssuer, getMcpResource } from "@/lib/auth-config";
 import { db } from "@/lib/db";
 import {
   accounts,
@@ -30,8 +29,8 @@ import {
   users,
   verifications,
 } from "@/lib/db/schema";
-import { getResend } from "@/lib/email";
-import { getBetterAuthEnv, getEmailEnv } from "@/lib/env";
+import { sendEmail } from "@/lib/email";
+import { getBetterAuthEnv } from "@/lib/env";
 import {
   cookieValueFromHeader,
   finishOnboarding,
@@ -39,9 +38,15 @@ import {
   orgValuesFromProfile,
 } from "@/lib/onboarding-session";
 import { hashPassword, verifyPassword } from "@/lib/password";
+import { accountLinkingPolicy, googleCredentials, socialInviteToken } from "@/lib/social-auth";
 
 const env = getBetterAuthEnv();
 const appUrl = getAuthIssuer();
+const google = googleCredentials();
+
+async function requestInviteToken(context: { body?: unknown } | null | undefined) {
+  return inviteTokenFrom(context) ?? socialInviteToken(await getOAuthState());
+}
 
 /** The invite token from the sign-up body; the invite link is the proof of access. */
 export function inviteTokenFrom(context: { body?: unknown } | null | undefined) {
@@ -80,6 +85,9 @@ async function joinOrCreateWorkspace(
   onboardingCookie?: string | null,
 ) {
   const invite = inviteToken ? await findInviteFor(user.email, inviteToken) : null;
+  if (inviteToken && !invite) {
+    throw new APIError("BAD_REQUEST", { message: "This invitation is no longer valid." });
+  }
   // The website read is saved to an account here and nowhere else.
   const onboarding = invite ? null : await getOnboardingSession(onboardingCookie);
   const profile = onboarding?.profile ?? null;
@@ -87,10 +95,23 @@ async function joinOrCreateWorkspace(
 
   await db.transaction(async (tx) => {
     if (invite) {
+      const [accepted] = await tx
+        .update(invites)
+        .set({ acceptedAt: new Date() })
+        .where(
+          and(
+            eq(invites.id, invite.id),
+            isNull(invites.acceptedAt),
+            gt(invites.expiresAt, new Date()),
+          ),
+        )
+        .returning({ id: invites.id });
+      if (!accepted) {
+        throw new APIError("BAD_REQUEST", { message: "This invitation is no longer valid." });
+      }
       await tx
         .insert(orgMembers)
         .values({ orgId: invite.orgId, role: invite.role, userId: user.id });
-      await tx.update(invites).set({ acceptedAt: new Date() }).where(eq(invites.id, invite.id));
       return;
     }
 
@@ -116,6 +137,7 @@ async function joinOrCreateWorkspace(
 }
 
 export const auth = betterAuth({
+  account: { accountLinking: accountLinkingPolicy },
   advanced: {
     database: { generateId: "uuid" },
   },
@@ -144,13 +166,13 @@ export const auth = betterAuth({
         after: async (user, context) => {
           await joinOrCreateWorkspace(
             user,
-            inviteTokenFrom(context),
+            await requestInviteToken(context),
             onboardingCookieFrom(context),
           );
         },
         // Reject a bad invite before the account exists, as the old sign-up did.
         before: async (user, context) => {
-          const token = inviteTokenFrom(context);
+          const token = await requestInviteToken(context);
           if (token && !(await findInviteFor(user.email, token))) {
             throw new APIError("BAD_REQUEST", {
               message: "This invite link is invalid, expired, or for a different email.",
@@ -173,8 +195,7 @@ export const auth = betterAuth({
     resetPasswordTokenExpiresIn: 60 * 60,
     revokeSessionsOnPasswordReset: true,
     sendResetPassword: async ({ url, user }) => {
-      await getResend().emails.send({
-        from: getEmailEnv().RESEND_FROM_EMAIL ?? DEFAULT_FROM_EMAIL,
+      await sendEmail({
         react: PasswordResetEmail({ name: user.name, resetUrl: url }),
         subject: "Reset your nota password",
         to: [user.email],
@@ -185,8 +206,7 @@ export const auth = betterAuth({
     expiresIn: 60 * 60,
     sendOnSignUp: false,
     sendVerificationEmail: async ({ url, user }) => {
-      await getResend().emails.send({
-        from: getEmailEnv().RESEND_FROM_EMAIL ?? DEFAULT_FROM_EMAIL,
+      await sendEmail({
         react: VerificationEmail({ name: user.name, verificationUrl: url }),
         subject: "Confirm your email to send invoices",
         to: [user.email],
@@ -199,9 +219,11 @@ export const auth = betterAuth({
       // ChatGPT and Claude register themselves (RFC 7591). CIMD covers newer clients.
       allowDynamicClientRegistration: true,
       allowUnauthenticatedClientRegistration: true,
+      clientRegistrationAllowedResources: [getApiResource(), getMcpResource()],
       consentPage: "/oauth/consent",
       loginPage: "/login",
       resource: getMcpResource(),
+      resources: [getApiResource()],
       signup: { page: "/register" },
     }),
     cimd({ fetchClientMetadataResource, metadataProfile: "mcp-2026-07-28" }),
@@ -211,6 +233,31 @@ export const auth = betterAuth({
   session: {
     expiresIn: 60 * 60 * 24 * 30,
     updateAge: 60 * 60 * 24,
+  },
+  socialProviders: google ? { google: { ...google, prompt: "select_account" } } : {},
+  user: {
+    // Runs before creation, linking, and returning OAuth sign-ins. The invite
+    // token is untrusted input; check its email/expiry against our own records.
+    validateUserInfo: async ({ source, user }) => {
+      if (source.oauth?.providerId !== "google") {
+        return;
+      }
+      const token = socialInviteToken(await getOAuthState());
+      if (token && (!user.email || !(await findInviteFor(user.email, token)))) {
+        return {
+          error: "invite_invalid",
+          errorDescription: "This invitation is invalid or is for a different email.",
+        };
+      }
+      // Existing accounts already belong to a workspace. Invitations in this
+      // app currently provision a new teammate, not switch existing accounts.
+      if (token && source.action !== "create-user") {
+        return {
+          error: "invite_invalid",
+          errorDescription: "Sign in to your existing account to manage workspace access.",
+        };
+      }
+    },
   },
 });
 

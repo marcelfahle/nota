@@ -19,6 +19,9 @@ const nextConfig: NextConfig = {
     };
   },
   serverExternalPackages: ["sharp"],
+  // NextURL normalizes loopback literals even inside query values. OAuth redirect
+  // URIs and signed consent queries must arrive byte-for-byte unchanged.
+  skipProxyUrlNormalize: true,
 };
 
 // Runs during the actual Vercel/CI build so uploaded maps match deployed chunks.

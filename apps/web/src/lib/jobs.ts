@@ -4,7 +4,7 @@ import { and, asc, eq, isNull, lt, lte, or } from "drizzle-orm";
 import { InvoicePdf } from "@/components/invoice-pdf";
 import { InvoiceSentEmail } from "@/emails/invoice-sent";
 import { PaymentReceivedEmail } from "@/emails/payment-received";
-import { APP_NAME, DEFAULT_FROM_EMAIL } from "@/lib/app-brand";
+import { APP_NAME } from "@/lib/app-brand";
 import { formatOrgAddress, getPdfLogoSrc } from "@/lib/branding";
 import { db } from "@/lib/db";
 import {
@@ -18,8 +18,8 @@ import {
   proposals,
   users,
 } from "@/lib/db/schema";
-import { getResend } from "@/lib/email";
-import { getAppEnv, getEmailEnv } from "@/lib/env";
+import { sendEmail } from "@/lib/email";
+import { getAppEnv } from "@/lib/env";
 import { buildInvoiceFilename } from "@/lib/invoice-filename";
 import { reminderPayloadSchema } from "@/lib/proposal-service";
 
@@ -127,7 +127,7 @@ async function getInvoiceEmailContext(invoiceId: string) {
   };
 }
 
-async function sendInvoiceEmail(invoiceId: string, recipient?: string) {
+async function sendInvoiceEmail(invoiceId: string, recipient?: string, idempotencyKey?: string) {
   const { bankDetails, client, invoice, items, logoSrc, org } =
     await getInvoiceEmailContext(invoiceId);
 
@@ -169,10 +169,9 @@ async function sendInvoiceEmail(invoiceId: string, recipient?: string) {
     }),
   );
 
-  const fromEmail = getEmailEnv().RESEND_FROM_EMAIL ?? DEFAULT_FROM_EMAIL;
   const businessName = org.legalName ?? org.businessName ?? org.name ?? APP_NAME;
 
-  const result = await getResend().emails.send({
+  await sendEmail({
     attachments: [
       {
         content: pdfBuffer.toString("base64"),
@@ -187,7 +186,7 @@ async function sendInvoiceEmail(invoiceId: string, recipient?: string) {
         ),
       },
     ],
-    from: fromEmail,
+    idempotencyKey,
     react: InvoiceSentEmail({
       bankDetails,
       businessName,
@@ -206,15 +205,13 @@ async function sendInvoiceEmail(invoiceId: string, recipient?: string) {
       : `Invoice ${invoice.number} from ${businessName}`,
     to: [recipient ?? client.email],
   });
-  if (result.error) {
-    throw new Error(result.error.message);
-  }
 }
 
 async function sendInvoiceReminderEmail(
   invoiceId: string,
   stored?: ReturnType<typeof reminderPayloadSchema.parse>,
   job: Pick<EmailJobPayload, "proposalId" | "source" | "sourceClient"> = {},
+  idempotencyKey?: string,
 ) {
   if (stored) {
     const [[invoice], [proposal]] = await Promise.all([
@@ -249,9 +246,8 @@ async function sendInvoiceReminderEmail(
       }
       return;
     }
-    const fromEmail = getEmailEnv().RESEND_FROM_EMAIL ?? DEFAULT_FROM_EMAIL;
-    const result = await getResend().emails.send({
-      from: fromEmail,
+    await sendEmail({
+      idempotencyKey,
       react: InvoiceSentEmail({
         businessName: stored.businessName,
         clientName: stored.clientName,
@@ -266,9 +262,6 @@ async function sendInvoiceReminderEmail(
       subject: stored.subject,
       to: [stored.to],
     });
-    if (result.error) {
-      throw new Error(result.error.message);
-    }
     await db.insert(activityLog).values({
       action: "reminder_sent",
       invoiceId,
@@ -279,11 +272,10 @@ async function sendInvoiceReminderEmail(
   }
   const { bankDetails, client, invoice, org } = await getInvoiceEmailContext(invoiceId);
 
-  const fromEmail = getEmailEnv().RESEND_FROM_EMAIL ?? DEFAULT_FROM_EMAIL;
   const businessName = org.legalName ?? org.businessName ?? org.name ?? APP_NAME;
 
-  await getResend().emails.send({
-    from: fromEmail,
+  await sendEmail({
+    idempotencyKey,
     react: InvoiceSentEmail({
       bankDetails,
       businessName,
@@ -308,7 +300,7 @@ async function sendInvoiceReminderEmail(
   });
 }
 
-async function sendPaymentReceivedEmail(invoiceId: string) {
+async function sendPaymentReceivedEmail(invoiceId: string, idempotencyKey?: string) {
   const [invoice] = await db
     .select({
       clientId: invoices.clientId,
@@ -342,10 +334,8 @@ async function sendPaymentReceivedEmail(invoiceId: string) {
     throw new Error("User not found");
   }
 
-  const fromEmail = getEmailEnv().RESEND_FROM_EMAIL ?? DEFAULT_FROM_EMAIL;
-
-  await getResend().emails.send({
-    from: fromEmail,
+  await sendEmail({
+    idempotencyKey,
     react: PaymentReceivedEmail({
       clientName: client?.name ?? "Client",
       currency: invoice.currency ?? "EUR",
@@ -358,22 +348,22 @@ async function sendPaymentReceivedEmail(invoiceId: string) {
   });
 }
 
-async function performEmailJob(type: EmailJobType, payload: EmailJobPayload) {
+async function performEmailJob(type: EmailJobType, payload: EmailJobPayload, jobId: string) {
   switch (type) {
     case "send_invoice_email":
-      await sendInvoiceEmail(payload.invoiceId);
+      await sendInvoiceEmail(payload.invoiceId, undefined, jobId);
       return;
     case "send_invoice_test_email":
       if (!payload.recipient) {
         throw new Error("Test invoice recipient is missing");
       }
-      await sendInvoiceEmail(payload.invoiceId, payload.recipient);
+      await sendInvoiceEmail(payload.invoiceId, payload.recipient, jobId);
       return;
     case "send_invoice_reminder_email":
-      await sendInvoiceReminderEmail(payload.invoiceId, payload.reminder, payload);
+      await sendInvoiceReminderEmail(payload.invoiceId, payload.reminder, payload, jobId);
       return;
     case "send_payment_received_email":
-      await sendPaymentReceivedEmail(payload.invoiceId);
+      await sendPaymentReceivedEmail(payload.invoiceId, jobId);
       return;
   }
 }
@@ -445,7 +435,7 @@ export async function processPendingEmailJobs(limit = 10) {
     }
 
     try {
-      await performEmailJob(job.type as EmailJobType, payload);
+      await performEmailJob(job.type as EmailJobType, payload, job.id);
       await db
         .update(jobs)
         .set({
