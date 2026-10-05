@@ -91,6 +91,9 @@ if [[ ! -f apps/web/.env && ! -f apps/web/.env.local ]]; then
 DATABASE_URL=$local_db
 APP_URL=http://localhost:3000
 SESSION_SECRET=nota-orb-development-only-session-secret
+# Optional analytics; pass development project values into this bootstrap.
+NEXT_PUBLIC_POSTHOG_KEY=${NEXT_PUBLIC_POSTHOG_KEY:-}
+NEXT_PUBLIC_POSTHOG_HOST=${NEXT_PUBLIC_POSTHOG_HOST:-}
 EOF
 fi
 printf '\nOrb prerequisites ready. External integrations still require development secrets.\n'

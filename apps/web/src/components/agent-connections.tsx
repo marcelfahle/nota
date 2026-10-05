@@ -2,6 +2,7 @@
 
 import { Check, CheckIcon, Copy, ExternalLink } from "lucide-react";
 import Link from "next/link";
+import posthog from "posthog-js";
 import { useEffect, useState, useTransition, type ReactNode } from "react";
 
 import { disconnectAppAction } from "@/actions/connected-apps";
@@ -132,6 +133,7 @@ function ConnectionStatus({ app, onRemoved }: { app: ConnectedApp; onRemoved: ()
         onClick={() =>
           startTransition(async () => {
             await disconnectAppAction(app.clientId);
+            posthog.capture("agent_access_removed", { agent_provider: provider(app) ?? "other" });
             onRemoved();
           })
         }

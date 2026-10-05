@@ -5,6 +5,7 @@ import { generateText, stepCountIs } from "ai";
 
 import { resolveChatInvoiceLineItems } from "../src/lib/chat-parser.ts";
 import { buildChatSystemPrompt, createChatTools } from "../src/lib/chat-tools.ts";
+import { withAiObservability } from "../src/lib/posthog-ai.ts";
 const clientId = "11111111-1111-4111-8111-111111111111";
 const invoiceId = "22222222-2222-4222-8222-222222222222";
 const client = {
@@ -51,6 +52,7 @@ const providerOptions = effort
   ? { anthropic: { effort, thinking: { type: "adaptive" } } }
   : undefined;
 const schemaTools = createChatTools(auth);
+const sessionId = `invoice-chat-eval-${process.pid}`;
 for (const prompt of [
   "All right, create another invoice for Ranger with services for September. The date of the invoice should be October 1st and should be paid within seven days.",
   "change the due date on invoice 97 to oct 8",
@@ -116,9 +118,13 @@ for (const prompt of [
     ]),
   );
   const started = Date.now();
+  const observability = withAiObservability(anthropic(model), {
+    sessionId,
+    traceId: globalThis.crypto.randomUUID(),
+  });
   const result = await generateText({
     maxOutputTokens: 1200,
-    model: anthropic(model),
+    model: observability.model,
     prompt,
     providerOptions,
     stopWhen: stepCountIs(6),
@@ -127,7 +133,7 @@ for (const prompt of [
       "Today's date is 2026-09-30.",
     ),
     tools,
-  });
+  }).finally(observability.flush);
   const create = calls.find((c) => c.name === "create_invoice");
   const change = calls.find((c) => c.name === "change_invoice_due_date");
   const expectsCreate = prompt.startsWith("All right,");

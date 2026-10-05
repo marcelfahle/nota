@@ -1,5 +1,6 @@
 "use client";
 
+import posthog from "posthog-js";
 import { useState, useTransition } from "react";
 
 import { updateBilling } from "@/actions/billing";
@@ -20,6 +21,7 @@ export function BillingSettings({
   const [error, setError] = useState<string | null>(null);
   const [confirmDisconnect, setConfirmDisconnect] = useState(false);
   function act(action: Parameters<typeof updateBilling>[0]) {
+    posthog.capture("billing_action_started", { billing_action: action });
     setError(null);
     startTransition(async () => {
       const result = await updateBilling(action);

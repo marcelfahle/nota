@@ -1,6 +1,7 @@
 "use client";
 
 import { LogOut } from "lucide-react";
+import posthog from "posthog-js";
 import { useState } from "react";
 
 import { authClient } from "@/lib/auth-client";
@@ -15,6 +16,7 @@ export function SignOutButton() {
   async function signOut() {
     setPending(true);
     try {
+      posthog.reset();
       await authClient.signOut();
     } finally {
       window.location.assign("/login");

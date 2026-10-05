@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
+import posthog from "posthog-js";
 import { Suspense, useState, type FormEvent } from "react";
 
 import { AuthShell } from "@/components/auth-shell";
@@ -54,6 +55,11 @@ function LoginForm() {
       return;
     }
 
+    posthog.identify(data.user.id, {
+      email: data.user.email,
+      name: data.user.name,
+    });
+    posthog.capture("user_signed_in");
     continueAfterAuth(data);
   }
 

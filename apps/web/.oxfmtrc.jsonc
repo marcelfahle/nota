@@ -1,4 +1,5 @@
 {
+  "ignorePatterns": [".claude/**"],
   "experimentalSortImports": {},
   "experimentalTailwindcss": {
     "stylesheet": "./src/app/globals.css",

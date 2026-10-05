@@ -3,6 +3,7 @@
 import { Menu, Plus, X } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import posthog from "posthog-js";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { ChatPanel } from "@/components/chat-panel";
@@ -86,6 +87,14 @@ export function DashboardShell({
   }, [isHome, userId]);
 
   useEffect(() => {
+    posthog.identify(userId, {
+      email: account.email,
+      name: account.name,
+    });
+  }, [account.email, account.name, userId]);
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- Restore persisted browser state.
     setPanelOpen(readChatOpen(userId));
   }, [userId]);
 

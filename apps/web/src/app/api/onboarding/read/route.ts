@@ -72,7 +72,11 @@ export async function POST(request: Request) {
   const signal = AbortSignal.any([request.signal, AbortSignal.timeout(READ_BUDGET_MS)]);
   const events = cached
     ? replay(cached)
-    : readSite(site.url, site.domain, { paid: await allowPaidRead(), signal });
+    : readSite(site.url, site.domain, {
+        observability: { sessionId: session.id, traceId: crypto.randomUUID() },
+        paid: await allowPaidRead(),
+        signal,
+      });
 
   const encoder = new TextEncoder();
   const stream = new ReadableStream<Uint8Array>({

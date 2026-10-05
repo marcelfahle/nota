@@ -3,6 +3,7 @@ import { generateText, Output } from "ai";
 import { z } from "zod";
 
 import { trackedModelCall } from "@/lib/ai-usage";
+import { type AiObservabilityContext, withAiObservability } from "@/lib/posthog-ai";
 
 import type { ParallelPage } from "./parallel";
 
@@ -136,7 +137,7 @@ export function keepGrounded(facts: SiteFacts, corpus: string): SiteFacts {
 
 export async function readSiteFacts(
   input: { domain: string; pages: Array<ParallelPage> },
-  options: { signal?: AbortSignal } = {},
+  options: { observability?: AiObservabilityContext; signal?: AbortSignal } = {},
 ): Promise<SiteFacts | null> {
   if (!modelConfigured() || input.pages.length === 0) {
     return null;
@@ -144,18 +145,23 @@ export async function readSiteFacts(
   try {
     const { output } = await trackedModelCall(
       { feature: "reader-site-facts" },
-      ({ modelId, onFinish }) =>
-        generateText({
+      ({ modelId, onFinish }) => {
+        const observability = withAiObservability(anthropic(modelId), {
+          sessionId: options.observability?.sessionId ?? `site-reader-${process.pid}`,
+          traceId: options.observability?.traceId ?? crypto.randomUUID(),
+        });
+        return generateText({
           abortSignal: options.signal,
           maxOutputTokens: 700,
           maxRetries: 1,
-          model: anthropic(modelId),
+          model: observability.model,
           onFinish,
           output: Output.object({ schema: siteFactsSchema }),
           prompt: `Website: ${input.domain}\n\n${wrap("page", input.pages, 36_000)}`,
           system: SITE_READER_SYSTEM_PROMPT,
           timeout: 20_000,
-        }),
+        }).finally(observability.flush);
+      },
     );
     return keepGrounded(output, input.pages.map((page) => page.text).join("\n"));
   } catch (error) {
@@ -166,7 +172,7 @@ export async function readSiteFacts(
 
 export async function readLocation(
   input: { domain: string; name: string; results: Array<ParallelPage>; summary?: string | null },
-  options: { signal?: AbortSignal } = {},
+  options: { observability?: AiObservabilityContext; signal?: AbortSignal } = {},
 ): Promise<FoundLocation | null> {
   if (!modelConfigured() || input.results.length === 0) {
     return null;
@@ -174,12 +180,16 @@ export async function readLocation(
   try {
     const { output } = await trackedModelCall(
       { feature: "reader-location" },
-      ({ modelId, onFinish }) =>
-        generateText({
+      ({ modelId, onFinish }) => {
+        const observability = withAiObservability(anthropic(modelId), {
+          sessionId: options.observability?.sessionId ?? `site-reader-${process.pid}`,
+          traceId: options.observability?.traceId ?? crypto.randomUUID(),
+        });
+        return generateText({
           abortSignal: options.signal,
           maxOutputTokens: 300,
           maxRetries: 1,
-          model: anthropic(modelId),
+          model: observability.model,
           onFinish,
           output: Output.object({ schema: locationSchema }),
           prompt: `Company: ${input.name}\nWebsite: ${input.domain}\n${
@@ -187,7 +197,8 @@ export async function readLocation(
           }\n${wrap("result", input.results, 9000)}`,
           system: LOCATION_READER_SYSTEM_PROMPT,
           timeout: 12_000,
-        }),
+        }).finally(observability.flush);
+      },
     );
     const source = input.results.find((result) => result.url === output.sourceUrl);
     const text = source ? `${source.title ?? ""} ${source.text}` : "";

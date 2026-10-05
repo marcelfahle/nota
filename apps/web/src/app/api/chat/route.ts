@@ -7,6 +7,7 @@ import {
   type UIMessage,
   validateUIMessages,
 } from "ai";
+import { after } from "next/server";
 
 import { trackedModelCall } from "@/lib/ai-usage";
 import { getActiveUserOrNull } from "@/lib/auth";
@@ -17,6 +18,12 @@ import {
   saveChatMessage,
 } from "@/lib/chat-store";
 import { buildChatSystemContext, buildChatSystemPrompt, createChatTools } from "@/lib/chat-tools";
+import { withAiObservability } from "@/lib/posthog-ai";
+import {
+  flushPostHogLogs,
+  logChatGenerationCompleted,
+  logChatGenerationStarted,
+} from "@/lib/posthog-logs";
 
 const MAX_CHAT_MESSAGES = 24;
 const MAX_CHAT_PAYLOAD_SIZE = 50_000;
@@ -94,16 +101,26 @@ export async function POST(request: Request) {
     route: typeof body.pageContext?.route === "string" ? body.pageContext.route : undefined,
   };
   await saveChatMessage(thread.id, incoming, pageContext);
+  logChatGenerationStarted(messages.length);
+  after(flushPostHogLogs);
 
   try {
     const context = await buildChatSystemContext(auth);
+    const traceId = crypto.randomUUID();
+    let flushAiObservability: (() => Promise<void>) | null = null;
     const result = await trackedModelCall(
       { feature: "chat", orgId: auth.org.id, userId: auth.user.id },
-      ({ modelId, onFinish }) =>
-        streamText({
+      ({ modelId, onFinish }) => {
+        const observability = withAiObservability(anthropic(modelId), {
+          distinctId: auth.user.id,
+          sessionId: thread.id,
+          traceId,
+        });
+        flushAiObservability = observability.flush;
+        return streamText({
           maxOutputTokens: 1200,
           messages: modelMessages,
-          model: anthropic(modelId),
+          model: observability.model,
           onFinish,
           providerOptions:
             modelId === "claude-sonnet-5-5"
@@ -112,7 +129,8 @@ export async function POST(request: Request) {
           stopWhen: stepCountIs(6),
           system: buildChatSystemPrompt(auth, context),
           tools: createChatTools(auth),
-        }),
+        });
+      },
     );
 
     return result.toUIMessageStreamResponse({
@@ -126,6 +144,8 @@ export async function POST(request: Request) {
       },
       onFinish: async ({ responseMessage }) => {
         await saveChatMessage(thread.id, responseMessage, pageContext);
+        logChatGenerationCompleted();
+        await Promise.all([flushAiObservability?.(), flushPostHogLogs()]);
       },
       originalMessages: messages,
     });

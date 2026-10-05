@@ -1,5 +1,6 @@
 "use client";
 
+import posthog from "posthog-js";
 import { useState, type FormEvent } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -55,6 +56,11 @@ export function RegisterForm({ invite }: { invite?: RegisterInvite | null }) {
       return;
     }
 
+    posthog.identify(data.user.id, {
+      email: data.user.email,
+      name: data.user.name,
+    });
+    posthog.capture("account_created", { signup_source: invite ? "invite" : "direct" });
     continueAfterAuth(data);
   }
 
