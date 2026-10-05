@@ -1,4 +1,4 @@
-import { randomBytes } from "node:crypto";
+import { randomBytes, randomUUID } from "node:crypto";
 
 import { and, asc, count, desc, eq, inArray, sql } from "drizzle-orm";
 
@@ -10,6 +10,7 @@ import {
   bankAccounts,
   clients,
   invoices,
+  invoiceNumberEvents,
   invoiceSends,
   jobs,
   lineItems,
@@ -137,12 +138,18 @@ export function calculateInvoiceTotals(
   };
 }
 
-export async function createNextInvoiceNumber(tx: DbTransaction, orgId: string) {
+async function createNextDocumentNumber(
+  tx: DbTransaction,
+  orgId: string,
+  kind: "credit_note" | "invoice",
+) {
   const [organization] = await tx
     .select({
+      creditNotePrefix: orgs.creditNotePrefix,
       invoiceDigits: orgs.invoiceDigits,
       invoicePrefix: orgs.invoicePrefix,
       invoiceSeparator: orgs.invoiceSeparator,
+      nextCreditNoteNumber: orgs.nextCreditNoteNumber,
       nextInvoiceNumber: orgs.nextInvoiceNumber,
     })
     .from(orgs)
@@ -154,15 +161,17 @@ export async function createNextInvoiceNumber(tx: DbTransaction, orgId: string) 
     throw new Error("Organization not found");
   }
 
-  let sequenceNumber = organization.nextInvoiceNumber;
+  let sequenceNumber =
+    kind === "credit_note" ? organization.nextCreditNoteNumber : organization.nextInvoiceNumber;
   let number: string;
 
-  // Skip over numbers that already exist (e.g. cancelled invoices)
+  // Existing and imported references own their numbers. A collision is therefore
+  // accounted for by the retained document rather than silently overwritten.
   for (;;) {
     number = formatInvoiceNumber({
       digits: organization.invoiceDigits,
       number: sequenceNumber,
-      prefix: organization.invoicePrefix,
+      prefix: kind === "credit_note" ? organization.creditNotePrefix : organization.invoicePrefix,
       separator: organization.invoiceSeparator,
     });
 
@@ -180,10 +189,40 @@ export async function createNextInvoiceNumber(tx: DbTransaction, orgId: string) 
 
   await tx
     .update(orgs)
-    .set({ nextInvoiceNumber: sequenceNumber + 1 })
+    .set(
+      kind === "credit_note"
+        ? { nextCreditNoteNumber: sequenceNumber + 1 }
+        : { nextInvoiceNumber: sequenceNumber + 1 },
+    )
     .where(eq(orgs.id, orgId));
 
   return number;
+}
+
+async function issueDocumentNumber(
+  tx: DbTransaction,
+  context: InvoiceServiceContext,
+  invoice: typeof invoices.$inferSelect,
+) {
+  const number = await createNextDocumentNumber(tx, context.orgId, invoice.kind);
+  await tx
+    .update(invoices)
+    .set({ number })
+    .where(and(eq(invoices.id, invoice.id), eq(invoices.orgId, context.orgId)));
+  await tx.insert(invoiceNumberEvents).values({
+    action: "issued",
+    invoiceId: invoice.id,
+    kind: invoice.kind,
+    metadata: { previousDraftIdentifier: invoice.number, userId: context.userId },
+    number,
+    orgId: context.orgId,
+    ...sourceFields(context),
+  });
+  return number;
+}
+
+function draftIdentifier(id: string) {
+  return `DRAFT-${id}`;
 }
 
 export async function getOwnedInvoice(orgId: string, invoiceId: string) {
@@ -323,12 +362,14 @@ export async function createInvoice(
   }
 
   const insertedInvoice = await db.transaction(async (tx) => {
-    const number = await createNextInvoiceNumber(tx, context.orgId);
+    const id = randomUUID();
+    const number = draftIdentifier(id);
     const [invoice] = await tx
       .insert(invoices)
       .values({
         ...invoiceData,
         ...totals,
+        id,
         number,
         orgId: context.orgId,
         ...sourceFields(context),
@@ -350,6 +391,15 @@ export async function createInvoice(
     await tx.insert(activityLog).values({
       action: "created",
       invoiceId: invoice.id,
+      ...sourceFields(context),
+    });
+    await tx.insert(invoiceNumberEvents).values({
+      action: "draft_created",
+      invoiceId: invoice.id,
+      kind: "invoice",
+      metadata: { userId: context.userId },
+      number,
+      orgId: context.orgId,
       ...sourceFields(context),
     });
 
@@ -489,6 +539,15 @@ export async function deleteInvoice(
   }
 
   await db.transaction(async (tx) => {
+    await tx.insert(invoiceNumberEvents).values({
+      action: "draft_deleted",
+      invoiceId,
+      kind: invoice.kind,
+      metadata: { userId: context.userId },
+      number: invoice.number,
+      orgId: context.orgId,
+      ...sourceFields(context),
+    });
     await tx.delete(activityLog).where(eq(activityLog.invoiceId, invoiceId));
     await tx
       .delete(invoices)
@@ -586,13 +645,14 @@ export async function sendInvoice(
       }
       const account = paymentAccount(mode, org.stripeAccountId, org.stripeChargesEnabled);
       const accountId = account === "platform" ? null : account;
+      const issuedNumber = await issueDocumentNumber(tx, context, invoice);
       const paymentLink =
         account && invoice.kind === "invoice"
           ? await createPaymentLink({
               attempt: sentAt.toISOString(),
               currency: invoice.currency,
               id: invoice.id,
-              number: invoice.number,
+              number: issuedNumber,
               stripeAccountId: accountId,
               total: invoice.total,
             })
@@ -642,6 +702,15 @@ export async function sendInvoice(
               updatedAt: sentAt,
             })
             .where(eq(invoices.id, original.id));
+          await tx.insert(invoiceNumberEvents).values({
+            action: "cancelled",
+            invoiceId: original.id,
+            kind: original.kind,
+            metadata: { creditedBy: invoice.id, userId: context.userId },
+            number: original.number,
+            orgId: context.orgId,
+            ...sourceFields(context),
+          });
           await expireInvoiceProposals(tx, original.id);
         }
         if (original?.stripePaymentLinkId) {
@@ -736,13 +805,15 @@ export async function duplicateInvoice(
   const dueDate = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
 
   const insertedInvoice = await db.transaction(async (tx) => {
-    const number = await createNextInvoiceNumber(tx, context.orgId);
+    const id = randomUUID();
+    const number = draftIdentifier(id);
     const [invoice] = await tx
       .insert(invoices)
       .values({
         clientId: original.clientId,
         currency: original.currency,
         dueAt: dueDate,
+        id,
         internalNotes: original.internalNotes,
         issuedAt: today,
         notes: original.notes,
@@ -775,6 +846,15 @@ export async function duplicateInvoice(
       action: "created",
       invoiceId: invoice.id,
       metadata: { duplicatedFrom: invoiceId },
+      ...sourceFields(context),
+    });
+    await tx.insert(invoiceNumberEvents).values({
+      action: "draft_created",
+      invoiceId: invoice.id,
+      kind: "invoice",
+      metadata: { duplicatedFrom: invoiceId, userId: context.userId },
+      number,
+      orgId: context.orgId,
       ...sourceFields(context),
     });
 
@@ -825,20 +905,8 @@ export async function createCreditNote(
       return { error: "Invoice has already been fully credited" };
     }
 
-    const [organization] = await tx
-      .select()
-      .from(orgs)
-      .where(eq(orgs.id, context.orgId))
-      .for("update");
-    if (!organization) {
-      return { error: "Organization not found" };
-    }
-    const number = formatInvoiceNumber({
-      digits: organization.invoiceDigits,
-      number: organization.nextCreditNoteNumber,
-      prefix: organization.creditNotePrefix,
-      separator: organization.invoiceSeparator,
-    });
+    const id = randomUUID();
+    const number = draftIdentifier(id);
     const [credit] = await tx
       .insert(invoices)
       .values({
@@ -846,6 +914,7 @@ export async function createCreditNote(
         creditsInvoiceId: original.id,
         currency: original.currency,
         dueAt: original.dueAt,
+        id,
         internalNotes: original.internalNotes,
         issuedAt: new Date().toISOString().slice(0, 10),
         kind: "credit_note",
@@ -877,14 +946,19 @@ export async function createCreditNote(
         })),
       );
     }
-    await tx
-      .update(orgs)
-      .set({ nextCreditNoteNumber: organization.nextCreditNoteNumber + 1 })
-      .where(eq(orgs.id, context.orgId));
     await tx.insert(activityLog).values({
       action: "created",
       invoiceId: credit.id,
       metadata: { creditsInvoiceId: original.id, originalNumber: original.number },
+      ...sourceFields(context),
+    });
+    await tx.insert(invoiceNumberEvents).values({
+      action: "draft_created",
+      invoiceId: credit.id,
+      kind: "credit_note",
+      metadata: { creditsInvoiceId: original.id, userId: context.userId },
+      number,
+      orgId: context.orgId,
       ...sourceFields(context),
     });
     return { invoiceId: credit.id, success: true };
@@ -1104,6 +1178,15 @@ export async function cancelInvoice(
       )
       .returning({ id: invoices.id });
     if (changed.length) {
+      await tx.insert(invoiceNumberEvents).values({
+        action: "cancelled",
+        invoiceId,
+        kind: invoice.kind,
+        metadata: { userId: context.userId },
+        number: invoice.number,
+        orgId: context.orgId,
+        ...sourceFields(context),
+      });
       await expireInvoiceProposals(tx, invoiceId);
     }
     return changed;
@@ -1133,4 +1216,55 @@ export async function cancelInvoice(
     success: true,
     warning,
   };
+}
+
+export async function markInvoiceSent(
+  context: InvoiceServiceContext,
+  invoiceId: string,
+): Promise<InvoiceMutationResult> {
+  if (!canSendInvoiceRole(context.role)) {
+    return { error: getInsufficientPermissionsError() };
+  }
+
+  return db.transaction(async (tx) => {
+    const [organization] = await tx
+      .select({ id: orgs.id })
+      .from(orgs)
+      .where(eq(orgs.id, context.orgId))
+      .for("update");
+    if (!organization) {
+      return { error: "Organization not found" };
+    }
+    const [invoice] = await tx
+      .select()
+      .from(invoices)
+      .where(and(eq(invoices.id, invoiceId), eq(invoices.orgId, context.orgId)))
+      .for("update");
+    if (!invoice) {
+      return { error: "Invoice not found" };
+    }
+    if (!canSendInvoiceStatus(invoice.status)) {
+      return { error: "Only draft invoices can be marked as sent" };
+    }
+
+    await issueDocumentNumber(tx, context, invoice);
+    const sentAt = new Date();
+    await tx
+      .update(invoices)
+      .set({
+        revision: sql`${invoices.revision} + 1`,
+        sentAt,
+        status: "sent",
+        updatedAt: sentAt,
+      })
+      .where(eq(invoices.id, invoiceId));
+    await tx.insert(activityLog).values({
+      action: "sent",
+      invoiceId,
+      metadata: { manual: true },
+      ...sourceFields(context),
+    });
+    await tx.update(orgs).set({ firstRunCompletedAt: sentAt }).where(eq(orgs.id, context.orgId));
+    return { invoiceId, success: true };
+  });
 }
