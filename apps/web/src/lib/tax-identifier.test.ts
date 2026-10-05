@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 
 import {
   formatTaxIdentifier,
+  invoiceTaxIdentifier,
   normalizeTaxIdentifier,
   taxIdentifierFromColumns,
   taxIdentifierFromLegacyVatNumber,
@@ -60,5 +61,14 @@ describe("tax identifiers", () => {
     expect(() => normalizeTaxIdentifier({ type: "eu_vat", value: "US123456789" })).toThrow(
       "EU VAT ID",
     );
+  });
+
+  test("issued invoice snapshots remain empty when an identifier is added later", () => {
+    const current = taxIdentifierFields(
+      normalizeTaxIdentifier({ type: "us_ein", value: "12-3456789" }),
+    );
+
+    expect(invoiceTaxIdentifier("sent", null, current)).toBeNull();
+    expect(invoiceTaxIdentifier("draft", null, current)?.value).toBe("12-3456789");
   });
 });

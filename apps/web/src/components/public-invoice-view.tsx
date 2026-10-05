@@ -3,7 +3,7 @@ import { ArrowRight, Download } from "lucide-react";
 import { RubberStamp } from "@/components/nota-marks";
 import { formatOrgAddress } from "@/lib/branding";
 import type { PublicInvoice } from "@/lib/public-invoice";
-import { formatTaxIdentifier, taxIdentifierFromColumns } from "@/lib/tax-identifier";
+import { formatTaxIdentifier, invoiceTaxIdentifier } from "@/lib/tax-identifier";
 import { formatCurrency } from "@/lib/utils";
 
 function formatDate(value: string | Date) {
@@ -43,10 +43,16 @@ export function PublicInvoiceView({ invoice, token }: { invoice: PublicInvoice; 
   const isPaid = !isCreditNote && invoice.settlementStatus === "paid";
   const paymentLinkUrl = !isCreditNote && !isPaid ? invoice.stripePaymentLinkUrl : null;
   const brandColor = invoice.organization.brandColor ?? "#86efac";
-  const sellerTaxIdentifier =
-    invoice.sellerTaxIdentifier ?? taxIdentifierFromColumns(invoice.organization);
-  const clientTaxIdentifier =
-    invoice.clientTaxIdentifier ?? taxIdentifierFromColumns(invoice.client);
+  const sellerTaxIdentifier = invoiceTaxIdentifier(
+    invoice.status,
+    invoice.sellerTaxIdentifier,
+    invoice.organization,
+  );
+  const clientTaxIdentifier = invoiceTaxIdentifier(
+    invoice.status,
+    invoice.clientTaxIdentifier,
+    invoice.client,
+  );
 
   return (
     <main className="min-h-dvh bg-[#efede8] px-3 py-5 text-[#1f1b16] sm:px-6 sm:py-10">

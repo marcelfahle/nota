@@ -58,7 +58,7 @@ import {
   getInsufficientPermissionsError,
 } from "@/lib/roles";
 import { createPaymentLink, deactivatePaymentLink } from "@/lib/stripe";
-import { taxIdentifierFromColumns } from "@/lib/tax-identifier";
+import { invoiceTaxIdentifier } from "@/lib/tax-identifier";
 
 export type InvoiceServiceContext = {
   orgId: string;
@@ -440,7 +440,7 @@ export async function getInvoiceDetail(orgId: string, invoiceId: string) {
     client: client
       ? {
           ...client,
-          taxIdentifier: invoice.clientTaxIdentifier ?? taxIdentifierFromColumns(client),
+          taxIdentifier: invoiceTaxIdentifier(invoice.status, invoice.clientTaxIdentifier, client),
         }
       : null,
     creditedAmount: settlement.creditedAmount,
@@ -809,10 +809,18 @@ export async function sendInvoice(
       await tx
         .update(invoices)
         .set({
-          clientTaxIdentifier: invoice.clientTaxIdentifier ?? taxIdentifierFromColumns(client),
+          clientTaxIdentifier: invoiceTaxIdentifier(
+            invoice.status,
+            invoice.clientTaxIdentifier,
+            client,
+          ),
           publicToken: invoice.publicToken ?? randomBytes(24).toString("base64url"),
           revision: sql`${invoices.revision} + 1`,
-          sellerTaxIdentifier: invoice.sellerTaxIdentifier ?? taxIdentifierFromColumns(org),
+          sellerTaxIdentifier: invoiceTaxIdentifier(
+            invoice.status,
+            invoice.sellerTaxIdentifier,
+            org,
+          ),
           sentAt,
           status: "sent",
           stripeAccountId: accountId,

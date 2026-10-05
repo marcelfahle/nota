@@ -6,7 +6,7 @@ import { formatOrgAddress } from "@/lib/branding";
 import { db } from "@/lib/db";
 import { bankAccounts, clients, invoices, lineItems } from "@/lib/db/schema";
 import { buildInvoiceFilename } from "@/lib/invoice-filename";
-import { taxIdentifierFromColumns } from "@/lib/tax-identifier";
+import { invoiceTaxIdentifier } from "@/lib/tax-identifier";
 import { generateXRechnung, XRechnungValidationError } from "@/lib/xrechnung";
 
 export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -74,14 +74,14 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
         email: user.email,
         iban: bankAccount?.iban ?? null,
         name: org.businessName ?? org.name,
-        taxIdentifier: invoice.sellerTaxIdentifier ?? taxIdentifierFromColumns(org),
+        taxIdentifier: invoiceTaxIdentifier(invoice.status, invoice.sellerTaxIdentifier, org),
       },
       client: {
         address: client.address,
         company: client.company,
         email: client.email,
         name: client.name,
-        taxIdentifier: invoice.clientTaxIdentifier ?? taxIdentifierFromColumns(client),
+        taxIdentifier: invoiceTaxIdentifier(invoice.status, invoice.clientTaxIdentifier, client),
       },
       invoice: {
         currency: invoice.currency ?? "EUR",

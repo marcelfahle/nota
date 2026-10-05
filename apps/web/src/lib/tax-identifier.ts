@@ -127,6 +127,14 @@ export function taxIdentifierFromColumns(columns: TaxIdentifierColumns) {
   return taxIdentifierFromLegacyVatNumber(columns.vatNumber);
 }
 
+export function invoiceTaxIdentifier(
+  status: string | null,
+  snapshot: TaxIdentifier | null | undefined,
+  current: TaxIdentifierColumns,
+) {
+  return status === "draft" ? taxIdentifierFromColumns(current) : (snapshot ?? null);
+}
+
 export function taxIdentifierFields(identifier: TaxIdentifier | null) {
   return {
     taxIdentifierCanonicalValue: identifier?.canonicalValue ?? null,
