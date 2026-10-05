@@ -10,7 +10,7 @@ import { DEFAULT_FROM_EMAIL } from "@/lib/app-brand";
 import { getCurrentUser } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { invites, orgMembers, orgRoleEnum, orgs, users } from "@/lib/db/schema";
-import { getResend } from "@/lib/email";
+import { sendEmail } from "@/lib/email";
 import { getEmailEnv } from "@/lib/env";
 import { getInviteLink } from "@/lib/invites";
 import { canManageMembers, getInsufficientPermissionsError } from "@/lib/roles";
@@ -121,8 +121,8 @@ export async function inviteMember(_prevState: InviteMemberState, formData: Form
       throw new Error("APP_URL must be configured for invite emails");
     }
 
-    await getResend().emails.send({
-      from: getEmailEnv().RESEND_FROM_EMAIL ?? DEFAULT_FROM_EMAIL,
+    await sendEmail({
+      from: getEmailEnv().EMAIL_FROM ?? DEFAULT_FROM_EMAIL,
       react: InviteEmail({
         inviteUrl,
         orgName: org.businessName ?? org.name,

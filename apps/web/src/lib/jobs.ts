@@ -18,7 +18,7 @@ import {
   proposals,
   users,
 } from "@/lib/db/schema";
-import { getResend } from "@/lib/email";
+import { sendEmail } from "@/lib/email";
 import { getAppEnv, getEmailEnv } from "@/lib/env";
 import { buildInvoiceFilename } from "@/lib/invoice-filename";
 import { reminderPayloadSchema } from "@/lib/proposal-service";
@@ -169,13 +169,14 @@ async function sendInvoiceEmail(invoiceId: string, recipient?: string) {
     }),
   );
 
-  const fromEmail = getEmailEnv().RESEND_FROM_EMAIL ?? DEFAULT_FROM_EMAIL;
+  const fromEmail = getEmailEnv().EMAIL_FROM ?? DEFAULT_FROM_EMAIL;
   const businessName = org.legalName ?? org.businessName ?? org.name ?? APP_NAME;
 
-  const result = await getResend().emails.send({
+  await sendEmail({
     attachments: [
       {
-        content: pdfBuffer.toString("base64"),
+        content: pdfBuffer,
+        contentType: "application/pdf",
         filename: buildInvoiceFilename(
           {
             clientName: client.name,
@@ -206,9 +207,6 @@ async function sendInvoiceEmail(invoiceId: string, recipient?: string) {
       : `Invoice ${invoice.number} from ${businessName}`,
     to: [recipient ?? client.email],
   });
-  if (result.error) {
-    throw new Error(result.error.message);
-  }
 }
 
 async function sendInvoiceReminderEmail(
@@ -249,8 +247,8 @@ async function sendInvoiceReminderEmail(
       }
       return;
     }
-    const fromEmail = getEmailEnv().RESEND_FROM_EMAIL ?? DEFAULT_FROM_EMAIL;
-    const result = await getResend().emails.send({
+    const fromEmail = getEmailEnv().EMAIL_FROM ?? DEFAULT_FROM_EMAIL;
+    await sendEmail({
       from: fromEmail,
       react: InvoiceSentEmail({
         businessName: stored.businessName,
@@ -266,9 +264,6 @@ async function sendInvoiceReminderEmail(
       subject: stored.subject,
       to: [stored.to],
     });
-    if (result.error) {
-      throw new Error(result.error.message);
-    }
     await db.insert(activityLog).values({
       action: "reminder_sent",
       invoiceId,
@@ -279,10 +274,10 @@ async function sendInvoiceReminderEmail(
   }
   const { bankDetails, client, invoice, org } = await getInvoiceEmailContext(invoiceId);
 
-  const fromEmail = getEmailEnv().RESEND_FROM_EMAIL ?? DEFAULT_FROM_EMAIL;
+  const fromEmail = getEmailEnv().EMAIL_FROM ?? DEFAULT_FROM_EMAIL;
   const businessName = org.legalName ?? org.businessName ?? org.name ?? APP_NAME;
 
-  await getResend().emails.send({
+  await sendEmail({
     from: fromEmail,
     react: InvoiceSentEmail({
       bankDetails,
@@ -342,9 +337,9 @@ async function sendPaymentReceivedEmail(invoiceId: string) {
     throw new Error("User not found");
   }
 
-  const fromEmail = getEmailEnv().RESEND_FROM_EMAIL ?? DEFAULT_FROM_EMAIL;
+  const fromEmail = getEmailEnv().EMAIL_FROM ?? DEFAULT_FROM_EMAIL;
 
-  await getResend().emails.send({
+  await sendEmail({
     from: fromEmail,
     react: PaymentReceivedEmail({
       clientName: client?.name ?? "Client",

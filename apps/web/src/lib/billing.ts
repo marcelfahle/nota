@@ -3,7 +3,7 @@ import { and, count, eq } from "drizzle-orm";
 import { billingMonth, FREE_INVOICE_LIMIT } from "@/lib/billing-policy";
 import { db } from "@/lib/db";
 import { invoiceSends, orgs } from "@/lib/db/schema";
-import { getAppEnv, getStripeBillingEnv, getStripeMode } from "@/lib/env";
+import { getAppEnv, getDeploymentEnv, getStripeBillingEnv, getStripeMode } from "@/lib/env";
 import { getStripe } from "@/lib/stripe";
 
 export async function billingStatus(orgId: string) {
@@ -17,10 +17,14 @@ export async function billingStatus(orgId: string) {
     .where(and(eq(invoiceSends.orgId, orgId), eq(invoiceSends.month, billingMonth())));
   return {
     chargesEnabled: org.stripeChargesEnabled,
+    deploymentMode: getDeploymentEnv().DEPLOYMENT_MODE,
     hasBillingAccount: Boolean(org.stripeCustomerId),
     limit:
-      getStripeMode().STRIPE_MODE === "direct" || org.plan === "pro" ? null : FREE_INVOICE_LIMIT,
+      getDeploymentEnv().DEPLOYMENT_MODE === "self-hosted" || org.plan === "pro"
+        ? null
+        : FREE_INVOICE_LIMIT,
     mode: getStripeMode().STRIPE_MODE,
+    paymentMode: getDeploymentEnv().PAYMENT_MODE,
     payoutsEnabled: org.stripePayoutsEnabled,
     plan: org.plan,
     sent: usage.sent,
@@ -34,7 +38,7 @@ export async function createBillingCheckout(
   email: string,
   interval: "month" | "year",
 ) {
-  if (getStripeMode().STRIPE_MODE === "direct") {
+  if (getDeploymentEnv().DEPLOYMENT_MODE === "self-hosted") {
     throw new Error("Self-hosted Nota does not require a subscription");
   }
   const prices = getStripeBillingEnv();

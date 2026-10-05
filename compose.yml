@@ -1,0 +1,140 @@
+name: nota
+
+x-web-environment: &web-environment
+  APP_URL: ${APP_URL:-http://localhost:3000}
+  ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+  BLOB_READ_WRITE_TOKEN: ${BLOB_READ_WRITE_TOKEN:-}
+  CRON_SECRET: ${CRON_SECRET:?Set CRON_SECRET in .env.self-hosted}
+  DATABASE_URL: postgresql://nota:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env.self-hosted}@postgres:5432/nota
+  DEPLOYMENT_MODE: self-hosted
+  EMAIL_FROM: ${EMAIL_FROM:-Nota <nota@localhost>}
+  EMAIL_LOG_PATH: /data/mail/sends.jsonl
+  EMAIL_PROVIDER: ${EMAIL_PROVIDER:-log}
+  HELO_API_KEY: ${HELO_API_KEY:-}
+  HELO_CHANNEL_ID: ${HELO_CHANNEL_ID:-}
+  LOCAL_STORAGE_PATH: /data/storage
+  PAYMENT_MODE: ${PAYMENT_MODE:-bank-transfer}
+  S3_ACCESS_KEY_ID: ${S3_ACCESS_KEY_ID:-}
+  S3_BUCKET: ${S3_BUCKET:-}
+  S3_ENDPOINT: ${S3_ENDPOINT:-}
+  S3_FORCE_PATH_STYLE: ${S3_FORCE_PATH_STYLE:-false}
+  S3_PUBLIC_URL: ${S3_PUBLIC_URL:-}
+  S3_REGION: ${S3_REGION:-us-east-1}
+  S3_SECRET_ACCESS_KEY: ${S3_SECRET_ACCESS_KEY:-}
+  SESSION_SECRET: ${SESSION_SECRET:?Set SESSION_SECRET in .env.self-hosted}
+  SMTP_URL: ${SMTP_URL:-}
+  STORAGE: ${STORAGE:-local}
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: nota
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_USER: nota
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U nota -d nota"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+    restart: unless-stopped
+    volumes:
+      - nota_postgres:/var/lib/postgresql/data
+
+  migrate:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+      target: migration
+    environment: *web-environment
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+      target: runner
+    environment: *web-environment
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:3000/api/ready').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+    ports:
+      - "${NOTA_PORT:-3000}:3000"
+    restart: unless-stopped
+    volumes:
+      - nota_data:/data
+
+  cron:
+    image: curlimages/curl:8.16.0
+    command:
+      - /bin/sh
+      - -ec
+      - |
+        while true; do
+          curl --fail --silent --show-error \
+            --header "Authorization: Bearer $${CRON_SECRET}" \
+            http://web:3000/api/cron/jobs
+          sleep "$${CRON_INTERVAL_SECONDS:-60}"
+        done
+    environment:
+      CRON_INTERVAL_SECONDS: ${CRON_INTERVAL_SECONDS:-60}
+      CRON_SECRET: ${CRON_SECRET}
+    depends_on:
+      web:
+        condition: service_healthy
+    restart: unless-stopped
+
+  seed:
+    profiles: ["seed"]
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+      target: migration
+    command: ["bun", "run", "db:seed"]
+    environment:
+      <<: *web-environment
+      SEED_API_KEY: ${SEED_API_KEY:-nota_seed_disposable_only}
+      SEED_CONFIRM: disposable
+      SEED_EMAIL: ${SEED_EMAIL:-admin@nota.test}
+      SEED_NAME: ${SEED_NAME:-Nota Demo Admin}
+      SEED_PASSWORD: ${SEED_PASSWORD:-nota-demo-password}
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    restart: "no"
+
+  mcp:
+    profiles: ["mcp"]
+    build:
+      context: .
+      dockerfile: apps/mcp/Dockerfile
+    environment:
+      NOTA_MCP_HOST: 0.0.0.0
+      NOTA_MCP_PUBLIC_URL: ${NOTA_MCP_PUBLIC_URL:-http://localhost:3100}
+      NOTA_OAUTH_SECRET: ${NOTA_OAUTH_SECRET:-}
+      NOTA_TRUST_PROXY_HOPS: "0"
+      NOTA_URL: ${APP_URL:-http://localhost:3000}
+    ports:
+      - "${NOTA_MCP_PORT:-3100}:3100"
+    restart: unless-stopped
+    volumes:
+      - nota_mcp:/data
+
+volumes:
+  nota_data:
+  nota_mcp:
+  nota_postgres:
