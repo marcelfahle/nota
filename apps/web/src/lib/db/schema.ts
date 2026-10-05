@@ -295,10 +295,10 @@ export const invoices = pgTable(
     stripePaymentIntentId: text("stripe_payment_intent_id"),
     stripePaymentLinkId: text("stripe_payment_link_id"),
     stripePaymentLinkUrl: text("stripe_payment_link_url"),
-    subtotal: numeric({ precision: 12, scale: 2 }),
-    taxAmount: numeric("tax_amount", { precision: 12, scale: 2 }),
-    taxRate: numeric("tax_rate", { precision: 5, scale: 2 }),
-    total: numeric({ precision: 12, scale: 2 }),
+    subtotal: numeric({ precision: 19, scale: 4 }),
+    taxAmount: numeric("tax_amount", { precision: 19, scale: 4 }),
+    taxRate: numeric("tax_rate", { precision: 9, scale: 6 }),
+    total: numeric({ precision: 19, scale: 4 }),
     updatedAt: timestamp("updated_at").defaultNow(),
     userId: uuid("user_id")
       .notNull()
@@ -308,15 +308,15 @@ export const invoices = pgTable(
 );
 
 export const lineItems = pgTable("line_items", {
-  amount: numeric({ precision: 12, scale: 2 }).notNull(),
+  amount: numeric({ precision: 19, scale: 4 }).notNull(),
   description: text().notNull(),
   id: uuid().defaultRandom().primaryKey(),
   invoiceId: uuid("invoice_id")
     .notNull()
     .references(() => invoices.id, { onDelete: "cascade" }),
-  quantity: numeric({ precision: 10, scale: 2 }).notNull(),
+  quantity: numeric({ precision: 18, scale: 6 }).notNull(),
   sortOrder: integer("sort_order").default(0),
-  unitPrice: numeric("unit_price", { precision: 12, scale: 2 }).notNull(),
+  unitPrice: numeric("unit_price", { precision: 18, scale: 6 }).notNull(),
 });
 
 export const activityLog = pgTable(
@@ -342,7 +342,7 @@ export const activityLog = pgTable(
 export const payments = pgTable(
   "payments",
   {
-    amount: numeric({ precision: 12, scale: 2 }).notNull(),
+    amount: numeric({ precision: 19, scale: 4 }).notNull(),
     createdAt: timestamp("created_at").defaultNow().notNull(),
     currency: text().notNull(),
     id: uuid().defaultRandom().primaryKey(),

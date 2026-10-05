@@ -15,6 +15,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { addDecimals, currencyExponent, multiplyAndRound, percentageAndRound } from "@/lib/money";
 import { formatCurrency } from "@/lib/utils";
 
 type LineItem = {
@@ -58,9 +59,8 @@ function emptyLineItem(): LineItem {
   return { description: "", quantity: "1", unitPrice: "" };
 }
 
-function toNumber(val: string): number {
-  const n = Number.parseFloat(val);
-  return Number.isNaN(n) ? 0 : n;
+function previewDecimal(value: string) {
+  return /^\d+(?:\.\d*)?$/.test(value) ? value : "0";
 }
 
 function todayISO(): string {
@@ -110,11 +110,17 @@ export function InvoiceForm({
   }, []);
 
   // Computed totals
-  const lineAmounts = items.map((item) => toNumber(item.quantity) * toNumber(item.unitPrice));
-  const subtotal = lineAmounts.reduce((sum, a) => sum + a, 0);
-  const taxRateNum = toNumber(taxRate);
-  const taxAmount = subtotal * (taxRateNum / 100);
-  const total = subtotal + taxAmount;
+  const exponent = currencyExponent(currency);
+  const lineAmountDecimals = items.map((item) =>
+    multiplyAndRound(previewDecimal(item.quantity), previewDecimal(item.unitPrice), exponent),
+  );
+  const subtotalDecimal = addDecimals(lineAmountDecimals, exponent);
+  const taxAmountDecimal = percentageAndRound(subtotalDecimal, previewDecimal(taxRate), exponent);
+  const totalDecimal = addDecimals([subtotalDecimal, taxAmountDecimal], exponent);
+  const lineAmounts = lineAmountDecimals.map(Number);
+  const subtotal = Number(subtotalDecimal);
+  const taxAmount = Number(taxAmountDecimal);
+  const total = Number(totalDecimal);
 
   return (
     <form
@@ -234,7 +240,7 @@ export function InvoiceForm({
                   onChange={(e) => updateItem(index, "quantity", e.target.value)}
                   placeholder="Qty"
                   required
-                  step="0.01"
+                  step="0.000001"
                   type="number"
                   value={item.quantity}
                 />
@@ -245,7 +251,7 @@ export function InvoiceForm({
                   onChange={(e) => updateItem(index, "unitPrice", e.target.value)}
                   placeholder="Rate"
                   required
-                  step="0.01"
+                  step="0.000001"
                   type="number"
                   value={item.unitPrice}
                 />
@@ -289,11 +295,11 @@ export function InvoiceForm({
           <div className="flex items-center gap-2 text-sm">
             <span className="text-zinc-500">Tax</span>
             <Input
-              className="h-7 w-16 text-center text-xs"
+              className="h-7 w-20 text-center text-xs"
               max="100"
               min="0"
               onChange={(e) => setTaxRate(e.target.value)}
-              step="0.01"
+              step="0.000001"
               type="number"
               value={taxRate}
             />

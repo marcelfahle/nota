@@ -32,6 +32,21 @@ import {
 import { formatInvoiceNumber } from "@/lib/invoice-number";
 import { processPendingEmailJobs } from "@/lib/jobs";
 import {
+  absoluteDecimal,
+  addDecimals,
+  compareDecimals,
+  currencyExponent,
+  type DecimalInput,
+  formatCurrencyDecimal,
+  formatDecimal,
+  formatStoredMoney,
+  formatVariableDecimal,
+  multiplyAndRound,
+  negateDecimal,
+  percentageAndRound,
+  subtractDecimals,
+} from "@/lib/money";
+import {
   canCancelInvoice as canCancelInvoiceRole,
   canCreateInvoice,
   canDeleteInvoice as canDeleteInvoiceRole,
@@ -53,8 +68,8 @@ export type InvoiceServiceContext = {
 
 export type InvoiceLineItemInput = {
   description: string;
-  quantity: number;
-  unitPrice: number;
+  quantity: DecimalInput;
+  unitPrice: DecimalInput;
 };
 
 export type InvoiceMutationInput = {
@@ -66,7 +81,7 @@ export type InvoiceMutationInput = {
   lineItems: Array<InvoiceLineItemInput>;
   notes?: string;
   reverseCharge: string;
-  taxRate: number;
+  taxRate: DecimalInput;
 };
 
 export type InvoiceMutationError = {
@@ -92,14 +107,6 @@ function sourceFields(context: InvoiceServiceContext) {
   return { source: context.source ?? "web", sourceClient: context.sourceClient ?? null };
 }
 
-function cents(value: string | null | undefined) {
-  return Math.round(Number(value ?? 0) * 100);
-}
-
-function money(value: number) {
-  return (value / 100).toFixed(2);
-}
-
 async function expireInvoiceProposals(tx: DbTransaction, invoiceId: string) {
   await tx
     .update(proposals)
@@ -107,7 +114,7 @@ async function expireInvoiceProposals(tx: DbTransaction, invoiceId: string) {
     .where(and(eq(proposals.invoiceId, invoiceId), eq(proposals.status, "pending")));
 }
 
-async function issuedCreditCents(tx: DbTransaction, invoiceId: string) {
+async function issuedCreditAmount(tx: DbTransaction, invoiceId: string) {
   const [row] = await tx
     .select({ total: sql<string>`coalesce(sum(${invoices.total}::numeric), 0)` })
     .from(invoices)
@@ -118,22 +125,105 @@ async function issuedCreditCents(tx: DbTransaction, invoiceId: string) {
         inArray(invoices.status, ["sent", "overdue", "paid"]),
       ),
     );
-  return Math.abs(cents(row?.total));
+  return row?.total ?? "0";
 }
 
 export function calculateInvoiceTotals(
-  items: Array<{ quantity: number; unitPrice: number }>,
-  taxRate: number,
+  items: Array<{ quantity: DecimalInput; unitPrice: DecimalInput }>,
+  taxRate: DecimalInput,
+  currency: string,
 ) {
-  const subtotal = items.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0);
-  const taxAmount = subtotal * (taxRate / 100);
-  const total = subtotal + taxAmount;
+  const exponent = currencyExponent(currency);
+  const maximumAmount = `999999999999999${exponent ? `.${"9".repeat(exponent)}` : ""}`;
+  const normalizedItems = items.map((item) => ({
+    quantity: formatVariableDecimal(item.quantity, 6, 2),
+    unitPrice: formatVariableDecimal(item.unitPrice, 6, 2),
+  }));
+  const normalizedTaxRate = formatVariableDecimal(taxRate, 6, 2);
+  if (normalizedItems.some((item) => compareDecimals(item.quantity, 0, 6) <= 0)) {
+    throw new Error("Quantity must be positive");
+  }
+  if (normalizedItems.some((item) => compareDecimals(item.unitPrice, 0, 6) < 0)) {
+    throw new Error("Unit price must be non-negative");
+  }
+  if (
+    normalizedItems.some(
+      (item) =>
+        compareDecimals(item.quantity, "999999999999.999999", 6) > 0 ||
+        compareDecimals(item.unitPrice, "999999999999.999999", 6) > 0,
+    )
+  ) {
+    throw new Error("Quantity or unit price is out of range");
+  }
+  if (
+    compareDecimals(normalizedTaxRate, 0, 6) < 0 ||
+    compareDecimals(normalizedTaxRate, 100, 6) > 0
+  ) {
+    throw new Error("Tax rate must be between 0 and 100");
+  }
+  const lineAmounts = normalizedItems.map((item) =>
+    multiplyAndRound(item.quantity, item.unitPrice, exponent),
+  );
+  if (lineAmounts.some((amount) => compareDecimals(amount, maximumAmount, exponent) > 0)) {
+    throw new Error("Invoice amount is out of range");
+  }
+  const subtotal = addDecimals(lineAmounts, exponent);
+  const taxAmount = percentageAndRound(subtotal, normalizedTaxRate, exponent);
+  if (
+    compareDecimals(subtotal, maximumAmount, exponent) > 0 ||
+    compareDecimals(taxAmount, maximumAmount, exponent) > 0
+  ) {
+    throw new Error("Invoice amount is out of range");
+  }
+  const total = addDecimals([subtotal, taxAmount], exponent);
+  if (compareDecimals(total, maximumAmount, exponent) > 0) {
+    throw new Error("Invoice amount is out of range");
+  }
 
   return {
-    subtotal: subtotal.toFixed(2),
-    taxAmount: taxAmount.toFixed(2),
-    taxRate: taxRate.toFixed(2),
-    total: total.toFixed(2),
+    lineAmounts,
+    subtotal,
+    taxAmount,
+    taxRate: normalizedTaxRate,
+    total,
+  };
+}
+
+export function reconcileInvoiceAmounts(
+  total: DecimalInput,
+  paymentAmounts: Array<DecimalInput>,
+  creditAmount: DecimalInput,
+  currency: string,
+) {
+  const exponent = currencyExponent(currency);
+  const paidAmount = addDecimals(paymentAmounts, exponent);
+  const creditedAmount = absoluteDecimal(creditAmount, exponent);
+  const settled = addDecimals([paidAmount, creditedAmount], exponent);
+  const balance =
+    compareDecimals(settled, total, exponent) >= 0
+      ? formatCurrencyDecimal(0, currency)
+      : subtractDecimals(total, settled, exponent);
+  return { balance, creditedAmount, paidAmount };
+}
+
+/** Reconcile persisted values at database precision so legacy documents are never recalculated. */
+export function reconcileStoredInvoiceAmounts(
+  total: DecimalInput,
+  paymentAmounts: Array<DecimalInput>,
+  creditAmount: DecimalInput,
+  currency: string,
+) {
+  const paid = addDecimals(paymentAmounts, 4);
+  const credited = absoluteDecimal(creditAmount, 4);
+  const settled = addDecimals([paid, credited], 4);
+  const balance =
+    compareDecimals(settled, total, 4) >= 0
+      ? formatDecimal(0, 4)
+      : subtractDecimals(total, settled, 4);
+  return {
+    balance: formatStoredMoney(balance, currency),
+    creditedAmount: formatStoredMoney(credited, currency),
+    paidAmount: formatStoredMoney(paid, currency),
   };
 }
 
@@ -284,24 +374,45 @@ export async function getInvoiceDetail(orgId: string, invoiceId: string) {
       .where(and(eq(activityLog.invoiceId, invoiceId), eq(activityLog.action, "viewed"))),
   ]);
 
-  const paidCents = paymentRows.reduce((sum, payment) => sum + cents(payment.amount), 0);
-  const creditedCents = Math.abs(cents(creditRow?.total));
-  const balanceCents = Math.max(0, cents(invoice.total) - paidCents - creditedCents);
+  const currency = invoice.currency ?? "EUR";
+  const settlement = reconcileStoredInvoiceAmounts(
+    invoice.total ?? "0",
+    paymentRows.map((payment) => payment.amount),
+    creditRow?.total ?? "0",
+    currency,
+  );
   const settlementStatus: "paid" | "partially_paid" | "unpaid" =
-    balanceCents === 0 ? "paid" : paidCents > 0 || creditedCents > 0 ? "partially_paid" : "unpaid";
+    compareDecimals(settlement.balance, 0, 4) === 0
+      ? "paid"
+      : compareDecimals(settlement.paidAmount, 0, 4) > 0 ||
+          compareDecimals(settlement.creditedAmount, 0, 4) > 0
+        ? "partially_paid"
+        : "unpaid";
 
   return {
     ...invoice,
     activityLog: activities,
-    balance: money(balanceCents),
+    balance: settlement.balance,
     client,
-    creditedAmount: money(creditedCents),
+    creditedAmount: settlement.creditedAmount,
     lastViewedAt: viewRow?.lastViewedAt ?? null,
-    lineItems: items,
-    paidAmount: money(paidCents),
-    payments: paymentRows,
+    lineItems: items.map((item) => ({
+      ...item,
+      amount: formatStoredMoney(item.amount, currency),
+      quantity: formatVariableDecimal(item.quantity, 6, 2),
+      unitPrice: formatVariableDecimal(item.unitPrice, 6, 2),
+    })),
+    paidAmount: settlement.paidAmount,
+    payments: paymentRows.map((payment) => ({
+      ...payment,
+      amount: formatStoredMoney(payment.amount, currency),
+    })),
     settlementStatus,
     status: invoice.status ?? "draft",
+    subtotal: formatStoredMoney(invoice.subtotal ?? 0, currency),
+    taxAmount: formatStoredMoney(invoice.taxAmount ?? 0, currency),
+    taxRate: formatVariableDecimal(invoice.taxRate ?? 0, 6, 2),
+    total: formatStoredMoney(invoice.total ?? 0, currency),
     viewCount: viewRow?.count ?? 0,
   };
 }
@@ -315,7 +426,13 @@ export async function createInvoice(
   }
 
   const { lineItems: items, taxRate, ...invoiceData } = input;
-  const totals = calculateInvoiceTotals(items, taxRate);
+  let calculation: ReturnType<typeof calculateInvoiceTotals>;
+  try {
+    calculation = calculateInvoiceTotals(items, taxRate, invoiceData.currency);
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : "Invalid invoice amount" };
+  }
+  const { lineAmounts, ...totals } = calculation;
   const client = await getOwnedClient(context.orgId, invoiceData.clientId);
 
   if (!client) {
@@ -338,12 +455,12 @@ export async function createInvoice(
 
     await tx.insert(lineItems).values(
       items.map((item, index) => ({
-        amount: (item.quantity * item.unitPrice).toFixed(2),
+        amount: lineAmounts[index],
         description: item.description,
         invoiceId: invoice.id,
-        quantity: item.quantity.toFixed(2),
+        quantity: formatVariableDecimal(item.quantity, 6, 2),
         sortOrder: index,
-        unitPrice: item.unitPrice.toFixed(2),
+        unitPrice: formatVariableDecimal(item.unitPrice, 6, 2),
       })),
     );
 
@@ -381,7 +498,13 @@ export async function updateInvoice(
   }
 
   const { lineItems: items, taxRate, ...invoiceData } = input;
-  const totals = calculateInvoiceTotals(items, taxRate);
+  let calculation: ReturnType<typeof calculateInvoiceTotals>;
+  try {
+    calculation = calculateInvoiceTotals(items, taxRate, invoiceData.currency);
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : "Invalid invoice amount" };
+  }
+  const { lineAmounts, ...totals } = calculation;
   const client = await getOwnedClient(context.orgId, invoiceData.clientId);
 
   if (!client) {
@@ -403,12 +526,12 @@ export async function updateInvoice(
 
     await tx.insert(lineItems).values(
       items.map((item, index) => ({
-        amount: (item.quantity * item.unitPrice).toFixed(2),
+        amount: lineAmounts[index],
         description: item.description,
         invoiceId,
-        quantity: item.quantity.toFixed(2),
+        quantity: formatVariableDecimal(item.quantity, 6, 2),
         sortOrder: index,
-        unitPrice: item.unitPrice.toFixed(2),
+        unitPrice: formatVariableDecimal(item.unitPrice, 6, 2),
       })),
     );
     await expireInvoiceProposals(tx, invoiceId);
@@ -637,7 +760,14 @@ export async function sendInvoice(
           .from(invoices)
           .where(eq(invoices.id, invoice.creditsInvoiceId))
           .for("update");
-        if (original && (await issuedCreditCents(tx, original.id)) >= cents(original.total)) {
+        if (
+          original &&
+          compareDecimals(
+            absoluteDecimal(await issuedCreditAmount(tx, original.id), 4),
+            original.total ?? "0",
+            4,
+          ) >= 0
+        ) {
           await tx
             .update(invoices)
             .set({
@@ -825,7 +955,14 @@ export async function createCreditNote(
           sql`${invoices.status} <> 'cancelled'`,
         ),
       );
-    if (Math.abs(cents(existing?.total)) >= cents(original.total)) {
+    const exponent = 4;
+    if (
+      compareDecimals(
+        absoluteDecimal(existing?.total ?? "0", exponent),
+        original.total ?? "0",
+        exponent,
+      ) >= 0
+    ) {
       return { error: "Invoice has already been fully credited" };
     }
 
@@ -857,10 +994,10 @@ export async function createCreditNote(
         number,
         orgId: context.orgId,
         reverseCharge: original.reverseCharge,
-        subtotal: money(-Math.abs(cents(original.subtotal))),
-        taxAmount: money(-Math.abs(cents(original.taxAmount))),
+        subtotal: negateDecimal(absoluteDecimal(original.subtotal ?? "0", exponent), exponent),
+        taxAmount: negateDecimal(absoluteDecimal(original.taxAmount ?? "0", exponent), exponent),
         taxRate: original.taxRate,
-        total: money(-Math.abs(cents(original.total))),
+        total: negateDecimal(absoluteDecimal(original.total ?? "0", exponent), exponent),
         ...sourceFields(context),
         userId: context.userId,
       })
@@ -872,12 +1009,12 @@ export async function createCreditNote(
     if (originalItems.length) {
       await tx.insert(lineItems).values(
         originalItems.map((item) => ({
-          amount: money(-Math.abs(cents(item.amount))),
+          amount: negateDecimal(absoluteDecimal(item.amount, exponent), exponent),
           description: item.description,
           invoiceId: credit.id,
           quantity: item.quantity,
           sortOrder: item.sortOrder,
-          unitPrice: money(-Math.abs(cents(item.unitPrice))),
+          unitPrice: negateDecimal(absoluteDecimal(item.unitPrice, 6), 6),
         })),
       );
     }
@@ -899,7 +1036,7 @@ export async function recordInvoicePayment(
   context: InvoiceServiceContext,
   invoiceId: string,
   input: {
-    amount: number;
+    amount: DecimalInput;
     method: "bank_transfer" | "other";
     note?: string;
     receivedAt?: Date;
@@ -908,10 +1045,6 @@ export async function recordInvoicePayment(
   if (!canMarkInvoicePaidRole(context.role)) {
     return { error: getInsufficientPermissionsError() };
   }
-  if (!Number.isFinite(input.amount) || input.amount <= 0) {
-    return { error: "Payment amount must be positive" };
-  }
-
   let paymentLink: { accountId: string | null; id: string } | null = null;
   const result = await db.transaction(async (tx): Promise<InvoiceMutationResult> => {
     const [invoice] = await tx
@@ -929,10 +1062,20 @@ export async function recordInvoicePayment(
       .select({ total: sql<string>`coalesce(sum(${payments.amount}::numeric), 0)` })
       .from(payments)
       .where(eq(payments.invoiceId, invoiceId));
-    const remaining =
-      cents(invoice.total) - cents(row?.total) - (await issuedCreditCents(tx, invoiceId));
-    const amount = Math.round(input.amount * 100);
-    if (amount <= 0 || amount > remaining) {
+    const currency = invoice.currency ?? "EUR";
+    const settlement = reconcileStoredInvoiceAmounts(
+      invoice.total ?? "0",
+      [row?.total ?? "0"],
+      await issuedCreditAmount(tx, invoiceId),
+      currency,
+    );
+    let amount: string;
+    try {
+      amount = formatCurrencyDecimal(input.amount, currency, "reject");
+    } catch (error) {
+      return { error: error instanceof Error ? error.message : "Invalid payment amount" };
+    }
+    if (compareDecimals(amount, 0, 4) <= 0 || compareDecimals(amount, settlement.balance, 4) > 0) {
       return { error: "Payment exceeds the remaining balance" };
     }
     if (invoice.stripePaymentLinkId) {
@@ -940,8 +1083,8 @@ export async function recordInvoicePayment(
     }
     const receivedAt = input.receivedAt ?? new Date();
     await tx.insert(payments).values({
-      amount: money(amount),
-      currency: invoice.currency ?? "EUR",
+      amount,
+      currency,
       invoiceId,
       method: input.method,
       note: input.note,
@@ -949,7 +1092,7 @@ export async function recordInvoicePayment(
       receivedAt,
       source: context.source ?? "web",
     });
-    const fullyPaid = amount === remaining;
+    const fullyPaid = compareDecimals(amount, settlement.balance, 4) === 0;
     await tx
       .update(invoices)
       .set({
@@ -962,12 +1105,12 @@ export async function recordInvoicePayment(
     await tx.insert(activityLog).values({
       action: "paid",
       invoiceId,
-      metadata: { amount: money(amount), method: input.method },
+      metadata: { amount, method: input.method },
       ...sourceFields(context),
     });
     await tx.insert(jobs).values({
       invoiceId,
-      payload: { amount: money(amount), invoiceId },
+      payload: { amount, invoiceId },
       type: "send_payment_received_email",
     });
     await expireInvoiceProposals(tx, invoiceId);
@@ -1019,15 +1162,20 @@ export async function markInvoicePaid(
       .select({ total: sql<string>`coalesce(sum(${payments.amount}::numeric), 0)` })
       .from(payments)
       .where(eq(payments.invoiceId, invoiceId));
-    const remaining =
-      cents(invoice.total) - cents(row?.total) - (await issuedCreditCents(tx, invoiceId));
-    if (remaining <= 0) {
+    const currency = invoice.currency ?? "EUR";
+    const { balance: remaining } = reconcileStoredInvoiceAmounts(
+      invoice.total ?? "0",
+      [row?.total ?? "0"],
+      await issuedCreditAmount(tx, invoiceId),
+      currency,
+    );
+    if (compareDecimals(remaining, 0, 4) <= 0) {
       return { invoiceId, success: true };
     }
     const now = new Date();
     await tx.insert(payments).values({
-      amount: money(remaining),
-      currency: invoice.currency ?? "EUR",
+      amount: remaining,
+      currency,
       invoiceId,
       method: "other",
       note: "Marked paid manually",
@@ -1048,7 +1196,7 @@ export async function markInvoicePaid(
     await tx.insert(activityLog).values({
       action: "paid",
       invoiceId,
-      metadata: { amount: money(remaining), manual: true },
+      metadata: { amount: remaining, manual: true },
       ...sourceFields(context),
     });
     await expireInvoiceProposals(tx, invoiceId);

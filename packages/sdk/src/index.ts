@@ -193,8 +193,8 @@ export type InvoiceDetail = {
 
 export type InvoiceLineItemInput = {
   description: string;
-  quantity: number;
-  unitPrice: number;
+  quantity: number | string;
+  unitPrice: number | string;
 };
 
 export type InvoiceCreateInput = {
@@ -205,7 +205,7 @@ export type InvoiceCreateInput = {
   notes?: string;
   internalNotes?: string;
   reverseCharge?: boolean;
-  taxRate?: number;
+  taxRate?: number | string;
   lineItems: Array<InvoiceLineItemInput>;
 };
 
@@ -462,7 +462,12 @@ export class NotaClient {
 
   async recordInvoicePayment(
     invoiceId: string,
-    input: { amount: number; method?: "bank_transfer" | "other"; note?: string; receivedAt?: string },
+    input: {
+      amount: number | string;
+      method?: "bank_transfer" | "other";
+      note?: string;
+      receivedAt?: string;
+    },
   ) {
     const response = await this.requestJson<JsonDataResponse<InvoiceDetail>>(
       `/invoices/${encodeURIComponent(invoiceId)}/payments`,

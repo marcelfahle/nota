@@ -145,6 +145,29 @@ describe("extractIban", () => {
 // generateXRechnung — structured IBAN
 // ---------------------------------------------------------------------------
 describe("generateXRechnung", () => {
+  test("preserves nonconforming legacy currency precision", () => {
+    const data = baseData();
+    data.invoice.currency = "JPY";
+    data.invoice.lineItems[0] = {
+      amount: "150.5000",
+      description: "Legacy item",
+      quantity: "1",
+      unitPrice: "150.500000",
+    };
+    data.invoice.subtotal = "150.5000";
+    data.invoice.taxAmount = "0.0000";
+    data.invoice.total = "150.5000";
+
+    const xml = generateXRechnung(data);
+    expect(xml).toContain(
+      '<cbc:LineExtensionAmount currencyID="JPY">150.50</cbc:LineExtensionAmount>',
+    );
+    expect(xml).toContain('<cbc:PayableAmount currencyID="JPY">150.50</cbc:PayableAmount>');
+
+    data.invoice.currency = "ZZZ";
+    expect(() => generateXRechnung(data)).not.toThrow();
+  });
+
   test("includes IBAN in PayeeFinancialAccount when structured iban provided", () => {
     const data = baseData();
     data.business.iban = "DE89370400440532013000";
@@ -216,6 +239,29 @@ describe("generateXRechnung", () => {
     const xml = generateXRechnung(data);
     expect(xml).toContain("<cbc:ID>S</cbc:ID>");
     expect(xml).toContain("<cbc:Percent>19.00</cbc:Percent>");
+  });
+
+  test("preserves fractional quantities, unit prices, and three-decimal money", () => {
+    const data = baseData();
+    Object.assign(data.invoice, {
+      currency: "BHD",
+      subtotal: "0.417",
+      taxAmount: "0.021",
+      taxRate: "5.125",
+      total: "0.438",
+    });
+    data.invoice.lineItems[0] = {
+      amount: "0.417",
+      description: "Fractional service",
+      quantity: "1.250000",
+      unitPrice: "0.333600",
+    };
+
+    const xml = generateXRechnung(data);
+    expect(xml).toContain('<cbc:InvoicedQuantity unitCode="C62">1.25</cbc:InvoicedQuantity>');
+    expect(xml).toContain('<cbc:PriceAmount currencyID="BHD">0.3336</cbc:PriceAmount>');
+    expect(xml).toContain('<cbc:PayableAmount currencyID="BHD">0.438</cbc:PayableAmount>');
+    expect(xml).toContain("<cbc:Percent>5.125</cbc:Percent>");
   });
 
   test("produces valid XML structure", () => {
