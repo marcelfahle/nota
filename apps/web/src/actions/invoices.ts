@@ -1,33 +1,28 @@
 "use server";
 
-import { and, eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
 import { getCurrentUser } from "@/lib/auth";
-import { db } from "@/lib/db";
-import { activityLog, invoices, orgs } from "@/lib/db/schema";
-import { canSendInvoice as canSendInvoiceStatus } from "@/lib/invoice-lifecycle";
 import {
   cancelInvoice as cancelInvoiceService,
   createCreditNote as createCreditNoteService,
   createInvoice as createInvoiceService,
   deleteInvoice as deleteInvoiceService,
   duplicateInvoice as duplicateInvoiceService,
-  getOwnedInvoice,
   markInvoicePaid as markInvoicePaidService,
+  markInvoiceSent as markInvoiceSentService,
   recordInvoicePayment as recordInvoicePaymentService,
   sendInvoice as sendInvoiceService,
   sendReminder as sendReminderService,
   type InvoiceServiceContext,
   updateInvoice as updateInvoiceService,
 } from "@/lib/invoice-service";
-import { canSendInvoice as canSendInvoiceRole, getInsufficientPermissionsError } from "@/lib/roles";
 
 const lineItemSchema = z.object({
   description: z.string().min(1, "Description is required"),
-  quantity: z.coerce.number().positive("Quantity must be positive"),
-  unitPrice: z.coerce.number().min(0, "Unit price must be non-negative"),
+  quantity: z.string().trim().min(1, "Quantity is required"),
+  unitPrice: z.string().trim().min(1, "Unit price is required"),
 });
 
 const invoiceSchema = z.object({
@@ -39,11 +34,11 @@ const invoiceSchema = z.object({
   lineItems: z.array(lineItemSchema).min(1, "At least one line item is required"),
   notes: z.string().optional(),
   reverseCharge: z.string().default("false"),
-  taxRate: z.coerce.number().min(0).max(100).default(0),
+  taxRate: z.string().trim().default("0"),
 });
 
 const paymentSchema = z.object({
-  amount: z.number().positive("Payment amount must be positive"),
+  amount: z.union([z.number().finite(), z.string().trim().min(1)]),
   invoiceId: z.string().uuid("Invalid invoice"),
   method: z.enum(["bank_transfer", "other"]),
   note: z.string().trim().max(500, "Note is too long").optional(),
@@ -169,36 +164,10 @@ export async function duplicateInvoice(
 
 export async function markInvoiceSent(invoiceId: string) {
   const currentUser = await getCurrentUser();
-
-  if (!canSendInvoiceRole(currentUser.role)) {
-    return { error: getInsufficientPermissionsError() };
+  const serviceResult = await markInvoiceSentService(buildServiceContext(currentUser), invoiceId);
+  if ("error" in serviceResult) {
+    return { error: serviceResult.error };
   }
-
-  const invoice = await getOwnedInvoice(currentUser.org.id, invoiceId);
-  if (!invoice) {
-    return { error: "Invoice not found" };
-  }
-
-  if (!canSendInvoiceStatus(invoice.status)) {
-    return { error: "Only draft invoices can be marked as sent" };
-  }
-
-  const sentAt = new Date();
-  await db
-    .update(invoices)
-    .set({
-      sentAt,
-      status: "sent",
-      updatedAt: sentAt,
-    })
-    .where(and(eq(invoices.id, invoiceId), eq(invoices.orgId, currentUser.org.id)));
-
-  await db.insert(activityLog).values({
-    action: "sent",
-    invoiceId,
-    metadata: { manual: true },
-  });
-  await db.update(orgs).set({ firstRunCompletedAt: sentAt }).where(eq(orgs.id, currentUser.org.id));
 
   revalidatePath("/invoices");
   revalidatePath(`/invoices/${invoiceId}`);
@@ -220,7 +189,7 @@ export async function markInvoicePaid(invoiceId: string) {
 
 export async function recordInvoicePayment(
   invoiceId: string,
-  input: { amount: number; method: "bank_transfer" | "other"; note?: string },
+  input: { amount: number | string; method: "bank_transfer" | "other"; note?: string },
 ) {
   const parsed = paymentSchema.safeParse({ invoiceId, ...input });
   if (!parsed.success) {

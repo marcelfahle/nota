@@ -6,7 +6,7 @@ import { z } from "zod";
 
 import { getCurrentUser } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { orgs } from "@/lib/db/schema";
+import { invoiceNumberEvents, orgs } from "@/lib/db/schema";
 import { deleteManagedLogo, uploadOrgFavicon, uploadOrgLogo } from "@/lib/logo-storage";
 import { canManageSettings, getInsufficientPermissionsError } from "@/lib/roles";
 
@@ -16,6 +16,7 @@ const settingsSchema = z.object({
   invoicePrefix: z.string().optional().default("INV"),
   invoiceSeparator: z.enum(["-", "/", ".", ""]).default("-"),
   nextInvoiceNumber: z.coerce.number().int().min(1).optional(),
+  originalNextInvoiceNumber: z.coerce.number().int().min(1),
 });
 
 const brandFieldSchema = z.enum([
@@ -164,6 +165,7 @@ export async function updateSettings(
         ? ""
         : ((formData.get("invoiceSeparator") as string) ?? "-"),
     nextInvoiceNumber: (formData.get("nextInvoiceNumber") as string) || undefined,
+    originalNextInvoiceNumber: formData.get("originalNextInvoiceNumber") as string,
   };
 
   const result = settingsSchema.safeParse(raw);
@@ -171,14 +173,68 @@ export async function updateSettings(
     return { error: result.error.issues[0].message };
   }
 
-  const { org, role } = await getCurrentUser();
+  const { org, role, user } = await getCurrentUser();
 
   if (!canManageSettings(role)) {
     return { error: getInsufficientPermissionsError() };
   }
 
   try {
-    await db.update(orgs).set(result.data).where(eq(orgs.id, org.id));
+    await db.transaction(async (tx) => {
+      const [lockedOrg] = await tx
+        .select({
+          invoiceDigits: orgs.invoiceDigits,
+          invoicePrefix: orgs.invoicePrefix,
+          invoiceSeparator: orgs.invoiceSeparator,
+          nextInvoiceNumber: orgs.nextInvoiceNumber,
+        })
+        .from(orgs)
+        .where(eq(orgs.id, org.id))
+        .for("update");
+      if (!lockedOrg) {
+        throw new Error("Organization not found");
+      }
+      const { originalNextInvoiceNumber, ...submitted } = result.data;
+      const staleUneditedCounter =
+        submitted.nextInvoiceNumber === originalNextInvoiceNumber &&
+        lockedOrg.nextInvoiceNumber !== originalNextInvoiceNumber;
+      const nextInvoiceNumber = staleUneditedCounter
+        ? lockedOrg.nextInvoiceNumber
+        : submitted.nextInvoiceNumber;
+      await tx
+        .update(orgs)
+        .set({ ...submitted, nextInvoiceNumber })
+        .where(eq(orgs.id, org.id));
+      if (nextInvoiceNumber !== undefined && nextInvoiceNumber !== lockedOrg.nextInvoiceNumber) {
+        await tx.insert(invoiceNumberEvents).values({
+          action: "counter_changed",
+          kind: "invoice",
+          metadata: {
+            changedBy: user.id,
+            from: lockedOrg.nextInvoiceNumber,
+            to: nextInvoiceNumber,
+          },
+          number: String(nextInvoiceNumber),
+          orgId: org.id,
+          source: "web",
+        });
+      }
+      const formatChanges = {
+        invoiceDigits: [lockedOrg.invoiceDigits, submitted.invoiceDigits],
+        invoicePrefix: [lockedOrg.invoicePrefix, submitted.invoicePrefix],
+        invoiceSeparator: [lockedOrg.invoiceSeparator, submitted.invoiceSeparator],
+      };
+      if (Object.values(formatChanges).some(([from, to]) => from !== to)) {
+        await tx.insert(invoiceNumberEvents).values({
+          action: "format_changed",
+          kind: "invoice",
+          metadata: { changedBy: user.id, changes: formatChanges },
+          number: String(nextInvoiceNumber ?? lockedOrg.nextInvoiceNumber),
+          orgId: org.id,
+          source: "web",
+        });
+      }
+    });
   } catch {
     return { error: "Could not update settings right now" };
   }

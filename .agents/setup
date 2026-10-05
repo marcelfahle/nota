@@ -80,7 +80,7 @@ if [[ "$(psql -h 127.0.0.1 -p 5433 -U postgres -d postgres -Atc "SELECT 1 FROM p
 fi
 step 'Migrate local database' env DATABASE_URL="$local_db" bun run --cwd apps/web db:migrate
 if [[ "$(psql "$local_db" -Atc "SELECT 1 FROM users WHERE email = 'admin@nota.app'")" != 1 ]]; then
-  step 'Seed local owner' env DATABASE_URL="$local_db" SEED_EMAIL=admin@nota.app \
+  step 'Seed local owner' env DATABASE_URL="$local_db" SEED_EMAIL=admin@nota.app SEED_CONFIRM=disposable \
     SEED_NAME=Admin SEED_PASSWORD=changeme bun run --cwd apps/web db:seed
 fi
 

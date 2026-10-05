@@ -10,11 +10,20 @@ import { db } from "@/lib/db";
 import { clients, invoices } from "@/lib/db/schema";
 import { normalizeInvoiceStatus } from "@/lib/invoice-lifecycle";
 import { getInvoiceDetail } from "@/lib/invoice-service";
+import { formatStoredMoney } from "@/lib/money";
+
+const decimalInput = z.union([
+  z.number().finite(),
+  z
+    .string()
+    .trim()
+    .regex(/^\d+(?:\.\d+)?$/),
+]);
 
 export const apiLineItemSchema = z.object({
   description: z.string().trim().min(1, "Description is required"),
-  quantity: z.coerce.number().positive("Quantity must be positive"),
-  unitPrice: z.coerce.number().min(0, "Unit price must be non-negative"),
+  quantity: decimalInput,
+  unitPrice: decimalInput,
 });
 
 export const apiInvoicePayloadSchema = z.object({
@@ -26,7 +35,7 @@ export const apiInvoicePayloadSchema = z.object({
   lineItems: z.array(apiLineItemSchema).min(1, "At least one line item is required"),
   notes: z.string().trim().optional(),
   reverseCharge: z.enum(["false", "true"]).default("false"),
-  taxRate: z.coerce.number().min(0).max(100).default(0),
+  taxRate: decimalInput.default(0),
 });
 
 export type ApiInvoicePayload = z.infer<typeof apiInvoicePayloadSchema>;
@@ -108,7 +117,15 @@ export async function getInvoiceList(
   ]);
 
   return {
-    data: rows,
+    data: rows.map((row) => {
+      const currency = row.currency ?? "EUR";
+      return {
+        ...row,
+        balance: formatStoredMoney(row.balance, currency),
+        paidAmount: formatStoredMoney(row.paidAmount, currency),
+        total: formatStoredMoney(row.total ?? 0, currency),
+      };
+    }),
     pagination: {
       page: filters.page,
       perPage: filters.perPage,

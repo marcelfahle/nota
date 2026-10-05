@@ -1,3 +1,5 @@
+import { absoluteDecimal, formatStoredMoney, formatVariableDecimal } from "@/lib/money";
+
 type XRechnungData = {
   business: {
     address?: string | null;
@@ -98,7 +100,7 @@ export function escapeXml(value: string): string {
 }
 
 function fmt(value: string): string {
-  return Number(value).toFixed(2);
+  return formatVariableDecimal(value, 6, 2);
 }
 
 export function parseAddress(address?: string | null): {
@@ -200,13 +202,17 @@ export function generateXRechnung(data: XRechnungData): string {
   const documentName = isCreditNote ? "CreditNote" : "Invoice";
   const lineName = isCreditNote ? "CreditNoteLine" : "InvoiceLine";
   const quantityName = isCreditNote ? "CreditedQuantity" : "InvoicedQuantity";
-  const amount = (value: string) => fmt(isCreditNote ? String(Math.abs(Number(value))) : value);
+  const amount = (value: string) =>
+    formatStoredMoney(isCreditNote ? absoluteDecimal(value, 4) : value, invoice.currency);
+  const quantity = (value: string) => formatVariableDecimal(value, 6, 2);
+  const unitPrice = (value: string) =>
+    formatVariableDecimal(isCreditNote ? absoluteDecimal(value, 6) : value, 6, 2);
 
   const lines = invoice.lineItems
     .map(
       (item, i) => `<cac:${lineName}>
 <cbc:ID>${i + 1}</cbc:ID>
-<cbc:${quantityName} unitCode="C62">${escapeXml(fmt(item.quantity))}</cbc:${quantityName}>
+<cbc:${quantityName} unitCode="C62">${escapeXml(quantity(item.quantity))}</cbc:${quantityName}>
 <cbc:LineExtensionAmount currencyID="${cur}">${escapeXml(amount(item.amount))}</cbc:LineExtensionAmount>
 <cac:Item>
 <cbc:Name>${escapeXml(item.description)}</cbc:Name>
@@ -219,7 +225,7 @@ export function generateXRechnung(data: XRechnungData): string {
 </cac:ClassifiedTaxCategory>
 </cac:Item>
 <cac:Price>
-<cbc:PriceAmount currencyID="${cur}">${escapeXml(amount(item.unitPrice))}</cbc:PriceAmount>
+<cbc:PriceAmount currencyID="${cur}">${escapeXml(unitPrice(item.unitPrice))}</cbc:PriceAmount>
 </cac:Price>
 </cac:${lineName}>`,
     )

@@ -174,7 +174,8 @@ async function sendInvoiceEmail(invoiceId: string, recipient?: string, idempoten
   await sendEmail({
     attachments: [
       {
-        content: pdfBuffer.toString("base64"),
+        content: pdfBuffer,
+        contentType: "application/pdf",
         filename: buildInvoiceFilename(
           {
             clientName: client.name,

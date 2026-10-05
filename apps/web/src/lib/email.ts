@@ -1,11 +1,16 @@
+import { appendFile, mkdir } from "node:fs/promises";
+import { dirname } from "node:path";
+
 import { render, toPlainText } from "@react-email/components";
+import nodemailer from "nodemailer";
 import type { ReactElement } from "react";
 import { z } from "zod";
 
 import { getEmailEnv } from "@/lib/env";
 
 type Email = {
-  attachments?: Array<{ content: string; filename: string }>;
+  attachments?: Array<{ content: string | Buffer; contentType?: string; filename: string }>;
+  from?: string;
   idempotencyKey?: string;
   react: ReactElement;
   subject: string;
@@ -20,7 +25,12 @@ const acceptedSchema = z.object({
 
 // Keep provider details here; callers only supply content and recipients.
 export function createHeloSender(
-  config: ReturnType<typeof getEmailEnv>,
+  config: {
+    EMAIL_FROM_ADDRESS: string;
+    EMAIL_FROM_NAME: string;
+    HELO_API_KEY?: string;
+    HELO_CHANNEL_ID?: string;
+  },
   fetcher: typeof fetch = fetch,
 ) {
   return async (email: Email) => {
@@ -29,7 +39,7 @@ export function createHeloSender(
       Accept: "application/json",
       Authorization: `Bearer ${config.HELO_API_KEY}`,
       "Content-Type": "application/json",
-      "X-Helo-Channel-Id": config.HELO_CHANNEL_ID,
+      ...(config.HELO_CHANNEL_ID ? { "X-Helo-Channel-Id": config.HELO_CHANNEL_ID } : {}),
     };
     if (email.idempotencyKey) {
       headers["X-Helo-Idempotency-Key"] = email.idempotencyKey;
@@ -40,12 +50,15 @@ export function createHeloSender(
     try {
       response = await fetcher("https://api.helohq.com/send/transactional", {
         body: JSON.stringify({
-          attachments: email.attachments?.map(({ content, filename }) => ({
-            content,
+          attachments: email.attachments?.map(({ content, contentType, filename }) => ({
+            content: typeof content === "string" ? content : content.toString("base64"),
+            contentType,
             disposition: "attachment",
             fileName: filename,
           })),
-          from: { email: config.EMAIL_FROM_ADDRESS, name: config.EMAIL_FROM_NAME },
+          from: email.from
+            ? parseAddress(email.from)
+            : { email: config.EMAIL_FROM_ADDRESS, name: config.EMAIL_FROM_NAME },
           html,
           subject: email.subject,
           text: toPlainText(html),
@@ -87,6 +100,49 @@ export function createHeloSender(
   };
 }
 
+function parseAddress(value: string) {
+  const match = value.match(/^\s*(.*?)\s*<([^>]+)>\s*$/);
+  return match
+    ? { email: match[2].trim(), name: match[1].replaceAll(/^"|"$/g, "").trim() || undefined }
+    : { email: value.trim() };
+}
+
 export async function sendEmail(email: Email) {
-  return createHeloSender(getEmailEnv())(email);
+  const env = getEmailEnv();
+  const attachments = email.attachments?.map(({ content, ...attachment }) => ({
+    ...attachment,
+    content: typeof content === "string" ? Buffer.from(content, "base64") : content,
+  }));
+  if (env.EMAIL_PROVIDER === "log") {
+    await mkdir(dirname(env.EMAIL_LOG_PATH), { recursive: true });
+    await appendFile(
+      env.EMAIL_LOG_PATH,
+      JSON.stringify({
+        attachments: attachments?.map(({ content, contentType, filename }) => ({
+          bytes: content.byteLength,
+          contentType,
+          filename,
+        })),
+        from: email.from ?? env.EMAIL_FROM,
+        recordedAt: new Date().toISOString(),
+        subject: email.subject,
+        to: email.to,
+      }) + "\n",
+      { mode: 0o600 },
+    );
+    return;
+  }
+  if (env.EMAIL_PROVIDER === "smtp") {
+    const html = await render(email.react);
+    await nodemailer.createTransport(env.SMTP_URL!).sendMail({
+      attachments,
+      from: email.from ?? env.EMAIL_FROM,
+      html,
+      subject: email.subject,
+      text: toPlainText(html),
+      to: email.to,
+    });
+    return;
+  }
+  return createHeloSender(env)(email);
 }

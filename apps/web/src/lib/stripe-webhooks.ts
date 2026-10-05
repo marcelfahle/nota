@@ -12,8 +12,9 @@ import {
   proposals,
   stripeEvents,
 } from "@/lib/db/schema";
+import { reconcileStoredInvoiceAmounts } from "@/lib/invoice-service";
 import { processPendingEmailJobs } from "@/lib/jobs";
-import { stripeAmount } from "@/lib/stripe-amount";
+import { stripeAmount, stripePaymentAmount } from "@/lib/stripe-amount";
 import { refreshStripeConnect, reconcileStripeDeauthorization } from "@/lib/stripe-connect";
 
 export async function handleStripeEvent(event: Stripe.Event, connected: boolean) {
@@ -116,14 +117,14 @@ export async function handleStripeEvent(event: Stripe.Event, connected: boolean)
           ),
         ),
     ]);
-    const remaining = Math.max(
-      0,
-      Number(invoice.total ?? 0) -
-        Number(existingPaymentTotal?.total ?? 0) -
-        Math.abs(Number(creditTotal?.total ?? 0)),
-    );
     const currency = (invoice.currency || "eur").toLowerCase();
-    const remainingAmount = stripeAmount(remaining.toFixed(2), currency);
+    const { balance: remaining } = reconcileStoredInvoiceAmounts(
+      invoice.total ?? "0",
+      [existingPaymentTotal?.total ?? "0"],
+      creditTotal?.total ?? "0",
+      currency,
+    );
+    const remainingAmount = stripeAmount(remaining, currency);
     if (
       session.currency !== currency ||
       !session.amount_total ||
@@ -139,7 +140,7 @@ export async function handleStripeEvent(event: Stripe.Event, connected: boolean)
     if (!inserted.length) {
       return;
     }
-    const paymentAmount = (session.amount_total / 100).toFixed(2);
+    const paymentAmount = stripePaymentAmount(session.amount_total, currency);
     const insertedPayments = await tx
       .insert(payments)
       .values({

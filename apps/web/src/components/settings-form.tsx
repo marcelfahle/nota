@@ -82,6 +82,11 @@ export function NumberingSettings({
 
   return (
     <form action={formAction} className="space-y-6">
+      <input
+        name="originalNextInvoiceNumber"
+        type="hidden"
+        value={settings.nextInvoiceNumber ?? 1}
+      />
       <div>
         <h2 className="text-lg font-semibold">Invoice numbering and tax</h2>
         <p className="mt-1 text-sm text-muted-foreground">

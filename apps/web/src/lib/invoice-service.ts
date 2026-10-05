@@ -1,4 +1,4 @@
-import { randomBytes } from "node:crypto";
+import { randomBytes, randomUUID } from "node:crypto";
 
 import { and, asc, count, desc, eq, inArray, sql } from "drizzle-orm";
 
@@ -10,6 +10,7 @@ import {
   bankAccounts,
   clients,
   invoices,
+  invoiceNumberEvents,
   invoiceSends,
   jobs,
   lineItems,
@@ -18,7 +19,7 @@ import {
   proposals,
   users,
 } from "@/lib/db/schema";
-import { getStripeMode } from "@/lib/env";
+import { getDeploymentEnv, getStripeMode } from "@/lib/env";
 import { resolveDueDateChange } from "@/lib/invoice-due-date";
 import {
   canCancelInvoice as canCancelInvoiceStatus,
@@ -31,6 +32,21 @@ import {
 } from "@/lib/invoice-lifecycle";
 import { formatInvoiceNumber } from "@/lib/invoice-number";
 import { processPendingEmailJobs } from "@/lib/jobs";
+import {
+  absoluteDecimal,
+  addDecimals,
+  compareDecimals,
+  currencyExponent,
+  type DecimalInput,
+  formatCurrencyDecimal,
+  formatDecimal,
+  formatStoredMoney,
+  formatVariableDecimal,
+  multiplyAndRound,
+  negateDecimal,
+  percentageAndRound,
+  subtractDecimals,
+} from "@/lib/money";
 import {
   canCancelInvoice as canCancelInvoiceRole,
   canCreateInvoice,
@@ -53,8 +69,8 @@ export type InvoiceServiceContext = {
 
 export type InvoiceLineItemInput = {
   description: string;
-  quantity: number;
-  unitPrice: number;
+  quantity: DecimalInput;
+  unitPrice: DecimalInput;
 };
 
 export type InvoiceMutationInput = {
@@ -66,7 +82,7 @@ export type InvoiceMutationInput = {
   lineItems: Array<InvoiceLineItemInput>;
   notes?: string;
   reverseCharge: string;
-  taxRate: number;
+  taxRate: DecimalInput;
 };
 
 export type InvoiceMutationError = {
@@ -92,14 +108,6 @@ function sourceFields(context: InvoiceServiceContext) {
   return { source: context.source ?? "web", sourceClient: context.sourceClient ?? null };
 }
 
-function cents(value: string | null | undefined) {
-  return Math.round(Number(value ?? 0) * 100);
-}
-
-function money(value: number) {
-  return (value / 100).toFixed(2);
-}
-
 async function expireInvoiceProposals(tx: DbTransaction, invoiceId: string) {
   await tx
     .update(proposals)
@@ -107,7 +115,7 @@ async function expireInvoiceProposals(tx: DbTransaction, invoiceId: string) {
     .where(and(eq(proposals.invoiceId, invoiceId), eq(proposals.status, "pending")));
 }
 
-async function issuedCreditCents(tx: DbTransaction, invoiceId: string) {
+async function issuedCreditAmount(tx: DbTransaction, invoiceId: string) {
   const [row] = await tx
     .select({ total: sql<string>`coalesce(sum(${invoices.total}::numeric), 0)` })
     .from(invoices)
@@ -118,31 +126,120 @@ async function issuedCreditCents(tx: DbTransaction, invoiceId: string) {
         inArray(invoices.status, ["sent", "overdue", "paid"]),
       ),
     );
-  return Math.abs(cents(row?.total));
+  return row?.total ?? "0";
 }
 
 export function calculateInvoiceTotals(
-  items: Array<{ quantity: number; unitPrice: number }>,
-  taxRate: number,
+  items: Array<{ quantity: DecimalInput; unitPrice: DecimalInput }>,
+  taxRate: DecimalInput,
+  currency: string,
 ) {
-  const subtotal = items.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0);
-  const taxAmount = subtotal * (taxRate / 100);
-  const total = subtotal + taxAmount;
+  const exponent = currencyExponent(currency);
+  const maximumAmount = `999999999999999${exponent ? `.${"9".repeat(exponent)}` : ""}`;
+  const normalizedItems = items.map((item) => ({
+    quantity: formatVariableDecimal(item.quantity, 6, 2),
+    unitPrice: formatVariableDecimal(item.unitPrice, 6, 2),
+  }));
+  const normalizedTaxRate = formatVariableDecimal(taxRate, 6, 2);
+  if (normalizedItems.some((item) => compareDecimals(item.quantity, 0, 6) <= 0)) {
+    throw new Error("Quantity must be positive");
+  }
+  if (normalizedItems.some((item) => compareDecimals(item.unitPrice, 0, 6) < 0)) {
+    throw new Error("Unit price must be non-negative");
+  }
+  if (
+    normalizedItems.some(
+      (item) =>
+        compareDecimals(item.quantity, "999999999999.999999", 6) > 0 ||
+        compareDecimals(item.unitPrice, "999999999999.999999", 6) > 0,
+    )
+  ) {
+    throw new Error("Quantity or unit price is out of range");
+  }
+  if (
+    compareDecimals(normalizedTaxRate, 0, 6) < 0 ||
+    compareDecimals(normalizedTaxRate, 100, 6) > 0
+  ) {
+    throw new Error("Tax rate must be between 0 and 100");
+  }
+  const lineAmounts = normalizedItems.map((item) =>
+    multiplyAndRound(item.quantity, item.unitPrice, exponent),
+  );
+  if (lineAmounts.some((amount) => compareDecimals(amount, maximumAmount, exponent) > 0)) {
+    throw new Error("Invoice amount is out of range");
+  }
+  const subtotal = addDecimals(lineAmounts, exponent);
+  const taxAmount = percentageAndRound(subtotal, normalizedTaxRate, exponent);
+  if (
+    compareDecimals(subtotal, maximumAmount, exponent) > 0 ||
+    compareDecimals(taxAmount, maximumAmount, exponent) > 0
+  ) {
+    throw new Error("Invoice amount is out of range");
+  }
+  const total = addDecimals([subtotal, taxAmount], exponent);
+  if (compareDecimals(total, maximumAmount, exponent) > 0) {
+    throw new Error("Invoice amount is out of range");
+  }
 
   return {
-    subtotal: subtotal.toFixed(2),
-    taxAmount: taxAmount.toFixed(2),
-    taxRate: taxRate.toFixed(2),
-    total: total.toFixed(2),
+    lineAmounts,
+    subtotal,
+    taxAmount,
+    taxRate: normalizedTaxRate,
+    total,
   };
 }
 
-export async function createNextInvoiceNumber(tx: DbTransaction, orgId: string) {
+export function reconcileInvoiceAmounts(
+  total: DecimalInput,
+  paymentAmounts: Array<DecimalInput>,
+  creditAmount: DecimalInput,
+  currency: string,
+) {
+  const exponent = currencyExponent(currency);
+  const paidAmount = addDecimals(paymentAmounts, exponent);
+  const creditedAmount = absoluteDecimal(creditAmount, exponent);
+  const settled = addDecimals([paidAmount, creditedAmount], exponent);
+  const balance =
+    compareDecimals(settled, total, exponent) >= 0
+      ? formatCurrencyDecimal(0, currency)
+      : subtractDecimals(total, settled, exponent);
+  return { balance, creditedAmount, paidAmount };
+}
+
+/** Reconcile persisted values at database precision so legacy documents are never recalculated. */
+export function reconcileStoredInvoiceAmounts(
+  total: DecimalInput,
+  paymentAmounts: Array<DecimalInput>,
+  creditAmount: DecimalInput,
+  currency: string,
+) {
+  const paid = addDecimals(paymentAmounts, 4);
+  const credited = absoluteDecimal(creditAmount, 4);
+  const settled = addDecimals([paid, credited], 4);
+  const balance =
+    compareDecimals(settled, total, 4) >= 0
+      ? formatDecimal(0, 4)
+      : subtractDecimals(total, settled, 4);
+  return {
+    balance: formatStoredMoney(balance, currency),
+    creditedAmount: formatStoredMoney(credited, currency),
+    paidAmount: formatStoredMoney(paid, currency),
+  };
+}
+
+async function createNextDocumentNumber(
+  tx: DbTransaction,
+  orgId: string,
+  kind: "credit_note" | "invoice",
+) {
   const [organization] = await tx
     .select({
+      creditNotePrefix: orgs.creditNotePrefix,
       invoiceDigits: orgs.invoiceDigits,
       invoicePrefix: orgs.invoicePrefix,
       invoiceSeparator: orgs.invoiceSeparator,
+      nextCreditNoteNumber: orgs.nextCreditNoteNumber,
       nextInvoiceNumber: orgs.nextInvoiceNumber,
     })
     .from(orgs)
@@ -154,15 +251,17 @@ export async function createNextInvoiceNumber(tx: DbTransaction, orgId: string) 
     throw new Error("Organization not found");
   }
 
-  let sequenceNumber = organization.nextInvoiceNumber;
+  let sequenceNumber =
+    kind === "credit_note" ? organization.nextCreditNoteNumber : organization.nextInvoiceNumber;
   let number: string;
 
-  // Skip over numbers that already exist (e.g. cancelled invoices)
+  // Existing and imported references own their numbers. A collision is therefore
+  // accounted for by the retained document rather than silently overwritten.
   for (;;) {
     number = formatInvoiceNumber({
       digits: organization.invoiceDigits,
       number: sequenceNumber,
-      prefix: organization.invoicePrefix,
+      prefix: kind === "credit_note" ? organization.creditNotePrefix : organization.invoicePrefix,
       separator: organization.invoiceSeparator,
     });
 
@@ -180,10 +279,40 @@ export async function createNextInvoiceNumber(tx: DbTransaction, orgId: string) 
 
   await tx
     .update(orgs)
-    .set({ nextInvoiceNumber: sequenceNumber + 1 })
+    .set(
+      kind === "credit_note"
+        ? { nextCreditNoteNumber: sequenceNumber + 1 }
+        : { nextInvoiceNumber: sequenceNumber + 1 },
+    )
     .where(eq(orgs.id, orgId));
 
   return number;
+}
+
+async function issueDocumentNumber(
+  tx: DbTransaction,
+  context: InvoiceServiceContext,
+  invoice: typeof invoices.$inferSelect,
+) {
+  const number = await createNextDocumentNumber(tx, context.orgId, invoice.kind);
+  await tx
+    .update(invoices)
+    .set({ number })
+    .where(and(eq(invoices.id, invoice.id), eq(invoices.orgId, context.orgId)));
+  await tx.insert(invoiceNumberEvents).values({
+    action: "issued",
+    invoiceId: invoice.id,
+    kind: invoice.kind,
+    metadata: { previousDraftIdentifier: invoice.number, userId: context.userId },
+    number,
+    orgId: context.orgId,
+    ...sourceFields(context),
+  });
+  return number;
+}
+
+function draftIdentifier(id: string) {
+  return `DRAFT-${id}`;
 }
 
 export async function getOwnedInvoice(orgId: string, invoiceId: string) {
@@ -284,24 +413,45 @@ export async function getInvoiceDetail(orgId: string, invoiceId: string) {
       .where(and(eq(activityLog.invoiceId, invoiceId), eq(activityLog.action, "viewed"))),
   ]);
 
-  const paidCents = paymentRows.reduce((sum, payment) => sum + cents(payment.amount), 0);
-  const creditedCents = Math.abs(cents(creditRow?.total));
-  const balanceCents = Math.max(0, cents(invoice.total) - paidCents - creditedCents);
+  const currency = invoice.currency ?? "EUR";
+  const settlement = reconcileStoredInvoiceAmounts(
+    invoice.total ?? "0",
+    paymentRows.map((payment) => payment.amount),
+    creditRow?.total ?? "0",
+    currency,
+  );
   const settlementStatus: "paid" | "partially_paid" | "unpaid" =
-    balanceCents === 0 ? "paid" : paidCents > 0 || creditedCents > 0 ? "partially_paid" : "unpaid";
+    compareDecimals(settlement.balance, 0, 4) === 0
+      ? "paid"
+      : compareDecimals(settlement.paidAmount, 0, 4) > 0 ||
+          compareDecimals(settlement.creditedAmount, 0, 4) > 0
+        ? "partially_paid"
+        : "unpaid";
 
   return {
     ...invoice,
     activityLog: activities,
-    balance: money(balanceCents),
+    balance: settlement.balance,
     client,
-    creditedAmount: money(creditedCents),
+    creditedAmount: settlement.creditedAmount,
     lastViewedAt: viewRow?.lastViewedAt ?? null,
-    lineItems: items,
-    paidAmount: money(paidCents),
-    payments: paymentRows,
+    lineItems: items.map((item) => ({
+      ...item,
+      amount: formatStoredMoney(item.amount, currency),
+      quantity: formatVariableDecimal(item.quantity, 6, 2),
+      unitPrice: formatVariableDecimal(item.unitPrice, 6, 2),
+    })),
+    paidAmount: settlement.paidAmount,
+    payments: paymentRows.map((payment) => ({
+      ...payment,
+      amount: formatStoredMoney(payment.amount, currency),
+    })),
     settlementStatus,
     status: invoice.status ?? "draft",
+    subtotal: formatStoredMoney(invoice.subtotal ?? 0, currency),
+    taxAmount: formatStoredMoney(invoice.taxAmount ?? 0, currency),
+    taxRate: formatVariableDecimal(invoice.taxRate ?? 0, 6, 2),
+    total: formatStoredMoney(invoice.total ?? 0, currency),
     viewCount: viewRow?.count ?? 0,
   };
 }
@@ -315,7 +465,13 @@ export async function createInvoice(
   }
 
   const { lineItems: items, taxRate, ...invoiceData } = input;
-  const totals = calculateInvoiceTotals(items, taxRate);
+  let calculation: ReturnType<typeof calculateInvoiceTotals>;
+  try {
+    calculation = calculateInvoiceTotals(items, taxRate, invoiceData.currency);
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : "Invalid invoice amount" };
+  }
+  const { lineAmounts, ...totals } = calculation;
   const client = await getOwnedClient(context.orgId, invoiceData.clientId);
 
   if (!client) {
@@ -323,12 +479,14 @@ export async function createInvoice(
   }
 
   const insertedInvoice = await db.transaction(async (tx) => {
-    const number = await createNextInvoiceNumber(tx, context.orgId);
+    const id = randomUUID();
+    const number = draftIdentifier(id);
     const [invoice] = await tx
       .insert(invoices)
       .values({
         ...invoiceData,
         ...totals,
+        id,
         number,
         orgId: context.orgId,
         ...sourceFields(context),
@@ -338,18 +496,27 @@ export async function createInvoice(
 
     await tx.insert(lineItems).values(
       items.map((item, index) => ({
-        amount: (item.quantity * item.unitPrice).toFixed(2),
+        amount: lineAmounts[index],
         description: item.description,
         invoiceId: invoice.id,
-        quantity: item.quantity.toFixed(2),
+        quantity: formatVariableDecimal(item.quantity, 6, 2),
         sortOrder: index,
-        unitPrice: item.unitPrice.toFixed(2),
+        unitPrice: formatVariableDecimal(item.unitPrice, 6, 2),
       })),
     );
 
     await tx.insert(activityLog).values({
       action: "created",
       invoiceId: invoice.id,
+      ...sourceFields(context),
+    });
+    await tx.insert(invoiceNumberEvents).values({
+      action: "draft_created",
+      invoiceId: invoice.id,
+      kind: "invoice",
+      metadata: { userId: context.userId },
+      number,
+      orgId: context.orgId,
       ...sourceFields(context),
     });
 
@@ -381,7 +548,13 @@ export async function updateInvoice(
   }
 
   const { lineItems: items, taxRate, ...invoiceData } = input;
-  const totals = calculateInvoiceTotals(items, taxRate);
+  let calculation: ReturnType<typeof calculateInvoiceTotals>;
+  try {
+    calculation = calculateInvoiceTotals(items, taxRate, invoiceData.currency);
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : "Invalid invoice amount" };
+  }
+  const { lineAmounts, ...totals } = calculation;
   const client = await getOwnedClient(context.orgId, invoiceData.clientId);
 
   if (!client) {
@@ -403,12 +576,12 @@ export async function updateInvoice(
 
     await tx.insert(lineItems).values(
       items.map((item, index) => ({
-        amount: (item.quantity * item.unitPrice).toFixed(2),
+        amount: lineAmounts[index],
         description: item.description,
         invoiceId,
-        quantity: item.quantity.toFixed(2),
+        quantity: formatVariableDecimal(item.quantity, 6, 2),
         sortOrder: index,
-        unitPrice: item.unitPrice.toFixed(2),
+        unitPrice: formatVariableDecimal(item.unitPrice, 6, 2),
       })),
     );
     await expireInvoiceProposals(tx, invoiceId);
@@ -479,23 +652,41 @@ export async function deleteInvoice(
     return { error: getInsufficientPermissionsError() };
   }
 
-  const invoice = await getOwnedInvoice(context.orgId, invoiceId);
-  if (!invoice) {
-    return { error: "Invoice not found" };
-  }
-
-  if (invoice.status !== "draft") {
-    return { error: "Only draft invoices can be deleted" };
-  }
-
-  await db.transaction(async (tx) => {
+  return db.transaction(async (tx) => {
+    const [organization] = await tx
+      .select({ id: orgs.id })
+      .from(orgs)
+      .where(eq(orgs.id, context.orgId))
+      .for("update");
+    if (!organization) {
+      return { error: "Organization not found" };
+    }
+    const [invoice] = await tx
+      .select()
+      .from(invoices)
+      .where(and(eq(invoices.id, invoiceId), eq(invoices.orgId, context.orgId)))
+      .for("update");
+    if (!invoice) {
+      return { error: "Invoice not found" };
+    }
+    if (invoice.status !== "draft") {
+      return { error: "Only draft invoices can be deleted" };
+    }
+    await tx.insert(invoiceNumberEvents).values({
+      action: "draft_deleted",
+      invoiceId,
+      kind: invoice.kind,
+      metadata: { userId: context.userId },
+      number: invoice.number,
+      orgId: context.orgId,
+      ...sourceFields(context),
+    });
     await tx.delete(activityLog).where(eq(activityLog.invoiceId, invoiceId));
     await tx
       .delete(invoices)
       .where(and(eq(invoices.id, invoiceId), eq(invoices.orgId, context.orgId)));
+    return { invoiceId, success: true };
   });
-
-  return { invoiceId, success: true };
 }
 
 export async function sendInvoice(
@@ -559,11 +750,12 @@ export async function sendInvoice(
         return { error: "Only draft invoices can be sent" };
       }
       const mode = getStripeMode().STRIPE_MODE;
+      const deployment = getDeploymentEnv();
       const [usage] = await tx
         .select({ total: count() })
         .from(invoiceSends)
         .where(and(eq(invoiceSends.orgId, org.id), eq(invoiceSends.month, billingMonth(sentAt))));
-      if (!canSendOnPlan(mode, org.plan, usage.total)) {
+      if (!canSendOnPlan(deployment.DEPLOYMENT_MODE, org.plan, usage.total)) {
         return { error: UPGRADE_MESSAGE };
       }
       const [client] = await tx
@@ -584,15 +776,19 @@ export async function sendInvoice(
           return { error: "Assigned bank account not found" };
         }
       }
-      const account = paymentAccount(mode, org.stripeAccountId, org.stripeChargesEnabled);
+      const account =
+        deployment.PAYMENT_MODE === "stripe"
+          ? paymentAccount(mode, org.stripeAccountId, org.stripeChargesEnabled)
+          : null;
       const accountId = account === "platform" ? null : account;
+      const issuedNumber = await issueDocumentNumber(tx, context, invoice);
       const paymentLink =
         account && invoice.kind === "invoice"
           ? await createPaymentLink({
               attempt: sentAt.toISOString(),
               currency: invoice.currency,
               id: invoice.id,
-              number: invoice.number,
+              number: issuedNumber,
               stripeAccountId: accountId,
               total: invoice.total,
             })
@@ -633,7 +829,14 @@ export async function sendInvoice(
           .from(invoices)
           .where(eq(invoices.id, invoice.creditsInvoiceId))
           .for("update");
-        if (original && (await issuedCreditCents(tx, original.id)) >= cents(original.total)) {
+        if (
+          original &&
+          compareDecimals(
+            absoluteDecimal(await issuedCreditAmount(tx, original.id), 4),
+            original.total ?? "0",
+            4,
+          ) >= 0
+        ) {
           await tx
             .update(invoices)
             .set({
@@ -642,6 +845,15 @@ export async function sendInvoice(
               updatedAt: sentAt,
             })
             .where(eq(invoices.id, original.id));
+          await tx.insert(invoiceNumberEvents).values({
+            action: "cancelled",
+            invoiceId: original.id,
+            kind: original.kind,
+            metadata: { creditedBy: invoice.id, userId: context.userId },
+            number: original.number,
+            orgId: context.orgId,
+            ...sourceFields(context),
+          });
           await expireInvoiceProposals(tx, original.id);
         }
         if (original?.stripePaymentLinkId) {
@@ -736,13 +948,15 @@ export async function duplicateInvoice(
   const dueDate = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
 
   const insertedInvoice = await db.transaction(async (tx) => {
-    const number = await createNextInvoiceNumber(tx, context.orgId);
+    const id = randomUUID();
+    const number = draftIdentifier(id);
     const [invoice] = await tx
       .insert(invoices)
       .values({
         clientId: original.clientId,
         currency: original.currency,
         dueAt: dueDate,
+        id,
         internalNotes: original.internalNotes,
         issuedAt: today,
         notes: original.notes,
@@ -775,6 +989,15 @@ export async function duplicateInvoice(
       action: "created",
       invoiceId: invoice.id,
       metadata: { duplicatedFrom: invoiceId },
+      ...sourceFields(context),
+    });
+    await tx.insert(invoiceNumberEvents).values({
+      action: "draft_created",
+      invoiceId: invoice.id,
+      kind: "invoice",
+      metadata: { duplicatedFrom: invoiceId, userId: context.userId },
+      number,
+      orgId: context.orgId,
       ...sourceFields(context),
     });
 
@@ -821,24 +1044,19 @@ export async function createCreditNote(
           sql`${invoices.status} <> 'cancelled'`,
         ),
       );
-    if (Math.abs(cents(existing?.total)) >= cents(original.total)) {
+    const exponent = 4;
+    if (
+      compareDecimals(
+        absoluteDecimal(existing?.total ?? "0", exponent),
+        original.total ?? "0",
+        exponent,
+      ) >= 0
+    ) {
       return { error: "Invoice has already been fully credited" };
     }
 
-    const [organization] = await tx
-      .select()
-      .from(orgs)
-      .where(eq(orgs.id, context.orgId))
-      .for("update");
-    if (!organization) {
-      return { error: "Organization not found" };
-    }
-    const number = formatInvoiceNumber({
-      digits: organization.invoiceDigits,
-      number: organization.nextCreditNoteNumber,
-      prefix: organization.creditNotePrefix,
-      separator: organization.invoiceSeparator,
-    });
+    const id = randomUUID();
+    const number = draftIdentifier(id);
     const [credit] = await tx
       .insert(invoices)
       .values({
@@ -846,6 +1064,7 @@ export async function createCreditNote(
         creditsInvoiceId: original.id,
         currency: original.currency,
         dueAt: original.dueAt,
+        id,
         internalNotes: original.internalNotes,
         issuedAt: new Date().toISOString().slice(0, 10),
         kind: "credit_note",
@@ -853,10 +1072,10 @@ export async function createCreditNote(
         number,
         orgId: context.orgId,
         reverseCharge: original.reverseCharge,
-        subtotal: money(-Math.abs(cents(original.subtotal))),
-        taxAmount: money(-Math.abs(cents(original.taxAmount))),
+        subtotal: negateDecimal(absoluteDecimal(original.subtotal ?? "0", exponent), exponent),
+        taxAmount: negateDecimal(absoluteDecimal(original.taxAmount ?? "0", exponent), exponent),
         taxRate: original.taxRate,
-        total: money(-Math.abs(cents(original.total))),
+        total: negateDecimal(absoluteDecimal(original.total ?? "0", exponent), exponent),
         ...sourceFields(context),
         userId: context.userId,
       })
@@ -868,23 +1087,28 @@ export async function createCreditNote(
     if (originalItems.length) {
       await tx.insert(lineItems).values(
         originalItems.map((item) => ({
-          amount: money(-Math.abs(cents(item.amount))),
+          amount: negateDecimal(absoluteDecimal(item.amount, exponent), exponent),
           description: item.description,
           invoiceId: credit.id,
           quantity: item.quantity,
           sortOrder: item.sortOrder,
-          unitPrice: money(-Math.abs(cents(item.unitPrice))),
+          unitPrice: negateDecimal(absoluteDecimal(item.unitPrice, 6), 6),
         })),
       );
     }
-    await tx
-      .update(orgs)
-      .set({ nextCreditNoteNumber: organization.nextCreditNoteNumber + 1 })
-      .where(eq(orgs.id, context.orgId));
     await tx.insert(activityLog).values({
       action: "created",
       invoiceId: credit.id,
       metadata: { creditsInvoiceId: original.id, originalNumber: original.number },
+      ...sourceFields(context),
+    });
+    await tx.insert(invoiceNumberEvents).values({
+      action: "draft_created",
+      invoiceId: credit.id,
+      kind: "credit_note",
+      metadata: { creditsInvoiceId: original.id, userId: context.userId },
+      number,
+      orgId: context.orgId,
       ...sourceFields(context),
     });
     return { invoiceId: credit.id, success: true };
@@ -895,7 +1119,7 @@ export async function recordInvoicePayment(
   context: InvoiceServiceContext,
   invoiceId: string,
   input: {
-    amount: number;
+    amount: DecimalInput;
     method: "bank_transfer" | "other";
     note?: string;
     receivedAt?: Date;
@@ -904,10 +1128,6 @@ export async function recordInvoicePayment(
   if (!canMarkInvoicePaidRole(context.role)) {
     return { error: getInsufficientPermissionsError() };
   }
-  if (!Number.isFinite(input.amount) || input.amount <= 0) {
-    return { error: "Payment amount must be positive" };
-  }
-
   let paymentLink: { accountId: string | null; id: string } | null = null;
   const result = await db.transaction(async (tx): Promise<InvoiceMutationResult> => {
     const [invoice] = await tx
@@ -925,10 +1145,20 @@ export async function recordInvoicePayment(
       .select({ total: sql<string>`coalesce(sum(${payments.amount}::numeric), 0)` })
       .from(payments)
       .where(eq(payments.invoiceId, invoiceId));
-    const remaining =
-      cents(invoice.total) - cents(row?.total) - (await issuedCreditCents(tx, invoiceId));
-    const amount = Math.round(input.amount * 100);
-    if (amount <= 0 || amount > remaining) {
+    const currency = invoice.currency ?? "EUR";
+    const settlement = reconcileStoredInvoiceAmounts(
+      invoice.total ?? "0",
+      [row?.total ?? "0"],
+      await issuedCreditAmount(tx, invoiceId),
+      currency,
+    );
+    let amount: string;
+    try {
+      amount = formatCurrencyDecimal(input.amount, currency, "reject");
+    } catch (error) {
+      return { error: error instanceof Error ? error.message : "Invalid payment amount" };
+    }
+    if (compareDecimals(amount, 0, 4) <= 0 || compareDecimals(amount, settlement.balance, 4) > 0) {
       return { error: "Payment exceeds the remaining balance" };
     }
     if (invoice.stripePaymentLinkId) {
@@ -936,8 +1166,8 @@ export async function recordInvoicePayment(
     }
     const receivedAt = input.receivedAt ?? new Date();
     await tx.insert(payments).values({
-      amount: money(amount),
-      currency: invoice.currency ?? "EUR",
+      amount,
+      currency,
       invoiceId,
       method: input.method,
       note: input.note,
@@ -945,7 +1175,7 @@ export async function recordInvoicePayment(
       receivedAt,
       source: context.source ?? "web",
     });
-    const fullyPaid = amount === remaining;
+    const fullyPaid = compareDecimals(amount, settlement.balance, 4) === 0;
     await tx
       .update(invoices)
       .set({
@@ -958,12 +1188,12 @@ export async function recordInvoicePayment(
     await tx.insert(activityLog).values({
       action: "paid",
       invoiceId,
-      metadata: { amount: money(amount), method: input.method },
+      metadata: { amount, method: input.method },
       ...sourceFields(context),
     });
     await tx.insert(jobs).values({
       invoiceId,
-      payload: { amount: money(amount), invoiceId },
+      payload: { amount, invoiceId },
       type: "send_payment_received_email",
     });
     await expireInvoiceProposals(tx, invoiceId);
@@ -1015,15 +1245,20 @@ export async function markInvoicePaid(
       .select({ total: sql<string>`coalesce(sum(${payments.amount}::numeric), 0)` })
       .from(payments)
       .where(eq(payments.invoiceId, invoiceId));
-    const remaining =
-      cents(invoice.total) - cents(row?.total) - (await issuedCreditCents(tx, invoiceId));
-    if (remaining <= 0) {
+    const currency = invoice.currency ?? "EUR";
+    const { balance: remaining } = reconcileStoredInvoiceAmounts(
+      invoice.total ?? "0",
+      [row?.total ?? "0"],
+      await issuedCreditAmount(tx, invoiceId),
+      currency,
+    );
+    if (compareDecimals(remaining, 0, 4) <= 0) {
       return { invoiceId, success: true };
     }
     const now = new Date();
     await tx.insert(payments).values({
-      amount: money(remaining),
-      currency: invoice.currency ?? "EUR",
+      amount: remaining,
+      currency,
       invoiceId,
       method: "other",
       note: "Marked paid manually",
@@ -1044,7 +1279,7 @@ export async function markInvoicePaid(
     await tx.insert(activityLog).values({
       action: "paid",
       invoiceId,
-      metadata: { amount: money(remaining), manual: true },
+      metadata: { amount: remaining, manual: true },
       ...sourceFields(context),
     });
     await expireInvoiceProposals(tx, invoiceId);
@@ -1104,6 +1339,15 @@ export async function cancelInvoice(
       )
       .returning({ id: invoices.id });
     if (changed.length) {
+      await tx.insert(invoiceNumberEvents).values({
+        action: "cancelled",
+        invoiceId,
+        kind: invoice.kind,
+        metadata: { userId: context.userId },
+        number: invoice.number,
+        orgId: context.orgId,
+        ...sourceFields(context),
+      });
       await expireInvoiceProposals(tx, invoiceId);
     }
     return changed;
@@ -1133,4 +1377,55 @@ export async function cancelInvoice(
     success: true,
     warning,
   };
+}
+
+export async function markInvoiceSent(
+  context: InvoiceServiceContext,
+  invoiceId: string,
+): Promise<InvoiceMutationResult> {
+  if (!canSendInvoiceRole(context.role)) {
+    return { error: getInsufficientPermissionsError() };
+  }
+
+  return db.transaction(async (tx) => {
+    const [organization] = await tx
+      .select({ id: orgs.id })
+      .from(orgs)
+      .where(eq(orgs.id, context.orgId))
+      .for("update");
+    if (!organization) {
+      return { error: "Organization not found" };
+    }
+    const [invoice] = await tx
+      .select()
+      .from(invoices)
+      .where(and(eq(invoices.id, invoiceId), eq(invoices.orgId, context.orgId)))
+      .for("update");
+    if (!invoice) {
+      return { error: "Invoice not found" };
+    }
+    if (!canSendInvoiceStatus(invoice.status)) {
+      return { error: "Only draft invoices can be marked as sent" };
+    }
+
+    await issueDocumentNumber(tx, context, invoice);
+    const sentAt = new Date();
+    await tx
+      .update(invoices)
+      .set({
+        revision: sql`${invoices.revision} + 1`,
+        sentAt,
+        status: "sent",
+        updatedAt: sentAt,
+      })
+      .where(eq(invoices.id, invoiceId));
+    await tx.insert(activityLog).values({
+      action: "sent",
+      invoiceId,
+      metadata: { manual: true },
+      ...sourceFields(context),
+    });
+    await tx.update(orgs).set({ firstRunCompletedAt: sentAt }).where(eq(orgs.id, context.orgId));
+    return { invoiceId, success: true };
+  });
 }

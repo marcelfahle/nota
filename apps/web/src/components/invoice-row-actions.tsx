@@ -91,7 +91,7 @@ const CONFIRM_COPY: Record<
   send: {
     confirmLabel: "Send invoice",
     description: (invoiceNumber) =>
-      `Nota will email ${invoiceNumber} to the client and create its payment link.`,
+      `Nota will email ${invoiceNumber} to the client with the configured payment instructions.`,
     title: "Send this invoice?",
   },
 };

@@ -8,6 +8,8 @@ on:
       - "apps/**"
       - "package.json"
       - "bun.lock"
+      - "compose.yml"
+      - ".env.self-hosted.example"
       - ".agents/**"
   push:
     branches:
@@ -18,6 +20,8 @@ on:
       - "apps/**"
       - "package.json"
       - "bun.lock"
+      - "compose.yml"
+      - ".env.self-hosted.example"
       - ".agents/**"
 
 jobs:
@@ -66,3 +70,75 @@ jobs:
           NEXT_PUBLIC_POSTHOG_HOST: ${{ vars.NEXT_PUBLIC_POSTHOG_HOST }}
           POSTHOG_PROJECT_ID: ${{ vars.POSTHOG_PROJECT_ID }}
           POSTHOG_API_KEY: ${{ secrets.POSTHOG_API_KEY }}
+
+  self-hosted-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Build SDK for CLI smoke commands
+        run: bun run build:sdk
+
+      - name: Configure disposable stack
+        run: |
+          cp .env.self-hosted.example .env.self-hosted
+          sed -i 's/change-me-database-password/ci-postgres-password/' .env.self-hosted
+          sed -i 's/change-me-at-least-32-random-characters/ci-session-secret-at-least-32-characters/' .env.self-hosted
+          sed -i 's/change-me-random-cron-secret/ci-cron-secret/' .env.self-hosted
+
+      - name: Start empty database, migrate, and seed
+        run: |
+          docker compose --env-file .env.self-hosted up --build -d postgres
+          docker compose --env-file .env.self-hosted run --rm migrate
+          docker compose --env-file .env.self-hosted --profile seed run --rm --no-deps seed
+
+      - name: Start web and authenticated cron
+        run: docker compose --env-file .env.self-hosted up --build -d web cron
+
+      - name: Exercise health, doctor, CLI, jobs, PDF, and restart persistence
+        env:
+          NOTA_API_KEY: nota_seed_disposable_only
+          NOTA_URL: http://127.0.0.1:3000
+        run: |
+          set -euxo pipefail
+          for attempt in $(seq 1 30); do
+            curl --fail --silent http://127.0.0.1:3000/api/ready && break
+            sleep 2
+          done
+          test "$(curl --silent http://127.0.0.1:3000/api/health)" = '{"status":"ok"}'
+          curl --fail --silent --header 'Authorization: Bearer ci-cron-secret' \
+            http://127.0.0.1:3000/api/doctor | grep '"status":"ok"'
+          create_output="$(bun run --cwd apps/cli dev -- invoices create --client 'Alice Example' \
+            --item 'Self-host smoke | 1 | 125' --tax-rate 21)"
+          printf '%s\n' "$create_output"
+          draft_number="$(printf '%s\n' "$create_output" | sed -n 's/^Created \(DRAFT-[^ ]*\).*/\1/p')"
+          test -n "$draft_number"
+          bun run --cwd apps/cli dev -- invoices send "$draft_number"
+          bun run --cwd apps/cli dev -- invoices pdf INV-0004 --output /tmp/INV-0004.pdf
+          test "$(head -c 4 /tmp/INV-0004.pdf)" = '%PDF'
+          docker compose --env-file .env.self-hosted exec -T web grep 'INV-0004' /data/mail/sends.jsonl
+          test "$(docker compose --env-file .env.self-hosted exec -T postgres \
+            psql -U nota -d nota -Atc "select status from jobs where type='send_invoice_email' order by created_at desc limit 1")" = completed
+          docker compose --env-file .env.self-hosted restart web
+          for attempt in $(seq 1 30); do
+            curl --fail --silent http://127.0.0.1:3000/api/ready && break
+            sleep 2
+          done
+          bun run --cwd apps/cli dev -- invoices show INV-0004
+          bun run --cwd apps/cli dev -- invoices pdf INV-0004 --output /tmp/INV-0004-after-restart.pdf
+          test "$(head -c 4 /tmp/INV-0004-after-restart.pdf)" = '%PDF'
+
+      - name: Print service logs on failure
+        if: failure()
+        run: docker compose --env-file .env.self-hosted logs --no-color
+
+      - name: Remove disposable stack
+        if: always()
+        run: docker compose --env-file .env.self-hosted --profile seed down --volumes
