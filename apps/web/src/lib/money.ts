@@ -166,3 +166,12 @@ export function formatCurrencyDecimal(
 ) {
   return formatDecimal(value, currencyExponent(currency), rounding);
 }
+
+/** Format persisted money without making legacy rows unreadable or changing their value. */
+export function formatStoredMoney(value: DecimalInput, currency: string) {
+  try {
+    return formatCurrencyDecimal(value, currency, "reject");
+  } catch {
+    return formatVariableDecimal(value, 4, 2);
+  }
+}

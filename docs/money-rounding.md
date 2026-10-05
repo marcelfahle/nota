@@ -26,5 +26,11 @@ PDF/XML, credit notes, duplicates, settlement, and API reads use the stored valu
 editing a draft invokes the policy above; issued invoices remain immutable and are never silently
 recalculated.
 
-Stripe's documented ISK/UGX transport exception remains isolated in `stripe-amount.ts`; invoice
-storage and reconciliation continue to use the ISO exponent.
+Persisted values are reconciled at the database's four-decimal precision. Values that conform to a
+supported currency are formatted at its ISO exponent. A legacy value that does not conform (for
+example, `150.50` JPY) or uses a historical unsupported currency remains readable and is returned
+without changing its value, with at least two decimal places and at most four.
+
+Stripe's documented ISK/UGX transport exception remains isolated in `stripe-amount.ts`. Stripe
+amounts are rounded half up only at that provider boundary when a legacy stored value cannot be
+represented in Stripe's exponent; invoice storage and reconciliation retain the exact stored value.

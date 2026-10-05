@@ -7,7 +7,7 @@ export function stripeCurrencyExponent(currency: string) {
 
 export function stripeAmount(total: string | null, currency: string) {
   const digits = stripeCurrencyExponent(currency);
-  const fixed = formatDecimal(total ?? "0", digits, "reject");
+  const fixed = formatDecimal(total ?? "0", digits, "half-up");
   const integer = Number(fixed.replace(".", ""));
   if (!Number.isSafeInteger(integer)) {
     throw new Error("Stripe amount is out of range");

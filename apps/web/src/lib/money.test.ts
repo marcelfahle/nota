@@ -4,6 +4,7 @@ import {
   addDecimals,
   currencyExponent,
   formatCurrencyDecimal,
+  formatStoredMoney,
   formatVariableDecimal,
   multiplyAndRound,
   percentageAndRound,
@@ -36,6 +37,13 @@ describe("exact decimal money", () => {
     expect(() => formatCurrencyDecimal("1.001", "EUR", "reject")).toThrow(
       "more than 2 decimal places",
     );
+  });
+
+  test("preserves nonconforming legacy stored money without weakening new writes", () => {
+    expect(formatStoredMoney("150.5000", "JPY")).toBe("150.50");
+    expect(formatStoredMoney("150.5000", "ZZZ")).toBe("150.50");
+    expect(formatStoredMoney("10.2300", "EUR")).toBe("10.23");
+    expect(formatStoredMoney("10.2300", "BHD")).toBe("10.230");
   });
 
   test("keeps fractional quantities to six decimal places", () => {

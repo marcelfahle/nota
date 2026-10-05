@@ -12,7 +12,7 @@ import {
   proposals,
   stripeEvents,
 } from "@/lib/db/schema";
-import { reconcileInvoiceAmounts } from "@/lib/invoice-service";
+import { reconcileStoredInvoiceAmounts } from "@/lib/invoice-service";
 import { processPendingEmailJobs } from "@/lib/jobs";
 import { stripeAmount, stripePaymentAmount } from "@/lib/stripe-amount";
 import { refreshStripeConnect, reconcileStripeDeauthorization } from "@/lib/stripe-connect";
@@ -118,7 +118,7 @@ export async function handleStripeEvent(event: Stripe.Event, connected: boolean)
         ),
     ]);
     const currency = (invoice.currency || "eur").toLowerCase();
-    const { balance: remaining } = reconcileInvoiceAmounts(
+    const { balance: remaining } = reconcileStoredInvoiceAmounts(
       invoice.total ?? "0",
       [existingPaymentTotal?.total ?? "0"],
       creditTotal?.total ?? "0",

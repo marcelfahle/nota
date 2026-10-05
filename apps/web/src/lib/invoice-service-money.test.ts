@@ -1,6 +1,10 @@
 import { describe, expect, test } from "bun:test";
 
-import { calculateInvoiceTotals, reconcileInvoiceAmounts } from "@/lib/invoice-service";
+import {
+  calculateInvoiceTotals,
+  reconcileInvoiceAmounts,
+  reconcileStoredInvoiceAmounts,
+} from "@/lib/invoice-service";
 
 describe("invoice money policy", () => {
   test("rounds each line before subtotal and rounds tax once", () => {
@@ -48,6 +52,19 @@ describe("invoice money policy", () => {
       balance: "0.00",
       creditedAmount: "3.34",
       paidAmount: "6.66",
+    });
+  });
+
+  test("reconciles legacy values at stored precision", () => {
+    expect(reconcileStoredInvoiceAmounts("150.5000", ["50.2500"], "-25.1250", "JPY")).toEqual({
+      balance: "75.125",
+      creditedAmount: "25.125",
+      paidAmount: "50.25",
+    });
+    expect(reconcileStoredInvoiceAmounts("150.5000", ["50.2500"], "-25.1250", "ZZZ")).toEqual({
+      balance: "75.125",
+      creditedAmount: "25.125",
+      paidAmount: "50.25",
     });
   });
 

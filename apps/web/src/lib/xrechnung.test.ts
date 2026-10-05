@@ -145,6 +145,29 @@ describe("extractIban", () => {
 // generateXRechnung — structured IBAN
 // ---------------------------------------------------------------------------
 describe("generateXRechnung", () => {
+  test("preserves nonconforming legacy currency precision", () => {
+    const data = baseData();
+    data.invoice.currency = "JPY";
+    data.invoice.lineItems[0] = {
+      amount: "150.5000",
+      description: "Legacy item",
+      quantity: "1",
+      unitPrice: "150.500000",
+    };
+    data.invoice.subtotal = "150.5000";
+    data.invoice.taxAmount = "0.0000";
+    data.invoice.total = "150.5000";
+
+    const xml = generateXRechnung(data);
+    expect(xml).toContain(
+      '<cbc:LineExtensionAmount currencyID="JPY">150.50</cbc:LineExtensionAmount>',
+    );
+    expect(xml).toContain('<cbc:PayableAmount currencyID="JPY">150.50</cbc:PayableAmount>');
+
+    data.invoice.currency = "ZZZ";
+    expect(() => generateXRechnung(data)).not.toThrow();
+  });
+
   test("includes IBAN in PayeeFinancialAccount when structured iban provided", () => {
     const data = baseData();
     data.business.iban = "DE89370400440532013000";

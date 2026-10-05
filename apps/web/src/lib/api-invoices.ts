@@ -10,7 +10,7 @@ import { db } from "@/lib/db";
 import { clients, invoices } from "@/lib/db/schema";
 import { normalizeInvoiceStatus } from "@/lib/invoice-lifecycle";
 import { getInvoiceDetail } from "@/lib/invoice-service";
-import { formatCurrencyDecimal } from "@/lib/money";
+import { formatStoredMoney } from "@/lib/money";
 
 const decimalInput = z.union([
   z.number().finite(),
@@ -121,9 +121,9 @@ export async function getInvoiceList(
       const currency = row.currency ?? "EUR";
       return {
         ...row,
-        balance: formatCurrencyDecimal(row.balance, currency, "reject"),
-        paidAmount: formatCurrencyDecimal(row.paidAmount, currency, "reject"),
-        total: formatCurrencyDecimal(row.total ?? 0, currency, "reject"),
+        balance: formatStoredMoney(row.balance, currency),
+        paidAmount: formatStoredMoney(row.paidAmount, currency),
+        total: formatStoredMoney(row.total ?? 0, currency),
       };
     }),
     pagination: {

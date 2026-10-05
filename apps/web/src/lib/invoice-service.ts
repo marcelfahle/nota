@@ -38,6 +38,8 @@ import {
   currencyExponent,
   type DecimalInput,
   formatCurrencyDecimal,
+  formatDecimal,
+  formatStoredMoney,
   formatVariableDecimal,
   multiplyAndRound,
   negateDecimal,
@@ -204,6 +206,27 @@ export function reconcileInvoiceAmounts(
   return { balance, creditedAmount, paidAmount };
 }
 
+/** Reconcile persisted values at database precision so legacy documents are never recalculated. */
+export function reconcileStoredInvoiceAmounts(
+  total: DecimalInput,
+  paymentAmounts: Array<DecimalInput>,
+  creditAmount: DecimalInput,
+  currency: string,
+) {
+  const paid = addDecimals(paymentAmounts, 4);
+  const credited = absoluteDecimal(creditAmount, 4);
+  const settled = addDecimals([paid, credited], 4);
+  const balance =
+    compareDecimals(settled, total, 4) >= 0
+      ? formatDecimal(0, 4)
+      : subtractDecimals(total, settled, 4);
+  return {
+    balance: formatStoredMoney(balance, currency),
+    creditedAmount: formatStoredMoney(credited, currency),
+    paidAmount: formatStoredMoney(paid, currency),
+  };
+}
+
 export async function createNextInvoiceNumber(tx: DbTransaction, orgId: string) {
   const [organization] = await tx
     .select({
@@ -352,17 +375,17 @@ export async function getInvoiceDetail(orgId: string, invoiceId: string) {
   ]);
 
   const currency = invoice.currency ?? "EUR";
-  const settlement = reconcileInvoiceAmounts(
+  const settlement = reconcileStoredInvoiceAmounts(
     invoice.total ?? "0",
     paymentRows.map((payment) => payment.amount),
     creditRow?.total ?? "0",
     currency,
   );
   const settlementStatus: "paid" | "partially_paid" | "unpaid" =
-    compareDecimals(settlement.balance, 0, currencyExponent(currency)) === 0
+    compareDecimals(settlement.balance, 0, 4) === 0
       ? "paid"
-      : compareDecimals(settlement.paidAmount, 0, currencyExponent(currency)) > 0 ||
-          compareDecimals(settlement.creditedAmount, 0, currencyExponent(currency)) > 0
+      : compareDecimals(settlement.paidAmount, 0, 4) > 0 ||
+          compareDecimals(settlement.creditedAmount, 0, 4) > 0
         ? "partially_paid"
         : "unpaid";
 
@@ -375,21 +398,21 @@ export async function getInvoiceDetail(orgId: string, invoiceId: string) {
     lastViewedAt: viewRow?.lastViewedAt ?? null,
     lineItems: items.map((item) => ({
       ...item,
-      amount: formatCurrencyDecimal(item.amount, currency, "reject"),
+      amount: formatStoredMoney(item.amount, currency),
       quantity: formatVariableDecimal(item.quantity, 6, 2),
       unitPrice: formatVariableDecimal(item.unitPrice, 6, 2),
     })),
     paidAmount: settlement.paidAmount,
     payments: paymentRows.map((payment) => ({
       ...payment,
-      amount: formatCurrencyDecimal(payment.amount, currency, "reject"),
+      amount: formatStoredMoney(payment.amount, currency),
     })),
     settlementStatus,
     status: invoice.status ?? "draft",
-    subtotal: formatCurrencyDecimal(invoice.subtotal ?? 0, currency, "reject"),
-    taxAmount: formatCurrencyDecimal(invoice.taxAmount ?? 0, currency, "reject"),
+    subtotal: formatStoredMoney(invoice.subtotal ?? 0, currency),
+    taxAmount: formatStoredMoney(invoice.taxAmount ?? 0, currency),
     taxRate: formatVariableDecimal(invoice.taxRate ?? 0, 6, 2),
-    total: formatCurrencyDecimal(invoice.total ?? 0, currency, "reject"),
+    total: formatStoredMoney(invoice.total ?? 0, currency),
     viewCount: viewRow?.count ?? 0,
   };
 }
@@ -736,12 +759,9 @@ export async function sendInvoice(
         if (
           original &&
           compareDecimals(
-            absoluteDecimal(
-              await issuedCreditAmount(tx, original.id),
-              currencyExponent(original.currency ?? "EUR"),
-            ),
+            absoluteDecimal(await issuedCreditAmount(tx, original.id), 4),
             original.total ?? "0",
-            currencyExponent(original.currency ?? "EUR"),
+            4,
           ) >= 0
         ) {
           await tx
@@ -931,8 +951,7 @@ export async function createCreditNote(
           sql`${invoices.status} <> 'cancelled'`,
         ),
       );
-    const currency = original.currency ?? "EUR";
-    const exponent = currencyExponent(currency);
+    const exponent = 4;
     if (
       compareDecimals(
         absoluteDecimal(existing?.total ?? "0", exponent),
@@ -1040,8 +1059,7 @@ export async function recordInvoicePayment(
       .from(payments)
       .where(eq(payments.invoiceId, invoiceId));
     const currency = invoice.currency ?? "EUR";
-    const exponent = currencyExponent(currency);
-    const settlement = reconcileInvoiceAmounts(
+    const settlement = reconcileStoredInvoiceAmounts(
       invoice.total ?? "0",
       [row?.total ?? "0"],
       await issuedCreditAmount(tx, invoiceId),
@@ -1053,10 +1071,7 @@ export async function recordInvoicePayment(
     } catch (error) {
       return { error: error instanceof Error ? error.message : "Invalid payment amount" };
     }
-    if (
-      compareDecimals(amount, 0, exponent) <= 0 ||
-      compareDecimals(amount, settlement.balance, exponent) > 0
-    ) {
+    if (compareDecimals(amount, 0, 4) <= 0 || compareDecimals(amount, settlement.balance, 4) > 0) {
       return { error: "Payment exceeds the remaining balance" };
     }
     if (invoice.stripePaymentLinkId) {
@@ -1073,7 +1088,7 @@ export async function recordInvoicePayment(
       receivedAt,
       source: context.source ?? "web",
     });
-    const fullyPaid = compareDecimals(amount, settlement.balance, exponent) === 0;
+    const fullyPaid = compareDecimals(amount, settlement.balance, 4) === 0;
     await tx
       .update(invoices)
       .set({
@@ -1144,14 +1159,13 @@ export async function markInvoicePaid(
       .from(payments)
       .where(eq(payments.invoiceId, invoiceId));
     const currency = invoice.currency ?? "EUR";
-    const exponent = currencyExponent(currency);
-    const { balance: remaining } = reconcileInvoiceAmounts(
+    const { balance: remaining } = reconcileStoredInvoiceAmounts(
       invoice.total ?? "0",
       [row?.total ?? "0"],
       await issuedCreditAmount(tx, invoiceId),
       currency,
     );
-    if (compareDecimals(remaining, 0, exponent) <= 0) {
+    if (compareDecimals(remaining, 0, 4) <= 0) {
       return { invoiceId, success: true };
     }
     const now = new Date();

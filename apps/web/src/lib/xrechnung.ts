@@ -1,9 +1,4 @@
-import {
-  absoluteDecimal,
-  currencyExponent,
-  formatDecimal,
-  formatVariableDecimal,
-} from "@/lib/money";
+import { absoluteDecimal, formatStoredMoney, formatVariableDecimal } from "@/lib/money";
 
 type XRechnungData = {
   business: {
@@ -207,9 +202,8 @@ export function generateXRechnung(data: XRechnungData): string {
   const documentName = isCreditNote ? "CreditNote" : "Invoice";
   const lineName = isCreditNote ? "CreditNoteLine" : "InvoiceLine";
   const quantityName = isCreditNote ? "CreditedQuantity" : "InvoicedQuantity";
-  const moneyScale = currencyExponent(invoice.currency);
   const amount = (value: string) =>
-    formatDecimal(isCreditNote ? absoluteDecimal(value, moneyScale) : value, moneyScale);
+    formatStoredMoney(isCreditNote ? absoluteDecimal(value, 4) : value, invoice.currency);
   const quantity = (value: string) => formatVariableDecimal(value, 6, 2);
   const unitPrice = (value: string) =>
     formatVariableDecimal(isCreditNote ? absoluteDecimal(value, 6) : value, 6, 2);
