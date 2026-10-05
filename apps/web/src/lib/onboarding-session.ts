@@ -13,6 +13,12 @@ import {
   type SiteProfile,
   type VatOutcome,
 } from "@/lib/site-reader/types";
+import {
+  normalizeTaxIdentifier,
+  taxIdentifierFields,
+  taxIdentifierFromLegacyVatNumber,
+  type TaxIdentifier,
+} from "@/lib/tax-identifier";
 
 // A website read is only a preview: anyone can type anyone's domain. It lives
 // here, under a random cookie, for a day, and reaches an account only when its
@@ -229,9 +235,34 @@ export function applyVatOutcome(
   vatNumber: string,
   outcome: VatOutcome,
 ): SiteProfile {
-  const next: SiteProfile = { ...profile, fields: { ...profile.fields }, vat: outcome };
-  next.fields.vatNumber = { confidence: 1, confirmed: true, source: "user", value: vatNumber };
-  if (outcome.status !== "valid") {
+  return applyTaxIdentifierOutcome(
+    profile,
+    normalizeTaxIdentifier({ type: "eu_vat", value: vatNumber })!,
+    outcome,
+  );
+}
+
+export function applyTaxIdentifierOutcome(
+  profile: SiteProfile,
+  taxIdentifier: TaxIdentifier,
+  outcome?: VatOutcome,
+): SiteProfile {
+  const next: SiteProfile = {
+    ...profile,
+    fields: { ...profile.fields },
+    taxIdentifier,
+    ...(outcome ? { vat: outcome } : {}),
+  };
+  if (!outcome) {
+    delete next.vat;
+  }
+  next.fields.vatNumber = {
+    confidence: 1,
+    confirmed: true,
+    source: "user",
+    value: taxIdentifier.value,
+  };
+  if (outcome?.status !== "valid") {
     return next;
   }
   if (outcome.name && canApplyRegistryField(next.fields.legalName)) {
@@ -273,7 +304,6 @@ export function orgValuesFromProfile(profile: SiteProfile, now = new Date()) {
     postalCode: "postalCode",
     region: "region",
     street: "street",
-    vatNumber: "vatNumber",
   } as const;
   for (const [key, column] of Object.entries(columns) as Array<
     [keyof typeof columns, (typeof columns)[keyof typeof columns]]
@@ -296,7 +326,23 @@ export function orgValuesFromProfile(profile: SiteProfile, now = new Date()) {
     values.brandColor = profile.brandColor;
     sources.brandColor = { at, confirmed: true, detail: "your website", source: "site" };
   }
-  if (profile.vat && profile.fields.vatNumber) {
+  const taxIdentifier =
+    profile.taxIdentifier ?? taxIdentifierFromLegacyVatNumber(profile.fields.vatNumber?.value);
+  Object.assign(values, taxIdentifierFields(taxIdentifier));
+  if (taxIdentifier && profile.fields.vatNumber) {
+    const taxSource = {
+      at,
+      confirmed: true,
+      detail: profile.fields.vatNumber.detail,
+      source: profile.fields.vatNumber.source,
+    };
+    sources.taxIdentifierCanonicalValue = taxSource;
+    sources.taxIdentifierCountryCode = taxSource;
+    sources.taxIdentifierType = taxSource;
+    sources.taxIdentifierValue = taxSource;
+    sources.vatNumber = taxSource;
+  }
+  if (profile.vat && taxIdentifier?.type === "eu_vat") {
     values.vatStatus = profile.vat.status;
     values.vatRegistryName = profile.vat.name;
     values.vatRegistryAddress = profile.vat.address;

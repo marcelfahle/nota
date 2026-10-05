@@ -24,6 +24,11 @@ import { ChatPanel } from "@/components/chat-panel";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  formatTaxIdentifier,
+  taxIdentifierFromColumns,
+  type TaxIdentifierType,
+} from "@/lib/tax-identifier";
 import { cn, formatCurrency } from "@/lib/utils";
 
 type FirstRunInvoice = {
@@ -52,6 +57,9 @@ type FirstRunOrg = {
   name: string;
   postalCode: string | null;
   street: string | null;
+  taxIdentifierCountryCode: string | null;
+  taxIdentifierType: TaxIdentifierType | null;
+  taxIdentifierValue: string | null;
   vatNumber: string | null;
 };
 
@@ -124,6 +132,10 @@ function Landed({ children, value }: { children?: React.ReactNode; value: string
 
 function ProfileForm({ onSaved, org }: { onSaved: () => void; org: FirstRunOrg }) {
   const [state, action, pending] = useActionState(saveFirstRunProfile, null);
+  const taxIdentifier = taxIdentifierFromColumns(org);
+  const [taxIdentifierType, setTaxIdentifierType] = useState<TaxIdentifierType>(
+    taxIdentifier?.type ?? "tax_id",
+  );
   useSaved(state, onSaved);
 
   return (
@@ -162,8 +174,27 @@ function ProfileForm({ onSaved, org }: { onSaved: () => void; org: FirstRunOrg }
           <Input defaultValue={org.country ?? ""} id="first-run-country" name="country" required />
         </div>
         <div className="space-y-1.5">
-          <Label htmlFor="first-run-vat">VAT ID (if registered)</Label>
-          <Input defaultValue={org.vatNumber ?? ""} id="first-run-vat" name="vatNumber" />
+          <Label htmlFor="first-run-tax-id-type">Tax identifier type</Label>
+          <select
+            className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+            id="first-run-tax-id-type"
+            name="taxIdentifierType"
+            onChange={(event) => setTaxIdentifierType(event.target.value as TaxIdentifierType)}
+            value={taxIdentifierType}
+          >
+            <option value="eu_vat">EU VAT ID</option>
+            <option value="us_ein">US EIN</option>
+            <option value="tax_id">Tax ID</option>
+          </select>
+        </div>
+        <div className="space-y-1.5">
+          <Label htmlFor="first-run-tax-id">Tax ID (if used)</Label>
+          <Input
+            defaultValue={taxIdentifier?.value ?? ""}
+            id="first-run-tax-id"
+            name="taxIdentifierValue"
+            placeholder={taxIdentifierType === "us_ein" ? "12-3456789" : undefined}
+          />
         </div>
       </div>
       <div className="flex items-center gap-3">
@@ -442,12 +473,12 @@ export function FirstRunHome({ data }: { data: FirstRunHomeData }) {
                     )}
                   </p>
                   <p>
-                    {data.org.vatNumber ? (
-                      `VAT ${data.org.vatNumber}`
+                    {taxIdentifierFromColumns(data.org) ? (
+                      formatTaxIdentifier(taxIdentifierFromColumns(data.org))
                     ) : legalReady ? (
-                      <span className="text-[#6b655c]">No VAT ID</span>
+                      <span className="text-[#6b655c]">No tax ID</span>
                     ) : (
-                      <Gap onClick={() => setEditor("profile")}>VAT ID, if registered</Gap>
+                      <Gap onClick={() => setEditor("profile")}>Tax ID, if used</Gap>
                     )}
                   </p>
                 </div>

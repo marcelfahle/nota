@@ -1,3 +1,5 @@
+import { normalizeTaxIdentifier } from "@/lib/tax-identifier";
+
 import { pickBrandColors } from "./colors";
 import { fromDataUrl } from "./data-url";
 import { visibleText } from "./html";
@@ -5,7 +7,7 @@ import { dominantColors, fetchImage } from "./logo";
 import { modelConfigured, readLocation, readSiteFacts, type SiteFacts } from "./model";
 import { extractPages, parallelConfigured, searchWeb, type ParallelPage } from "./parallel";
 import { safeFetch, UnsafeUrlError, type SafeFetchOptions } from "./safe-fetch";
-import { EMAIL_NOISE, extractSignals, findVatNumber, type SiteSignals } from "./signals";
+import { EMAIL_NOISE, extractSignals, findTaxIdentifier, type SiteSignals } from "./signals";
 import {
   emptyProfile,
   nameFromDomain,
@@ -192,7 +194,10 @@ export async function* readSite(
     );
     setField("email", site(signals.email, "your website", 0.7));
     setField("legalName", site(signals.legalName, "your site's structured data", 0.85));
-    setField("vatNumber", site(signals.vatNumber, "your website", 0.85));
+    setField("vatNumber", site(signals.taxIdentifier?.value, "your website", 0.85));
+    if (signals.taxIdentifier) {
+      profile.taxIdentifier = signals.taxIdentifier;
+    }
     const address = signals.address;
     if (address) {
       for (const key of ["street", "postalCode", "city", "region", "country"] as const) {
@@ -268,7 +273,11 @@ export async function* readSite(
       pages = [homepage];
     }
     const corpus = pages.map((page) => page.text).join("\n");
-    setField("vatNumber", site(findVatNumber(corpus), "your website", 0.85));
+    const foundTaxIdentifier = findTaxIdentifier(corpus);
+    setField("vatNumber", site(foundTaxIdentifier?.value, "your website", 0.85));
+    if (foundTaxIdentifier) {
+      profile.taxIdentifier = foundTaxIdentifier;
+    }
     let facts: SiteFacts | null = null;
     if (canModel && pages.length > 0) {
       facts = await services.readSiteFacts(
@@ -293,6 +302,9 @@ export async function* readSite(
       );
       setField("legalName", site(facts.legalName, where, 0.8));
       setField("vatNumber", site(facts.vatNumber, where, 0.8));
+      if (facts.vatNumber) {
+        profile.taxIdentifier = normalizeTaxIdentifier({ type: "eu_vat", value: facts.vatNumber })!;
+      }
       for (const key of [
         "street",
         "postalCode",

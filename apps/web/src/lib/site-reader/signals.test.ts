@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 
 import { pickBrandColors } from "./colors";
-import { extractSignals, findEmail, findVatNumber } from "./signals";
+import { extractSignals, findEmail, findTaxIdentifier, findVatNumber } from "./signals";
 
 const STRUCTURED = `<!doctype html><html><head>
 <title>Bold — video for courses</title>
@@ -74,6 +74,16 @@ test("VAT IDs are taken only next to a VAT label", () => {
   expect(findVatNumber("Partita IVA IT00159560366")).toBe("IT00159560366");
   expect(findVatNumber("Order DE123456789 shipped")).toBeNull();
   expect(findVatNumber("VAT is included in all prices.")).toBeNull();
+});
+
+test("a synthetic EIN is taken only next to an EIN label", () => {
+  expect(findTaxIdentifier("Employer Identification Number: 12 3456789")).toEqual({
+    canonicalValue: "123456789",
+    countryCode: "US",
+    type: "us_ein",
+    value: "12-3456789",
+  });
+  expect(findTaxIdentifier("Reference 12-3456789")).toBeNull();
 });
 
 test("placeholder and asset emails are ignored", () => {

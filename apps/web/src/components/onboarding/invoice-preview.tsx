@@ -1,6 +1,7 @@
 import { ArrowRight } from "lucide-react";
 
 import type { SiteProfile } from "@/lib/site-reader/types";
+import { formatTaxIdentifier, taxIdentifierFromLegacyVatNumber } from "@/lib/tax-identifier";
 import { cn, formatCurrency } from "@/lib/utils";
 
 const INK = "#1F1B16";
@@ -55,6 +56,8 @@ export function InvoicePreview({
   testId?: string;
 }) {
   const fields = profile?.fields ?? {};
+  const taxIdentifier =
+    profile?.taxIdentifier ?? taxIdentifierFromLegacyVatNumber(fields.vatNumber?.value);
   const name = fields.name?.value;
   const color = profile?.brandColor ?? null;
   const textOnColor =
@@ -140,10 +143,7 @@ export function InvoicePreview({
                   ) : null}
                 </p>
                 <p>
-                  <Slot
-                    missing="VAT ID"
-                    value={fields.vatNumber?.value ? `VAT ${fields.vatNumber.value}` : null}
-                  />
+                  <Slot missing="Tax ID" value={formatTaxIdentifier(taxIdentifier)} />
                 </p>
               </>
             ) : null}

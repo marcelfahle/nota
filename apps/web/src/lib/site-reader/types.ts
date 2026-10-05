@@ -1,3 +1,5 @@
+import type { TaxIdentifier } from "@/lib/tax-identifier";
+
 export type ProfileSource = "registry" | "search" | "site" | "user";
 
 export const PROFILE_FIELDS = [
@@ -50,6 +52,7 @@ export type SiteProfile = {
   favicon: string | null;
   fields: Partial<Record<ProfileFieldKey, ProfileField>>;
   logo: string | null;
+  taxIdentifier?: TaxIdentifier;
   vat?: VatOutcome;
   website: string;
 };
