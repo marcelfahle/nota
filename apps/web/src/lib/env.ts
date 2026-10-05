@@ -1,5 +1,11 @@
 import { z } from "zod";
 
+const optionalString = z.preprocess(
+  (value) => (value === "" ? undefined : value),
+  z.string().min(1).optional(),
+);
+const optionalUrl = z.preprocess((value) => (value === "" ? undefined : value), z.url().optional());
+
 function createEnvGetter<T extends z.ZodRawShape>(schema: z.ZodObject<T>) {
   let cached: z.infer<typeof schema> | null = null;
 
@@ -45,16 +51,62 @@ export const getBetterAuthEnv = createEnvGetter(
 );
 
 export const getEmailEnv = createEnvGetter(
-  z.object({
-    RESEND_API_KEY: z.string().min(1, "RESEND_API_KEY is required"),
-    RESEND_FROM_EMAIL: z.string().min(1).optional(),
-  }),
+  z
+    .object({
+      EMAIL_FROM: z.string().min(1).default("Nota <nota@localhost>"),
+      EMAIL_LOG_PATH: z.string().min(1).default("/data/mail/sends.jsonl"),
+      EMAIL_PROVIDER: z.enum(["helo", "smtp", "log"]).default("helo"),
+      HELO_API_KEY: optionalString,
+      HELO_CHANNEL_ID: z.preprocess(
+        (value) => (value === "" ? undefined : value),
+        z.string().uuid().optional(),
+      ),
+      SMTP_URL: optionalString,
+    })
+    .superRefine((env, context) => {
+      if (env.EMAIL_PROVIDER === "helo" && !env.HELO_API_KEY) {
+        context.addIssue({ code: "custom", message: "HELO_API_KEY is required for Helo email" });
+      }
+      if (env.EMAIL_PROVIDER === "smtp" && !env.SMTP_URL) {
+        context.addIssue({ code: "custom", message: "SMTP_URL is required for SMTP email" });
+      }
+    }),
 );
 
 export const getAppEnv = createEnvGetter(
   z.object({
     APP_URL: z.url("APP_URL must be a valid absolute URL"),
   }),
+);
+
+export const getStorageEnv = createEnvGetter(
+  z
+    .object({
+      BLOB_READ_WRITE_TOKEN: optionalString,
+      LOCAL_STORAGE_PATH: z.string().min(1).default("/data/storage"),
+      S3_ACCESS_KEY_ID: optionalString,
+      S3_BUCKET: optionalString,
+      S3_ENDPOINT: optionalUrl,
+      S3_FORCE_PATH_STYLE: z.enum(["true", "false"]).default("false"),
+      S3_PUBLIC_URL: optionalUrl,
+      S3_REGION: z.string().min(1).default("us-east-1"),
+      S3_SECRET_ACCESS_KEY: optionalString,
+      STORAGE: z.enum(["vercel-blob", "s3", "local"]).default("vercel-blob"),
+    })
+    .superRefine((env, context) => {
+      if (env.STORAGE === "vercel-blob" && !env.BLOB_READ_WRITE_TOKEN) {
+        context.addIssue({ code: "custom", message: "BLOB_READ_WRITE_TOKEN is required" });
+      }
+      if (env.STORAGE === "s3" && (!env.S3_BUCKET || !env.S3_PUBLIC_URL)) {
+        context.addIssue({ code: "custom", message: "S3_BUCKET and S3_PUBLIC_URL are required" });
+      }
+      if (Boolean(env.S3_ACCESS_KEY_ID) !== Boolean(env.S3_SECRET_ACCESS_KEY)) {
+        context.addIssue({
+          code: "custom",
+          message: "S3_ACCESS_KEY_ID and S3_SECRET_ACCESS_KEY must be set together",
+        });
+      }
+    }),
 );
 
 export const getStripeEnv = createEnvGetter(
@@ -72,6 +124,13 @@ export const getStripeWebhookEnv = createEnvGetter(
 export const getCronEnv = createEnvGetter(
   z.object({
     CRON_SECRET: z.string().min(1, "CRON_SECRET is required"),
+  }),
+);
+
+export const getDeploymentEnv = createEnvGetter(
+  z.object({
+    DEPLOYMENT_MODE: z.enum(["hosted", "self-hosted"]).default("hosted"),
+    PAYMENT_MODE: z.enum(["stripe", "bank-transfer"]).default("stripe"),
   }),
 );
 

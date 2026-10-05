@@ -1,8 +1,12 @@
+import { resolve } from "node:path";
+
 import { withPostHogConfig } from "@posthog/nextjs-config";
 import { withBotId } from "botid/next/config";
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  output: "standalone",
+  outputFileTracingRoot: resolve(import.meta.dirname, "../.."),
   // sharp's shared libraries live in sibling packages that file tracing misses
   // under Bun's node_modules layout; without them the reader cannot load it.
   // Files only: a symlinked directory in the trace makes the deployment invalid.

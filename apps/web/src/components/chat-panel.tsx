@@ -500,6 +500,7 @@ export function ChatPanel({
   const router = useRouter();
   const pathname = usePathname();
   const [activity, setActivity] = useState<Array<ChatActivity>>([]);
+  const [available, setAvailable] = useState(true);
   const [input, setInput] = useState("");
   const [csvFile, setCsvFile] = useState<File | null>(null);
   const [historyLoaded, setHistoryLoaded] = useState(false);
@@ -649,14 +650,25 @@ export function ChatPanel({
     let active = true;
     void fetch("/api/chat")
       .then((response) => (response.ok ? response.json() : null))
-      .then((data: { activity?: Array<ChatActivity>; messages?: Array<UIMessage> } | null) => {
-        if (active && data?.activity) {
-          setActivity(data.activity);
-        }
-        if (active && data?.messages) {
-          setMessages(data.messages);
-        }
-      })
+      .then(
+        (
+          data: {
+            activity?: Array<ChatActivity>;
+            available?: boolean;
+            messages?: Array<UIMessage>;
+          } | null,
+        ) => {
+          if (active && data?.available === false) {
+            setAvailable(false);
+          }
+          if (active && data?.activity) {
+            setActivity(data.activity);
+          }
+          if (active && data?.messages) {
+            setMessages(data.messages);
+          }
+        },
+      )
       .finally(() => {
         if (active) {
           setHistoryLoaded(true);
@@ -695,7 +707,7 @@ export function ChatPanel({
 
   async function submitInput(value: string) {
     const trimmedValue = value.trim();
-    if (!trimmedValue || isBusy) {
+    if (!available || !trimmedValue || isBusy) {
       return;
     }
 
@@ -736,6 +748,13 @@ export function ChatPanel({
   function renderComposer(variant: "dock" | "home" | "panel" = "panel") {
     if (csvFile) {
       return null;
+    }
+    if (!available) {
+      return (
+        <div className="border-t bg-card px-4 py-3 text-sm text-muted-foreground" role="status">
+          AI chat is not configured. Invoices, clients, PDF exports, and sending remain available.
+        </div>
+      );
     }
     // The dock is one composer for both layouts: a slim row on a phone, and on
     // a wide screen the home prompt until the conversation opens.

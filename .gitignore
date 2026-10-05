@@ -1,4 +1,5 @@
 .env
+.env.self-hosted
 .amp/portals/*
 .vercel/
 .DS_Store

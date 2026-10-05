@@ -44,9 +44,13 @@ test("validateLogoFile rejects unsupported formats and oversize files", () => {
   });
 });
 
-test("managed logo helpers only target Blob-hosted assets", () => {
-  expect(buildOrgLogoPath("org_123", "png")).toBe("orgs/org_123/logo.png");
-  expect(buildOrgFaviconPath("org_123", "webp")).toBe("orgs/org_123/favicon.webp");
+test("managed logo helpers enforce tenant UUIDs and only target managed assets", () => {
+  const orgId = "0f72f87b-3d4d-4f4b-85f8-f469e835c708";
+  expect(buildOrgLogoPath(orgId, "png")).toBe(`orgs/${orgId}/logo.png`);
+  expect(buildOrgFaviconPath(orgId, "webp")).toBe(`orgs/${orgId}/favicon.webp`);
+  expect(() => buildOrgLogoPath("../another-tenant", "png")).toThrow(
+    "Invalid organization image path",
+  );
   expect(
     isManagedLogoUrl("https://store.public.blob.vercel-storage.com/orgs/org_123/logo.png"),
   ).toBe(true);
