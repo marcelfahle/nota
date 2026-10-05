@@ -7,7 +7,8 @@ import { z } from "zod";
 import { getCurrentUser } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { bankAccounts, clients } from "@/lib/db/schema";
-import { clientVatFields } from "@/lib/vat";
+import { TAX_IDENTIFIER_TYPES, TaxIdentifierValidationError } from "@/lib/tax-identifier";
+import { clientTaxIdentifierFields } from "@/lib/vat";
 
 const clientSchema = z.object({
   address: z.string().nullable().optional(),
@@ -17,7 +18,8 @@ const clientSchema = z.object({
   email: z.string().email("Invalid email address"),
   name: z.string().min(1, "Name is required"),
   notes: z.string().nullable().optional(),
-  vatNumber: z.string().nullable().optional(),
+  taxIdentifierType: z.enum(TAX_IDENTIFIER_TYPES),
+  taxIdentifierValue: z.string().max(100),
 });
 
 function parseClientFormData(formData: FormData) {
@@ -30,8 +32,16 @@ function parseClientFormData(formData: FormData) {
     email: formData.get("email") as string,
     name: formData.get("name") as string,
     notes: (formData.get("notes") as string) || null,
-    vatNumber: (formData.get("vatNumber") as string) || null,
+    taxIdentifierType: formData.get("taxIdentifierType") as string,
+    taxIdentifierValue: (formData.get("taxIdentifierValue") as string) || "",
   };
+}
+
+async function taxFields(data: z.infer<typeof clientSchema>) {
+  return clientTaxIdentifierFields({
+    type: data.taxIdentifierType,
+    value: data.taxIdentifierValue,
+  });
 }
 
 export async function createClient(
@@ -58,12 +68,20 @@ export async function createClient(
     }
   }
 
-  await db.insert(clients).values({
-    ...result.data,
-    ...(await clientVatFields(result.data.vatNumber)),
-    orgId: org.id,
-    userId: user.id,
-  });
+  try {
+    const { taxIdentifierType: _type, taxIdentifierValue: _value, ...values } = result.data;
+    await db.insert(clients).values({
+      ...values,
+      ...(await taxFields(result.data)),
+      orgId: org.id,
+      userId: user.id,
+    });
+  } catch (error) {
+    return {
+      error:
+        error instanceof TaxIdentifierValidationError ? error.message : "Could not save the client",
+    };
+  }
 
   revalidatePath("/clients");
   return { success: true };
@@ -104,14 +122,22 @@ export async function updateClient(
     }
   }
 
-  await db
-    .update(clients)
-    .set({
-      ...result.data,
-      ...(await clientVatFields(result.data.vatNumber)),
-      updatedAt: new Date(),
-    })
-    .where(and(eq(clients.id, clientId), eq(clients.orgId, org.id)));
+  try {
+    const { taxIdentifierType: _type, taxIdentifierValue: _value, ...values } = result.data;
+    await db
+      .update(clients)
+      .set({
+        ...values,
+        ...(await taxFields(result.data)),
+        updatedAt: new Date(),
+      })
+      .where(and(eq(clients.id, clientId), eq(clients.orgId, org.id)));
+  } catch (error) {
+    return {
+      error:
+        error instanceof TaxIdentifierValidationError ? error.message : "Could not save the client",
+    };
+  }
 
   revalidatePath("/clients");
   revalidatePath(`/clients/${clientId}`);

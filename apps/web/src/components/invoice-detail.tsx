@@ -75,6 +75,12 @@ type InvoiceDetailProps = {
       company?: string | null;
       email: string;
       name: string;
+      taxIdentifier?: {
+        canonicalValue: string;
+        countryCode: string | null;
+        type: "eu_vat" | "tax_id" | "us_ein";
+        value: string;
+      } | null;
       vatNumber?: string | null;
       vatStatus?: "invalid" | "unavailable" | "valid" | null;
     };
@@ -573,12 +579,19 @@ export function InvoiceDetailView({ activities, business, invoice, role }: Invoi
                 <dt className="text-xs text-muted-foreground">Sent to</dt>
                 <dd className="mt-1 break-all">{invoice.client.email}</dd>
               </div>
-              {invoice.client.vatNumber ? (
+              {invoice.client.taxIdentifier ? (
                 <div>
-                  <dt className="text-xs text-muted-foreground">VAT ID</dt>
+                  <dt className="text-xs text-muted-foreground">
+                    {invoice.client.taxIdentifier.type === "eu_vat"
+                      ? "VAT ID"
+                      : invoice.client.taxIdentifier.type === "us_ein"
+                        ? "EIN"
+                        : "Tax ID"}
+                  </dt>
                   <dd className="mt-1 flex items-center gap-1.5 font-mono text-xs">
-                    {invoice.client.vatNumber}
-                    {invoice.client.vatStatus === "valid" ? (
+                    {invoice.client.taxIdentifier.value}
+                    {invoice.client.taxIdentifier.type === "eu_vat" &&
+                    invoice.client.vatStatus === "valid" ? (
                       <BadgeCheck aria-label="Verified" className="size-4 text-emerald-600" />
                     ) : null}
                   </dd>

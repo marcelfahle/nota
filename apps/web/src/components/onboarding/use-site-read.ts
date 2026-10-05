@@ -11,6 +11,7 @@ import {
   type ReaderStep,
   type SiteProfile,
 } from "@/lib/site-reader/types";
+import type { TaxIdentifierInput } from "@/lib/tax-identifier";
 
 export type ReadStatus = "done" | "error" | "idle" | "reading";
 export type StepState = "active" | "done" | "skipped";
@@ -345,7 +346,7 @@ export function useSiteRead(initial: SiteProfile | null) {
   }, [flush]);
 
   const checkVat = useCallback(
-    async (vatNumber: string): Promise<VatReply | { error: string }> => {
+    async (taxIdentifier: TaxIdentifierInput): Promise<VatReply | { error: string }> => {
       await settle();
       let result: VatReply | { error: string } = {
         error: "We couldn't check that right now.",
@@ -355,7 +356,7 @@ export function useSiteRead(initial: SiteProfile | null) {
       const operation = previous.then(async () => {
         try {
           const response = await fetch("/api/onboarding/vat", {
-            body: JSON.stringify({ vatNumber }),
+            body: JSON.stringify({ taxIdentifier }),
             headers: { "content-type": "application/json" },
             method: "POST",
           });

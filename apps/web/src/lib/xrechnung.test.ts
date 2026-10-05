@@ -18,14 +18,24 @@ function baseData() {
       bankDetails: "IBAN: DE89370400440532013000\nBIC: COBADEFFXXX",
       email: "test@example.com",
       name: "Test GmbH",
-      vatNumber: "DE123456789",
+      taxIdentifier: {
+        canonicalValue: "DE123456789",
+        countryCode: "DE",
+        type: "eu_vat" as const,
+        value: "DE123456789",
+      },
     },
     client: {
       address: "Client St 5\n28001 Madrid\nSpain",
       company: "Client Corp",
       email: "client@example.com",
       name: "Jane Doe",
-      vatNumber: "ESB12345678",
+      taxIdentifier: {
+        canonicalValue: "ESB12345678",
+        countryCode: "ES",
+        type: "eu_vat" as const,
+        value: "ESB12345678",
+      },
     },
     invoice: {
       currency: "EUR",
@@ -59,6 +69,32 @@ describe("escapeXml", () => {
   test("leaves plain text unchanged", () => {
     expect(escapeXml("Hello World")).toBe("Hello World");
   });
+});
+
+test("never emits an EIN in VAT fields and reports unsupported seller legal data", () => {
+  const data = baseData();
+  data.business.taxIdentifier = {
+    canonicalValue: "123456789",
+    countryCode: "US",
+    type: "us_ein",
+    value: "12-3456789",
+  };
+
+  expect(() => generateXRechnung(data)).toThrow("EIN or generic tax ID cannot be exported as VAT");
+});
+
+test("omits a client EIN from VAT-specific XML", () => {
+  const data = baseData();
+  data.client.taxIdentifier = {
+    canonicalValue: "987654321",
+    countryCode: "US",
+    type: "us_ein",
+    value: "98-7654321",
+  };
+
+  const xml = generateXRechnung(data);
+  expect(xml).not.toContain("98-7654321");
+  expect(xml).not.toContain("987654321");
 });
 
 // ---------------------------------------------------------------------------

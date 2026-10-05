@@ -5,6 +5,11 @@ import { useActionState, useEffect, useMemo, useState, type ChangeEvent } from "
 import { updateBrandSettings } from "@/actions/settings";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import {
+  taxIdentifierFromColumns,
+  taxIdentifierLabel,
+  type TaxIdentifierType,
+} from "@/lib/tax-identifier";
 import { cn } from "@/lib/utils";
 
 type Source = {
@@ -28,11 +33,17 @@ export type BrandSettingsData = {
   profileSources: Record<string, Source & { at: string }> | null;
   region: string | null;
   street: string | null;
+  taxIdentifierCountryCode: string | null;
+  taxIdentifierType: TaxIdentifierType | null;
+  taxIdentifierValue: string | null;
   vatNumber: string | null;
   website: string | null;
 };
 
-type BrandField = Exclude<keyof BrandSettingsData, "faviconUrl" | "logoUrl" | "profileSources">;
+type BrandField = Exclude<
+  keyof BrandSettingsData,
+  "faviconUrl" | "logoUrl" | "profileSources" | "taxIdentifierCountryCode" | "vatNumber"
+>;
 
 const SWATCHES = ["#43C6A6", "#1F1B16", "#14705A"];
 const PAPER_INK = "#1F1B16";
@@ -99,6 +110,7 @@ export function BrandSettings({
   canManage: boolean;
   settings: BrandSettingsData;
 }) {
+  const savedTaxIdentifier = taxIdentifierFromColumns(settings);
   const initial = useMemo(
     () => ({
       brandColor: settings.brandColor ?? SWATCHES[0],
@@ -112,10 +124,11 @@ export function BrandSettings({
       postalCode: settings.postalCode ?? "",
       region: settings.region ?? "",
       street: settings.street ?? "",
-      vatNumber: settings.vatNumber ?? "",
+      taxIdentifierType: savedTaxIdentifier?.type ?? "tax_id",
+      taxIdentifierValue: savedTaxIdentifier?.value ?? "",
       website: settings.website ?? "",
     }),
-    [settings],
+    [savedTaxIdentifier, settings],
   );
   const [values, setValues] = useState(initial);
   const [editing, setEditing] = useState<string | null>(null);
@@ -151,7 +164,16 @@ export function BrandSettings({
     { field: "businessName", label: "Name", placeholder: "Your business name" },
     { field: "name", label: "Shown as", placeholder: "Short display name" },
     { field: "contactEmail", label: "Email", placeholder: "billing@example.com", type: "email" },
-    { field: "vatNumber", label: "VAT ID", placeholder: "e.g. ESB12345678" },
+    {
+      field: "taxIdentifierValue",
+      label: taxIdentifierLabel({ type: values.taxIdentifierType as TaxIdentifierType }),
+      placeholder:
+        values.taxIdentifierType === "us_ein"
+          ? "e.g. 12-3456789"
+          : values.taxIdentifierType === "eu_vat"
+            ? "e.g. ESB12345678"
+            : "Your tax ID",
+    },
     { field: "legalName", label: "Legal name", placeholder: "Registered company name" },
     { field: "street", label: "Street", placeholder: "Street and number" },
   ];
@@ -165,6 +187,26 @@ export function BrandSettings({
       {Object.entries(values).map(([name, value]) => (
         <input key={name} name={name} type="hidden" value={value} />
       ))}
+
+      <div className="flex items-center gap-3">
+        <label className="text-sm text-muted-foreground" htmlFor="brand-tax-identifier-type">
+          Tax identifier type
+        </label>
+        <select
+          className="h-9 rounded-md border border-input bg-background px-3 text-sm"
+          disabled={!canManage}
+          id="brand-tax-identifier-type"
+          onChange={(event) => {
+            change("taxIdentifierType", event.target.value);
+            setDirty((current) => new Set(current).add("taxIdentifierValue"));
+          }}
+          value={values.taxIdentifierType}
+        >
+          <option value="eu_vat">EU VAT ID</option>
+          <option value="us_ein">US EIN</option>
+          <option value="tax_id">Tax ID</option>
+        </select>
+      </div>
 
       {!canManage ? (
         <p className="rounded-md border bg-secondary px-4 py-3 text-sm text-muted-foreground">
@@ -276,7 +318,7 @@ export function BrandSettings({
               ) : null}
             </div>
             <p className="mt-3 text-xs text-muted-foreground">
-              You can also tell Nota: “we moved”, “new VAT ID”, or “make the pay button black”.
+              You can also tell Nota: “we moved”, “new tax ID”, or “make the pay button black”.
             </p>
           </section>
 
@@ -446,10 +488,13 @@ export function BrandSettings({
                   ) : (
                     <p className="bg-highlighter px-1">street address</p>
                   )}
-                  {values.vatNumber ? (
-                    <p>VAT {values.vatNumber}</p>
+                  {values.taxIdentifierValue ? (
+                    <p>
+                      {taxIdentifierLabel({ type: values.taxIdentifierType as TaxIdentifierType })}{" "}
+                      {values.taxIdentifierValue}
+                    </p>
                   ) : (
-                    <p className="bg-highlighter px-1">VAT ID missing</p>
+                    <p className="bg-highlighter px-1">Tax ID missing</p>
                   )}
                 </div>
                 <div className="text-right">

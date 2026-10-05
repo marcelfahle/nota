@@ -26,8 +26,16 @@ export function printClientDetail(client: ClientRecord, recentInvoices: Array<In
   if (client.address) {
     console.log(`Address: ${client.address}`);
   }
-  if (client.vatNumber) {
-    console.log(`VAT: ${client.vatNumber}`);
+  if (client.taxIdentifier) {
+    const label =
+      client.taxIdentifier.type === "eu_vat"
+        ? "VAT ID"
+        : client.taxIdentifier.type === "us_ein"
+          ? "EIN"
+          : "Tax ID";
+    console.log(`${label}: ${client.taxIdentifier.value}`);
+  } else if (client.vatNumber) {
+    console.log(`VAT ID: ${client.vatNumber}`);
   }
   if (client.notes) {
     console.log(`Notes: ${client.notes}`);

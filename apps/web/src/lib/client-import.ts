@@ -3,6 +3,12 @@ import { createHash } from "node:crypto";
 import { parse } from "csv-parse/sync";
 import { z } from "zod";
 
+import {
+  normalizeTaxIdentifier,
+  taxIdentifierFromLegacyVatNumber,
+  TaxIdentifierValidationError,
+} from "@/lib/tax-identifier";
+
 export const MAX_CLIENT_CSV_BYTES = 250 * 1024;
 export const MAX_CLIENT_CSV_ROWS = 1000;
 
@@ -10,20 +16,37 @@ export class ClientImportError extends Error {}
 
 const currencies = new Set(Intl.supportedValuesOf("currency"));
 
-const clientSchema = z.object({
-  address: z.string().max(4000).optional(),
-  company: z.string().max(250).optional(),
-  defaultCurrency: z
-    .string()
-    .refine(
-      (value) => currencies.has(value),
-      "Use a supported ISO currency code, such as EUR or USD",
-    ),
-  email: z.email("A valid email is required").max(320),
-  name: z.string().min(1, "A name or company is required").max(250),
-  notes: z.string().max(4000).optional(),
-  vatNumber: z.string().max(100).optional(),
-});
+const clientSchema = z
+  .object({
+    address: z.string().max(4000).optional(),
+    company: z.string().max(250).optional(),
+    defaultCurrency: z
+      .string()
+      .refine(
+        (value) => currencies.has(value),
+        "Use a supported ISO currency code, such as EUR or USD",
+      ),
+    email: z.email("A valid email is required").max(320),
+    name: z.string().min(1, "A name or company is required").max(250),
+    notes: z.string().max(4000).optional(),
+    taxIdentifier: z.object({ type: z.literal("tax_id"), value: z.string().max(100) }).optional(),
+    vatNumber: z.string().max(100).optional(),
+  })
+  .superRefine((client, context) => {
+    for (const [path, read] of [
+      ["taxIdentifier", () => normalizeTaxIdentifier(client.taxIdentifier)],
+      ["vatNumber", () => taxIdentifierFromLegacyVatNumber(client.vatNumber)],
+    ] as const) {
+      try {
+        read();
+      } catch (error) {
+        if (!(error instanceof TaxIdentifierValidationError)) {
+          throw error;
+        }
+        context.addIssue({ code: "custom", message: error.message, path: [path] });
+      }
+    }
+  });
 
 export type ImportedClient = z.infer<typeof clientSchema>;
 export type ClientImportRow = {
@@ -57,7 +80,8 @@ const aliases: Record<string, Array<string>> = {
   region: ["state", "province", "region", "billingstate"],
   street: ["address1", "addressline1", "street", "streetaddress", "billingaddress1"],
   street2: ["address2", "addressline2", "billingaddress2"],
-  vatNumber: ["vatnumber", "vatid", "taxnumber", "taxid", "taxregistrationnumber"],
+  taxIdentifier: ["taxnumber", "taxid", "taxregistrationnumber"],
+  vatNumber: ["vatnumber", "vatid"],
 };
 
 function normalizeHeader(value: string) {
@@ -177,6 +201,9 @@ export function previewClientImport(
         [contact && contact !== name ? `Contact: ${contact}` : "", value("notes")]
           .filter(Boolean)
           .join("\n") || undefined,
+      taxIdentifier: value("taxIdentifier")
+        ? { type: "tax_id" as const, value: value("taxIdentifier") }
+        : undefined,
       vatNumber: value("vatNumber") || undefined,
     };
     if (record.length !== headers.length) {

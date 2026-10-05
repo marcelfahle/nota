@@ -9,6 +9,12 @@ import { db } from "@/lib/db";
 import { invoiceNumberEvents, orgs } from "@/lib/db/schema";
 import { deleteManagedLogo, uploadOrgFavicon, uploadOrgLogo } from "@/lib/logo-storage";
 import { canManageSettings, getInsufficientPermissionsError } from "@/lib/roles";
+import {
+  normalizeTaxIdentifier,
+  TAX_IDENTIFIER_TYPES,
+  TaxIdentifierValidationError,
+} from "@/lib/tax-identifier";
+import { clientTaxIdentifierFields } from "@/lib/vat";
 
 const settingsSchema = z.object({
   defaultCurrency: z.string().optional().default("EUR"),
@@ -31,7 +37,8 @@ const brandFieldSchema = z.enum([
   "postalCode",
   "region",
   "street",
-  "vatNumber",
+  "taxIdentifierType",
+  "taxIdentifierValue",
   "website",
 ]);
 
@@ -57,7 +64,8 @@ const brandSettingsSchema = z.object({
   postalCode: z.string().trim().max(40),
   region: z.string().trim().max(250),
   street: z.string().trim().max(500),
-  vatNumber: z.string().trim().max(100),
+  taxIdentifierType: z.enum(TAX_IDENTIFIER_TYPES),
+  taxIdentifierValue: z.string().trim().max(100),
   website: z.string().trim().max(500),
 });
 
@@ -78,7 +86,8 @@ export async function updateBrandSettings(
     postalCode: formData.get("postalCode"),
     region: formData.get("region"),
     street: formData.get("street"),
-    vatNumber: formData.get("vatNumber"),
+    taxIdentifierType: formData.get("taxIdentifierType"),
+    taxIdentifierValue: formData.get("taxIdentifierValue"),
     website: formData.get("website"),
   });
   if (!parsed.success) {
@@ -123,6 +132,22 @@ export async function updateBrandSettings(
   ) as Partial<typeof values>;
   if (dirtyFields.includes("name")) {
     update.name = values.name;
+  }
+  if (dirtyFields.includes("taxIdentifierType") || dirtyFields.includes("taxIdentifierValue")) {
+    try {
+      const identifier = normalizeTaxIdentifier({
+        type: values.taxIdentifierType,
+        value: values.taxIdentifierValue,
+      });
+      Object.assign(update, await clientTaxIdentifierFields(identifier));
+    } catch (error) {
+      return {
+        error:
+          error instanceof TaxIdentifierValidationError
+            ? error.message
+            : "Enter a valid tax identifier",
+      };
+    }
   }
   const now = new Date().toISOString();
   const profileSources = { ...(org.profileSources ?? {}) };

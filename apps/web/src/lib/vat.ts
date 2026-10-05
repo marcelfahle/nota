@@ -2,40 +2,19 @@ import { eq } from "drizzle-orm";
 
 import { db } from "@/lib/db";
 import { vatChecks } from "@/lib/db/schema";
+import {
+  isViesCountry,
+  normalizeTaxIdentifier,
+  normalizeVatNumber,
+  taxIdentifierFields,
+  taxIdentifierFromLegacyVatNumber,
+  type TaxIdentifierInput,
+} from "@/lib/tax-identifier";
+
+export { isViesCountry, normalizeVatNumber } from "@/lib/tax-identifier";
 
 const CACHE_MS = 24 * 60 * 60 * 1000;
 const VIES_URL = "https://ec.europa.eu/taxation_customs/vies/rest-api/check-vat-number";
-const VIES_COUNTRIES = new Set([
-  "AT",
-  "BE",
-  "BG",
-  "CY",
-  "CZ",
-  "DE",
-  "DK",
-  "EE",
-  "EL",
-  "ES",
-  "FI",
-  "FR",
-  "HR",
-  "HU",
-  "IE",
-  "IT",
-  "LT",
-  "LU",
-  "LV",
-  "MT",
-  "NL",
-  "PL",
-  "PT",
-  "RO",
-  "SE",
-  "SI",
-  "SK",
-  "XI",
-]);
-
 export type VatResult = {
   address: string | null;
   checkedAt: Date;
@@ -51,14 +30,6 @@ function registryText(value: unknown) {
   }
   const text = value.trim();
   return text && !/^-+$/.test(text) ? text : null;
-}
-
-export function isViesCountry(countryCode: string) {
-  return VIES_COUNTRIES.has(countryCode.toUpperCase());
-}
-
-export function normalizeVatNumber(value: string) {
-  return value.replaceAll(/[^a-zA-Z0-9]/g, "").toUpperCase();
 }
 
 export async function verifyVatNumber(
@@ -81,7 +52,7 @@ export async function verifyVatNumber(
   let result: VatResult;
   if (!/^[A-Z]{2}$/.test(countryCode) || !number) {
     result = { address: null, checkedAt: now, name: null, status: "invalid", vatNumber };
-  } else if (!VIES_COUNTRIES.has(countryCode)) {
+  } else if (!isViesCountry(countryCode)) {
     result = { address: null, checkedAt: now, name: null, status: "unavailable", vatNumber };
   } else {
     try {
@@ -126,9 +97,14 @@ export async function verifyVatNumber(
 }
 
 export async function clientVatFields(vatNumber?: string | null) {
-  if (!vatNumber?.trim()) {
+  return clientTaxIdentifierFields(taxIdentifierFromLegacyVatNumber(vatNumber));
+}
+
+export async function clientTaxIdentifierFields(input?: TaxIdentifierInput | null) {
+  const identifier = normalizeTaxIdentifier(input);
+  if (!identifier) {
     return {
-      vatNumber: vatNumber ?? null,
+      ...taxIdentifierFields(null),
       vatRegistryAddress: null,
       vatRegistryName: null,
       vatStatus: null,
@@ -136,9 +112,19 @@ export async function clientVatFields(vatNumber?: string | null) {
     } as const;
   }
 
-  const result = await verifyVatNumber(vatNumber);
+  if (identifier.type !== "eu_vat") {
+    return {
+      ...taxIdentifierFields(identifier),
+      vatRegistryAddress: null,
+      vatRegistryName: null,
+      vatStatus: null,
+      vatVerifiedAt: null,
+    } as const;
+  }
+
+  const result = await verifyVatNumber(identifier.canonicalValue);
   return {
-    vatNumber: result.vatNumber,
+    ...taxIdentifierFields(identifier),
     vatRegistryAddress: result.address,
     vatRegistryName: result.name,
     vatStatus: result.status,

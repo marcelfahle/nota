@@ -1,4 +1,5 @@
 import { absoluteDecimal, formatStoredMoney, formatVariableDecimal } from "@/lib/money";
+import type { TaxIdentifier } from "@/lib/tax-identifier";
 
 type XRechnungData = {
   business: {
@@ -8,14 +9,14 @@ type XRechnungData = {
     email: string;
     iban?: string | null;
     name?: string | null;
-    vatNumber?: string | null;
+    taxIdentifier?: TaxIdentifier | null;
   };
   client: {
     address?: string | null;
     company?: string | null;
     email: string;
     name: string;
-    vatNumber?: string | null;
+    taxIdentifier?: TaxIdentifier | null;
   };
   invoice: {
     currency: string;
@@ -39,6 +40,13 @@ type XRechnungData = {
     total: string;
   };
 };
+
+export class XRechnungValidationError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "XRechnungValidationError";
+  }
+}
 
 // ---------------------------------------------------------------------------
 // Country name → ISO 3166-1 alpha-2
@@ -193,6 +201,15 @@ function buildTaxCategory(
 // ---------------------------------------------------------------------------
 export function generateXRechnung(data: XRechnungData): string {
   const { business, client, invoice } = data;
+  if (business.taxIdentifier && business.taxIdentifier.type !== "eu_vat") {
+    throw new XRechnungValidationError(
+      "XRechnung requires supported EU legal tax data; an EIN or generic tax ID cannot be exported as VAT.",
+    );
+  }
+  const businessVatNumber =
+    business.taxIdentifier?.type === "eu_vat" ? business.taxIdentifier.canonicalValue : null;
+  const clientVatNumber =
+    client.taxIdentifier?.type === "eu_vat" ? client.taxIdentifier.canonicalValue : null;
   const cur = escapeXml(invoice.currency);
   const tax = buildTaxCategory(invoice.reverseCharge, invoice.taxRate);
   const buyerName = escapeXml(client.company || client.name);
@@ -268,7 +285,7 @@ ${isCreditNote && invoice.originalNumber ? `<cac:BillingReference>\n<cac:Invoice
 <cbc:EndpointID schemeID="EM">${escapeXml(business.email)}</cbc:EndpointID>
 ${business.name ? `<cac:PartyName>\n<cbc:Name>${escapeXml(business.name)}</cbc:Name>\n</cac:PartyName>` : ""}
 ${buildPartyAddress(business.address)}
-${business.vatNumber ? `<cac:PartyTaxScheme>\n<cbc:CompanyID>${escapeXml(business.vatNumber)}</cbc:CompanyID>\n<cac:TaxScheme>\n<cbc:ID>VAT</cbc:ID>\n</cac:TaxScheme>\n</cac:PartyTaxScheme>` : ""}
+${businessVatNumber ? `<cac:PartyTaxScheme>\n<cbc:CompanyID>${escapeXml(businessVatNumber)}</cbc:CompanyID>\n<cac:TaxScheme>\n<cbc:ID>VAT</cbc:ID>\n</cac:TaxScheme>\n</cac:PartyTaxScheme>` : ""}
 <cac:PartyLegalEntity>
 <cbc:RegistrationName>${escapeXml(business.name || business.email)}</cbc:RegistrationName>
 </cac:PartyLegalEntity>
@@ -284,7 +301,7 @@ ${business.vatNumber ? `<cac:PartyTaxScheme>\n<cbc:CompanyID>${escapeXml(busines
 <cbc:Name>${buyerName}</cbc:Name>
 </cac:PartyName>
 ${buildPartyAddress(client.address)}
-${client.vatNumber ? `<cac:PartyTaxScheme>\n<cbc:CompanyID>${escapeXml(client.vatNumber)}</cbc:CompanyID>\n<cac:TaxScheme>\n<cbc:ID>VAT</cbc:ID>\n</cac:TaxScheme>\n</cac:PartyTaxScheme>` : ""}
+${clientVatNumber ? `<cac:PartyTaxScheme>\n<cbc:CompanyID>${escapeXml(clientVatNumber)}</cbc:CompanyID>\n<cac:TaxScheme>\n<cbc:ID>VAT</cbc:ID>\n</cac:TaxScheme>\n</cac:PartyTaxScheme>` : ""}
 <cac:PartyLegalEntity>
 <cbc:RegistrationName>${buyerName}</cbc:RegistrationName>
 </cac:PartyLegalEntity>

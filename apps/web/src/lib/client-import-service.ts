@@ -4,6 +4,8 @@ import { revalidatePath } from "next/cache";
 import { previewClientImport } from "@/lib/client-import";
 import { db } from "@/lib/db";
 import { clients } from "@/lib/db/schema";
+import { taxIdentifierFromLegacyVatNumber } from "@/lib/tax-identifier";
+import { clientTaxIdentifierFields } from "@/lib/vat";
 
 type ImportContext = { org: { defaultCurrency: string | null; id: string }; user: { id: string } };
 
@@ -31,13 +33,20 @@ export async function importClientsCsv(auth: ImportContext, csv: string, preview
     }
     const ready = preview.rows.filter((row) => row.status === "ready");
     if (ready.length) {
-      await tx.insert(clients).values(
-        ready.map((row) => ({
-          ...row.client,
-          orgId: auth.org.id,
-          userId: auth.user.id,
-        })),
+      const values = await Promise.all(
+        ready.map(async (row) => {
+          const { taxIdentifier, vatNumber, ...client } = row.client;
+          return {
+            ...client,
+            ...(await clientTaxIdentifierFields(
+              taxIdentifier ?? taxIdentifierFromLegacyVatNumber(vatNumber),
+            )),
+            orgId: auth.org.id,
+            userId: auth.user.id,
+          };
+        }),
       );
+      await tx.insert(clients).values(values);
     }
     return { added: ready.length, counts: preview.counts, stale: false as const };
   });

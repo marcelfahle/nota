@@ -92,6 +92,9 @@ export default async function SettingsPage({
     profileSources: org.profileSources,
     region: org.region,
     street: org.street,
+    taxIdentifierCountryCode: org.taxIdentifierCountryCode,
+    taxIdentifierType: org.taxIdentifierType,
+    taxIdentifierValue: org.taxIdentifierValue,
     vatNumber: org.vatNumber,
     website: org.website,
   };

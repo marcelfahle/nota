@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ADDRESS_FIELDS, addressNeedsReview } from "@/lib/onboarding-address";
 import type { ProfileFieldKey, SiteProfile } from "@/lib/site-reader/types";
+import type { TaxIdentifierType } from "@/lib/tax-identifier";
 import { cn } from "@/lib/utils";
 
 import type { SiteRead, VatReply } from "./use-site-read";
@@ -114,12 +115,15 @@ const VAT_MESSAGES: Record<Exclude<VatReply, "valid-with-details">, string> = {
 
 function VatStep({ profile, read }: { profile: SiteProfile; read: SiteRead }) {
   const fields = profile.fields;
-  const [value, setValue] = useState(fields.vatNumber?.value ?? "");
+  const [value, setValue] = useState(profile.taxIdentifier?.value ?? fields.vatNumber?.value ?? "");
   const [pending, setPending] = useState(false);
   const [reply, setReply] = useState<VatReply | null>(null);
   const [error, setError] = useState<string | null>(null);
   const country = fields.countryCode?.value?.toUpperCase();
   const outsideEu = Boolean(country) && !EU.has(country!);
+  const suggestedType = profile.taxIdentifier?.type ?? (outsideEu ? "tax_id" : "eu_vat");
+  const [chosenType, setChosenType] = useState<TaxIdentifierType | null>(null);
+  const type = chosenType ?? suggestedType;
   const hasLegal = Boolean(fields.legalName && fields.street);
 
   async function onSubmit(event: FormEvent) {
@@ -129,7 +133,7 @@ function VatStep({ profile, read }: { profile: SiteProfile; read: SiteRead }) {
     }
     setPending(true);
     setError(null);
-    const result = await read.checkVat(value);
+    const result = await read.checkVat({ countryCode: country, type, value });
     setPending(false);
     if (typeof result === "string") {
       setReply(result);
@@ -168,9 +172,11 @@ function VatStep({ profile, read }: { profile: SiteProfile; read: SiteRead }) {
           </>
         ) : hasLegal ? (
           <>
-            {outsideEu ? "Your tax ID" : "Your VAT ID"}
+            {type === "us_ein" ? "Your EIN" : type === "eu_vat" ? "Your VAT ID" : "Your tax ID"}
             {fields.vatNumber
-              ? " was on your site. Check it against the registry if you like."
+              ? type === "eu_vat"
+                ? " was on your site. Check it against the EU registry if you like."
+                : " was on your site. Confirm it here if you use it."
               : " wasn’t on your site. Add it here if you have one."}
           </>
         ) : outsideEu ? (
@@ -184,8 +190,24 @@ function VatStep({ profile, read }: { profile: SiteProfile; read: SiteRead }) {
       </p>
 
       <form className="flex flex-wrap items-center gap-2 font-sans" onSubmit={onSubmit}>
+        <label className="sr-only" htmlFor="onboarding-tax-id-type">
+          Tax identifier type
+        </label>
+        <select
+          className="h-11 rounded-md border border-input bg-card px-3 text-sm"
+          id="onboarding-tax-id-type"
+          onChange={(event) => {
+            setChosenType(event.target.value as TaxIdentifierType);
+            setReply(null);
+          }}
+          value={type}
+        >
+          <option value="eu_vat">EU VAT ID</option>
+          <option value="us_ein">US EIN</option>
+          <option value="tax_id">Tax ID</option>
+        </select>
         <label className="sr-only" htmlFor="onboarding-vat-input">
-          {outsideEu ? "Tax ID" : "VAT ID"}
+          {type === "us_ein" ? "EIN" : type === "eu_vat" ? "VAT ID" : "Tax ID"}
         </label>
         <Input
           autoCapitalize="characters"
@@ -197,7 +219,13 @@ function VatStep({ profile, read }: { profile: SiteProfile; read: SiteRead }) {
             setValue(event.target.value);
             setReply(null);
           }}
-          placeholder={outsideEu ? "Tax ID (optional)" : "ESB12345678"}
+          placeholder={
+            type === "us_ein"
+              ? "12-3456789"
+              : type === "eu_vat"
+                ? "ESB12345678"
+                : "Tax ID (optional)"
+          }
           spellCheck={false}
           value={value}
         />
@@ -209,7 +237,7 @@ function VatStep({ profile, read }: { profile: SiteProfile; read: SiteRead }) {
           variant="outline"
         >
           {pending ? <Loader2 className="animate-spin" /> : null}
-          {outsideEu ? "Save" : "Check"}
+          {type === "eu_vat" ? "Check" : "Save"}
         </Button>
       </form>
 

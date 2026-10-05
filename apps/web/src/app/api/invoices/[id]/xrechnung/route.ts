@@ -6,7 +6,8 @@ import { formatOrgAddress } from "@/lib/branding";
 import { db } from "@/lib/db";
 import { bankAccounts, clients, invoices, lineItems } from "@/lib/db/schema";
 import { buildInvoiceFilename } from "@/lib/invoice-filename";
-import { generateXRechnung } from "@/lib/xrechnung";
+import { invoiceTaxIdentifier } from "@/lib/tax-identifier";
+import { generateXRechnung, XRechnungValidationError } from "@/lib/xrechnung";
 
 export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -63,45 +64,53 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
     bankAccount = defaultBa ?? null;
   }
 
-  const xml = generateXRechnung({
-    business: {
-      address: formatOrgAddress(org),
-      bankDetails: bankAccount?.details ?? null,
-      bic: bankAccount?.bic ?? null,
-      email: user.email,
-      iban: bankAccount?.iban ?? null,
-      name: org.businessName ?? org.name,
-      vatNumber: org.vatNumber,
-    },
-    client: {
-      address: client.address,
-      company: client.company,
-      email: client.email,
-      name: client.name,
-      vatNumber: client.vatNumber,
-    },
-    invoice: {
-      currency: invoice.currency ?? "EUR",
-      dueAt: invoice.dueAt,
-      issuedAt: invoice.issuedAt,
-      kind: invoice.kind,
-      lineItems: items.map((item) => ({
-        amount: item.amount,
-        description: item.description,
-        quantity: item.quantity,
-        unitPrice: item.unitPrice,
-      })),
-      notes: invoice.notes,
-      number: invoice.number,
-      originalNumber: creditedInvoice?.number,
-      paymentLinkUrl: invoice.stripePaymentLinkUrl,
-      reverseCharge: invoice.reverseCharge,
-      subtotal: invoice.subtotal ?? "0.00",
-      taxAmount: invoice.taxAmount ?? "0.00",
-      taxRate: invoice.taxRate ?? "0.00",
-      total: invoice.total ?? "0.00",
-    },
-  });
+  let xml;
+  try {
+    xml = generateXRechnung({
+      business: {
+        address: formatOrgAddress(org),
+        bankDetails: bankAccount?.details ?? null,
+        bic: bankAccount?.bic ?? null,
+        email: user.email,
+        iban: bankAccount?.iban ?? null,
+        name: org.businessName ?? org.name,
+        taxIdentifier: invoiceTaxIdentifier(invoice.status, invoice.sellerTaxIdentifier, org),
+      },
+      client: {
+        address: client.address,
+        company: client.company,
+        email: client.email,
+        name: client.name,
+        taxIdentifier: invoiceTaxIdentifier(invoice.status, invoice.clientTaxIdentifier, client),
+      },
+      invoice: {
+        currency: invoice.currency ?? "EUR",
+        dueAt: invoice.dueAt,
+        issuedAt: invoice.issuedAt,
+        kind: invoice.kind,
+        lineItems: items.map((item) => ({
+          amount: item.amount,
+          description: item.description,
+          quantity: item.quantity,
+          unitPrice: item.unitPrice,
+        })),
+        notes: invoice.notes,
+        number: invoice.number,
+        originalNumber: creditedInvoice?.number,
+        paymentLinkUrl: invoice.stripePaymentLinkUrl,
+        reverseCharge: invoice.reverseCharge,
+        subtotal: invoice.subtotal ?? "0.00",
+        taxAmount: invoice.taxAmount ?? "0.00",
+        taxRate: invoice.taxRate ?? "0.00",
+        total: invoice.total ?? "0.00",
+      },
+    });
+  } catch (error) {
+    if (error instanceof XRechnungValidationError) {
+      return NextResponse.json({ error: error.message }, { status: 422 });
+    }
+    throw error;
+  }
 
   const filename = buildInvoiceFilename(
     {

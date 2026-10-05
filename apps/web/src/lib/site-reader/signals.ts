@@ -1,6 +1,13 @@
 // Deterministic signals from a homepage's HTML. No parser dependency: the few
 // tags we need are matched directly, and nothing from the page is executed.
 
+import {
+  normalizeTaxIdentifier,
+  taxIdentifierFromLegacyVatNumber,
+  TaxIdentifierValidationError,
+  type TaxIdentifier,
+} from "@/lib/tax-identifier";
+
 import { elementBlocks, inlineStyles, openTags, stripElements, visibleText } from "./html";
 
 export type SiteSignals = {
@@ -20,6 +27,7 @@ export type SiteSignals = {
   logos: Array<string>;
   name: { detail: string; value: string } | null;
   stylesheets: Array<string>;
+  taxIdentifier: TaxIdentifier | null;
   themeColor: string | null;
   vatNumber: string | null;
 };
@@ -188,6 +196,29 @@ export function findVatNumber(text: string) {
     }
   }
   return null;
+}
+
+const EIN_LABEL = /(?:\bEIN\b|Employer Identification Number)[^\d]{0,30}(\d{2}[\s-]?\d{7})/i;
+
+export function normalizeDiscoveredTaxIdentifier(value: string) {
+  try {
+    return taxIdentifierFromLegacyVatNumber(value);
+  } catch (error) {
+    if (error instanceof TaxIdentifierValidationError) {
+      return null;
+    }
+    throw error;
+  }
+}
+
+/** A labelled US EIN or EU VAT ID. Unlabelled number-like values are ignored. */
+export function findTaxIdentifier(text: string) {
+  const vatNumber = findVatNumber(text);
+  if (vatNumber) {
+    return normalizeDiscoveredTaxIdentifier(vatNumber);
+  }
+  const ein = text.match(EIN_LABEL)?.[1];
+  return ein ? normalizeTaxIdentifier({ type: "us_ein", value: ein }) : null;
 }
 
 // Every quantifier is bounded: this runs over whole untrusted documents.
@@ -388,6 +419,14 @@ export function extractSignals(html: string, pageUrl: string): SiteSignals {
 
   const text = decodeEntities(visibleText(html));
 
+  const vatNumber =
+    clean(organization?.vatID, 20)
+      ?.replaceAll(/[\s.-]/g, "")
+      .toUpperCase() ?? findVatNumber(text);
+  const taxIdentifier = vatNumber
+    ? normalizeDiscoveredTaxIdentifier(vatNumber)
+    : findTaxIdentifier(text);
+
   return {
     address: address && Object.values(address).some(Boolean) ? address : null,
     description:
@@ -405,11 +444,9 @@ export function extractSignals(html: string, pageUrl: string): SiteSignals {
     logos: [...new Set(logos)].slice(0, 4),
     name,
     stylesheets: [...new Set(stylesheets)].slice(0, 4),
+    taxIdentifier,
     themeColor:
       clean(meta.get("theme-color"), 40) ?? clean(meta.get("msapplication-tilecolor"), 40),
-    vatNumber:
-      clean(organization?.vatID, 20)
-        ?.replaceAll(/[\s.-]/g, "")
-        .toUpperCase() ?? findVatNumber(text),
+    vatNumber: taxIdentifier?.type === "eu_vat" ? taxIdentifier.value : null,
   };
 }
