@@ -19,7 +19,7 @@ SELECT
 	COALESCE("created_at", now()),
 	"id",
 	"kind",
-	jsonb_build_object('migration', '0020_brief_sentinel', 'status', "status"),
+	jsonb_build_object('migration', '0021_little_strong_guy', 'status', "status"),
 	"number",
 	"org_id",
 	"source",

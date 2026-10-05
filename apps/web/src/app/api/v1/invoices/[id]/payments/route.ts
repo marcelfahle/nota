@@ -4,7 +4,7 @@ import { recordInvoicePaymentFromApi } from "@/lib/api-invoice-actions";
 import { error, json, requireAuth } from "@/lib/api-response";
 
 const paymentSchema = z.object({
-  amount: z.coerce.number().positive(),
+  amount: z.union([z.number().finite(), z.string().trim().min(1)]),
   method: z.enum(["bank_transfer", "other"]).default("bank_transfer"),
   note: z.string().trim().optional(),
   receivedAt: z.coerce.date().optional(),

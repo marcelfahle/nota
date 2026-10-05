@@ -21,8 +21,8 @@ import {
 
 const lineItemSchema = z.object({
   description: z.string().min(1, "Description is required"),
-  quantity: z.coerce.number().positive("Quantity must be positive"),
-  unitPrice: z.coerce.number().min(0, "Unit price must be non-negative"),
+  quantity: z.string().trim().min(1, "Quantity is required"),
+  unitPrice: z.string().trim().min(1, "Unit price is required"),
 });
 
 const invoiceSchema = z.object({
@@ -34,11 +34,11 @@ const invoiceSchema = z.object({
   lineItems: z.array(lineItemSchema).min(1, "At least one line item is required"),
   notes: z.string().optional(),
   reverseCharge: z.string().default("false"),
-  taxRate: z.coerce.number().min(0).max(100).default(0),
+  taxRate: z.string().trim().default("0"),
 });
 
 const paymentSchema = z.object({
-  amount: z.number().positive("Payment amount must be positive"),
+  amount: z.union([z.number().finite(), z.string().trim().min(1)]),
   invoiceId: z.string().uuid("Invalid invoice"),
   method: z.enum(["bank_transfer", "other"]),
   note: z.string().trim().max(500, "Note is too long").optional(),
@@ -189,7 +189,7 @@ export async function markInvoicePaid(invoiceId: string) {
 
 export async function recordInvoicePayment(
   invoiceId: string,
-  input: { amount: number; method: "bank_transfer" | "other"; note?: string },
+  input: { amount: number | string; method: "bank_transfer" | "other"; note?: string },
 ) {
   const parsed = paymentSchema.safeParse({ invoiceId, ...input });
   if (!parsed.success) {
