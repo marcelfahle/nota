@@ -63,6 +63,51 @@ function profileFor(domain: string): SiteProfile {
   };
 }
 
+function staleUsProfile(domain: string): SiteProfile {
+  const profile = profileFor(domain);
+  return {
+    ...profile,
+    fields: {
+      ...profile.fields,
+      city: {
+        confidence: 0.5,
+        confirmed: false,
+        detail: "a public business profile",
+        source: "search",
+        value: "Redondo Beach",
+      },
+      country: {
+        confidence: 0.5,
+        confirmed: false,
+        detail: "a public business profile",
+        source: "search",
+        value: "United States",
+      },
+      countryCode: {
+        confidence: 0.5,
+        confirmed: false,
+        detail: "a public business profile",
+        source: "search",
+        value: "US",
+      },
+      postalCode: {
+        confidence: 0.5,
+        confirmed: false,
+        detail: "a public business profile",
+        source: "search",
+        value: "90277",
+      },
+      region: {
+        confidence: 0.5,
+        confirmed: false,
+        detail: "a public business profile",
+        source: "search",
+        value: "CA",
+      },
+    },
+  };
+}
+
 /** A website read that already happened: session row plus its signed cookie. */
 async function seedSession(page: Page, profile: SiteProfile) {
   const session = await createOnboardingSession();
@@ -158,6 +203,115 @@ test("a visitor goes from website to branded invoice to an account with the same
   await expect(page.getByRole("heading", { level: 1, name: "Bold" })).toBeVisible();
   await expect(page.getByText(`hello@${domain}`).first()).toBeVisible();
   await expect(page.getByText("Dénia", { exact: false }).first()).toBeVisible();
+});
+
+test("a combined city/state correction cannot silently retain a stale region or postal code", async ({
+  page,
+}) => {
+  const suffix = uniqueSuffix();
+  const domain = `silverton-${suffix}.example`;
+  await seedSession(page, staleUsProfile(domain));
+  const patches: Array<Record<string, unknown>> = [];
+  await page.route("**/api/onboarding/session", async (route) => {
+    if (route.request().method() !== "PATCH") {
+      await route.continue();
+      return;
+    }
+    patches.push(route.request().postDataJSON() as Record<string, unknown>);
+    const response = await route.fetch();
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    await route.fulfill({ response });
+  });
+
+  await page.goto("/start");
+  const location = page.getByTestId("onboarding-location");
+  await expect(location).toContainText("Redondo Beach, CA 90277, United States");
+  await expect(page.getByTestId("onboarding-keep")).toBeDisabled();
+
+  await page.getByTestId("onboarding-chip-city").click();
+  await page.getByTestId("onboarding-edit-city").fill("Silverton CO");
+  await page.getByTestId("onboarding-edit-city").press("Enter");
+  await expect(page.getByTestId("onboarding-chip-city")).toHaveText("Silverton");
+  await expect(page.getByTestId("onboarding-chip-region")).toHaveText("CO");
+  await expect(location).toContainText("We split your city and state");
+  await expect(location).toContainText("90277");
+
+  await page.getByTestId("onboarding-chip-postalCode").click();
+  await page.getByTestId("onboarding-edit-postalCode").fill("81433");
+  await page.getByTestId("onboarding-edit-postalCode").press("Enter");
+  await expect(page.getByTestId("onboarding-invoice")).toContainText(
+    "81433 Silverton, CO, United States",
+  );
+  const saved = page.waitForResponse((response) => {
+    if (
+      !response.url().endsWith("/api/onboarding/session") ||
+      response.request().method() !== "PATCH"
+    ) {
+      return false;
+    }
+    const body = response.request().postDataJSON() as { confirm?: Record<string, unknown> };
+    return Object.keys(body.confirm ?? {}).length > 0;
+  });
+  await page.getByTestId("onboarding-confirm-location").click();
+  await expect(page.getByTestId("onboarding-keep")).toBeEnabled();
+  await saved;
+
+  // The reviewed structured values survive a fresh server snapshot.
+  await page.reload();
+  await expect(page.getByTestId("onboarding-chip-city")).toHaveText("Silverton");
+  await expect(page.getByTestId("onboarding-chip-region")).toHaveText("CO");
+  await expect(page.getByTestId("onboarding-chip-postalCode")).toHaveText("81433");
+  await expect(page.getByTestId("onboarding-invoice")).toContainText(
+    "81433 Silverton, CO, United States",
+  );
+
+  // A country change clears the old US code and reopens the whole address for review.
+  await page.getByTestId("onboarding-chip-country").click();
+  await page.getByTestId("onboarding-edit-country").fill("United States of America");
+  await page.getByTestId("onboarding-edit-country").press("Enter");
+  await expect(page.getByTestId("onboarding-keep")).toBeDisabled();
+  await page.getByTestId("onboarding-confirm-location").click();
+  await expect(page.getByTestId("onboarding-keep")).toBeEnabled();
+
+  // Continue immediately: settle() must wait for the delayed country edit and confirmation.
+  await page.getByTestId("onboarding-keep").click();
+  const email = `silverton-${suffix}@example.com`;
+  await page.getByTestId("onboarding-name").fill("Synthetic Owner");
+  await page.getByTestId("onboarding-email").fill(email);
+  await page.getByTestId("onboarding-password").fill(`Playwright-${suffix}`);
+  await page.getByTestId("onboarding-save-submit").click();
+  await expect(page).toHaveURL(/\/home$/);
+
+  const [result] = await db
+    .select({ org: orgs })
+    .from(users)
+    .innerJoin(orgMembers, eq(orgMembers.userId, users.id))
+    .innerJoin(orgs, eq(orgs.id, orgMembers.orgId))
+    .where(eq(users.email, email));
+  expect(result.org).toMatchObject({
+    city: "Silverton",
+    country: "United States of America",
+    postalCode: "81433",
+    region: "CO",
+  });
+  expect(result.org.profileSources).toMatchObject({
+    city: { confirmed: true, source: "user" },
+    country: { confirmed: true, source: "user" },
+    postalCode: { confirmed: true, source: "user" },
+    region: { confirmed: true, source: "user" },
+  });
+  expect(patches).toContainEqual(
+    expect.objectContaining({
+      fields: expect.objectContaining({ countryCode: "" }),
+    }),
+  );
+
+  await page.goto("/settings");
+  await page.getByRole("tab", { name: "Brand" }).click();
+  await expect(
+    page.getByText("Silverton, CO, United States of America", { exact: true }),
+  ).toBeVisible();
+  await expect(page.getByText("90277", { exact: true })).toHaveCount(0);
 });
 
 test("abandoning onboarding leaves no org, no user and, after expiry, no stored profile", async ({
@@ -259,6 +413,92 @@ test("the read streams in, and an unreachable site returns to the question", asy
   await page.getByTestId("onboarding-read").click();
   await expect(page.getByTestId("onboarding-error")).toContainText("couldn't reach that website");
   await expect(page.getByTestId("onboarding-blank")).toHaveAttribute("href", "/register");
+});
+
+test("late reader fields cannot overwrite an address correction", async ({ page }) => {
+  const finalProfile = staleUsProfile("late-reader.example");
+  const registryProfile: SiteProfile = {
+    ...finalProfile,
+    fields: {
+      ...finalProfile.fields,
+      city: { confidence: 1, confirmed: true, source: "registry", value: "Amsterdam" },
+      postalCode: { confidence: 1, confirmed: true, source: "registry", value: "1011DL" },
+      region: { confidence: 1, confirmed: true, source: "registry", value: "NH" },
+    },
+  };
+  const field = (key: keyof SiteProfile["fields"]): ReaderEvent => ({
+    field: finalProfile.fields[key]!,
+    key,
+    type: "field",
+  });
+  const events: Array<ReaderEvent> = [
+    { domain: finalProfile.domain, type: "start", website: finalProfile.website },
+    field("name"),
+    field("country"),
+    field("countryCode"),
+    field("city"),
+    field("email"),
+    field("summary"),
+    { colors: finalProfile.colors, type: "colors" },
+    { favicon: null, logo: null, type: "logo" },
+    field("postalCode"),
+    field("region"),
+    { profile: finalProfile, type: "done" },
+  ];
+  const patches: Array<Record<string, unknown>> = [];
+  await page.route("**/api/onboarding/read", (route) =>
+    route.fulfill({
+      body: `${events.map((event) => JSON.stringify(event)).join("\n")}\n`,
+      contentType: "application/x-ndjson",
+    }),
+  );
+  await page.route("**/api/onboarding/session", async (route) => {
+    patches.push(route.request().postDataJSON() as Record<string, unknown>);
+    await route.fulfill({ contentType: "application/json", status: 200 });
+  });
+  await page.route("**/api/onboarding/vat", async (route) => {
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    await route.fulfill({
+      contentType: "application/json",
+      json: { outcome: "valid-with-details", profile: registryProfile },
+      status: 200,
+    });
+  });
+
+  await page.goto("/start");
+  await page.getByTestId("onboarding-website").fill("late-reader.example");
+  await page.getByTestId("onboarding-read").click();
+  await expect(page.getByTestId("onboarding-chip-city")).toHaveText("Redondo Beach");
+  await page.getByTestId("onboarding-chip-city").click();
+  await page.getByTestId("onboarding-edit-city").fill("Silverton CO");
+  await page.getByTestId("onboarding-edit-city").press("Enter");
+
+  await expect(page.getByTestId("onboarding-status")).toHaveText("From late-reader.example");
+  await expect(page.getByTestId("onboarding-chip-city")).toHaveText("Silverton");
+  await expect(page.getByTestId("onboarding-chip-region")).toHaveText("CO");
+
+  // An edit made while a registry request is pending is queued after its response.
+  await page.getByTestId("onboarding-vat-input").fill("US123456");
+  await page.getByTestId("onboarding-vat-submit").click();
+  await page.getByTestId("onboarding-chip-postalCode").click();
+  await page.getByTestId("onboarding-edit-postalCode").fill("81433");
+  await page.getByTestId("onboarding-edit-postalCode").press("Enter");
+  await expect(page.getByTestId("onboarding-vat-result")).toContainText("Valid");
+  await expect(page.getByTestId("onboarding-chip-city")).toHaveText("Silverton");
+  await expect(page.getByTestId("onboarding-chip-region")).toHaveText("CO");
+  await expect(page.getByTestId("onboarding-chip-postalCode")).toHaveText("81433");
+  await page.getByTestId("onboarding-confirm-location").click();
+  await expect.poll(() => patches.length).toBeGreaterThan(0);
+  expect(patches).toContainEqual(
+    expect.objectContaining({
+      fields: expect.objectContaining({ city: "Silverton", region: "CO" }),
+    }),
+  );
+  expect(patches).toContainEqual(
+    expect.objectContaining({
+      fields: expect.objectContaining({ postalCode: "81433" }),
+    }),
+  );
 });
 
 test("the reader refuses internal addresses and non-websites before doing any work", async ({
