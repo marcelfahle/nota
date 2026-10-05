@@ -55,7 +55,12 @@ export function DashboardShell({
   logoUrl: string | null;
   navCounts: { overdue: number; proposals: number };
   stripeDockItems: Array<StripeDockItem>;
-  usage: { limit: number | null; plan: string; sent: number };
+  usage: {
+    deploymentMode: "hosted" | "self-hosted";
+    limit: number | null;
+    plan: string;
+    sent: number;
+  };
   userId: string;
 }) {
   const navItems = [
@@ -257,9 +262,11 @@ export function DashboardShell({
               <div className="flex justify-between gap-2">
                 <span className="nota-label">
                   {usage.limit === null
-                    ? usage.plan === "pro"
-                      ? "Pro plan"
-                      : "Self-hosted"
+                    ? usage.deploymentMode === "self-hosted"
+                      ? "Self-hosted"
+                      : usage.plan === "pro"
+                        ? "Pro plan"
+                        : "Unlimited"
                     : "Free plan"}
                 </span>
                 <span className="font-mono text-[11px]">
@@ -277,7 +284,11 @@ export function DashboardShell({
                 />
               ) : null}
               <Link className="text-xs underline underline-offset-4" href="/settings">
-                {usage.limit !== null ? "View plans and usage" : "Manage billing"}
+                {usage.deploymentMode === "self-hosted"
+                  ? "Deployment settings"
+                  : usage.limit !== null
+                    ? "View plans and usage"
+                    : "Manage billing"}
               </Link>
             </div>
             <div className="flex items-center justify-between gap-2 border-t pt-3 pl-2">

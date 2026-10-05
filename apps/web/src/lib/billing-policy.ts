@@ -6,8 +6,12 @@ export function billingMonth(now = new Date()) {
   return `${now.toISOString().slice(0, 7)}-01`;
 }
 
-export function canSendOnPlan(mode: "connect" | "direct", plan: string, sent: number) {
-  return mode === "direct" || plan === "pro" || sent < FREE_INVOICE_LIMIT;
+export function canSendOnPlan(
+  deploymentMode: "hosted" | "self-hosted",
+  plan: string,
+  sent: number,
+) {
+  return deploymentMode === "self-hosted" || plan === "pro" || sent < FREE_INVOICE_LIMIT;
 }
 
 export function paymentAccount(

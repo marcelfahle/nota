@@ -18,7 +18,7 @@ import {
   proposals,
   users,
 } from "@/lib/db/schema";
-import { getStripeMode } from "@/lib/env";
+import { getDeploymentEnv, getStripeMode } from "@/lib/env";
 import { resolveDueDateChange } from "@/lib/invoice-due-date";
 import {
   canCancelInvoice as canCancelInvoiceStatus,
@@ -559,11 +559,12 @@ export async function sendInvoice(
         return { error: "Only draft invoices can be sent" };
       }
       const mode = getStripeMode().STRIPE_MODE;
+      const deployment = getDeploymentEnv();
       const [usage] = await tx
         .select({ total: count() })
         .from(invoiceSends)
         .where(and(eq(invoiceSends.orgId, org.id), eq(invoiceSends.month, billingMonth(sentAt))));
-      if (!canSendOnPlan(mode, org.plan, usage.total)) {
+      if (!canSendOnPlan(deployment.DEPLOYMENT_MODE, org.plan, usage.total)) {
         return { error: UPGRADE_MESSAGE };
       }
       const [client] = await tx
@@ -584,7 +585,10 @@ export async function sendInvoice(
           return { error: "Assigned bank account not found" };
         }
       }
-      const account = paymentAccount(mode, org.stripeAccountId, org.stripeChargesEnabled);
+      const account =
+        deployment.PAYMENT_MODE === "stripe"
+          ? paymentAccount(mode, org.stripeAccountId, org.stripeChargesEnabled)
+          : null;
       const accountId = account === "platform" ? null : account;
       const paymentLink =
         account && invoice.kind === "invoice"

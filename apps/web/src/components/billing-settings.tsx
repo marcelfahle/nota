@@ -47,7 +47,11 @@ export function BillingSettings({
       ) : null}
       <div className="space-y-3">
         <h2 className="text-lg font-semibold">Payments from your clients</h2>
-        {status.mode === "direct" ? (
+        {status.paymentMode === "bank-transfer" ? (
+          <p className="text-sm text-muted-foreground">
+            Invoices use your bank details. Stripe payment links are disabled for this installation.
+          </p>
+        ) : status.mode === "direct" ? (
           <p className="text-sm text-muted-foreground">
             Payments use this installation’s Stripe account.
           </p>
@@ -122,20 +126,20 @@ export function BillingSettings({
       <div className="space-y-3 border-t pt-6">
         <h2 className="text-lg font-semibold">Your Nota plan</h2>
         <p className="text-sm">
-          {status.mode === "direct"
+          {status.deploymentMode === "self-hosted"
             ? "Self-hosted · Unlimited invoices · Free"
             : status.plan === "pro"
               ? "Nota Pro · Unlimited invoices"
               : `Nota Free · ${status.sent} of 5 invoices sent this month`}
         </p>
-        {status.mode === "connect" ? (
+        {status.deploymentMode === "hosted" ? (
           <p className="text-sm text-muted-foreground">
             Prices are in USD, plus applicable tax calculated at checkout. Every feature is
             included. Free sends reset on the first day of each month (UTC). Your Nota subscription
             is separate from your clients’ invoice payments.
           </p>
         ) : null}
-        {canManage && status.mode === "connect" ? (
+        {canManage && status.deploymentMode === "hosted" ? (
           <div className="flex flex-wrap gap-2">
             {status.plan !== "pro" ? (
               <>

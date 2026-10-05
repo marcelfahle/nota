@@ -43,7 +43,12 @@ export async function GET() {
     loadChatActivity(auth.org.id),
     loadChatMessages(thread.id),
   ]);
-  return Response.json({ activity, messages, threadId: thread.id });
+  return Response.json({
+    activity,
+    available: Boolean(process.env.ANTHROPIC_API_KEY),
+    messages,
+    threadId: thread.id,
+  });
 }
 
 export async function POST(request: Request) {
