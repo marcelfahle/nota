@@ -22,6 +22,7 @@ const clientSchema = z.object({
   email: z.email("A valid email is required").max(320),
   name: z.string().min(1, "A name or company is required").max(250),
   notes: z.string().max(4000).optional(),
+  taxIdentifier: z.object({ type: z.literal("tax_id"), value: z.string().max(100) }).optional(),
   vatNumber: z.string().max(100).optional(),
 });
 
@@ -57,7 +58,8 @@ const aliases: Record<string, Array<string>> = {
   region: ["state", "province", "region", "billingstate"],
   street: ["address1", "addressline1", "street", "streetaddress", "billingaddress1"],
   street2: ["address2", "addressline2", "billingaddress2"],
-  vatNumber: ["vatnumber", "vatid", "taxnumber", "taxid", "taxregistrationnumber"],
+  taxIdentifier: ["taxnumber", "taxid", "taxregistrationnumber"],
+  vatNumber: ["vatnumber", "vatid"],
 };
 
 function normalizeHeader(value: string) {
@@ -177,6 +179,9 @@ export function previewClientImport(
         [contact && contact !== name ? `Contact: ${contact}` : "", value("notes")]
           .filter(Boolean)
           .join("\n") || undefined,
+      taxIdentifier: value("taxIdentifier")
+        ? { type: "tax_id" as const, value: value("taxIdentifier") }
+        : undefined,
       vatNumber: value("vatNumber") || undefined,
     };
     if (record.length !== headers.length) {

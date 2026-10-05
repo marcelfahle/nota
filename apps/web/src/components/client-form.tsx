@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useActionState, useEffect } from "react";
+import { useActionState, useEffect, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -13,6 +13,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  taxIdentifierFromColumns,
+  taxIdentifierLabel,
+  type TaxIdentifierType,
+} from "@/lib/tax-identifier";
 
 type ActionState = { error?: string; success?: boolean } | null;
 
@@ -33,6 +38,9 @@ type ClientFormProps = {
     email?: string;
     name?: string;
     notes?: string | null;
+    taxIdentifierCountryCode?: string | null;
+    taxIdentifierType?: TaxIdentifierType | null;
+    taxIdentifierValue?: string | null;
     vatNumber?: string | null;
   };
   onCancel?: () => void;
@@ -52,6 +60,10 @@ export function ClientForm({
 }: ClientFormProps) {
   const [state, formAction, pending] = useActionState(action, null);
   const router = useRouter();
+  const identifier = taxIdentifierFromColumns(defaultValues ?? {});
+  const [identifierType, setIdentifierType] = useState<TaxIdentifierType>(
+    identifier?.type ?? "tax_id",
+  );
 
   useEffect(() => {
     if (state?.success) {
@@ -99,8 +111,30 @@ export function ClientForm({
           />
         </div>
         <div className="space-y-2">
-          <Label htmlFor="vatNumber">VAT Number</Label>
-          <Input defaultValue={defaultValues?.vatNumber ?? ""} id="vatNumber" name="vatNumber" />
+          <Label htmlFor="taxIdentifierType">Tax identifier type</Label>
+          <Select
+            name="taxIdentifierType"
+            onValueChange={(value) => setIdentifierType(value as TaxIdentifierType)}
+            value={identifierType}
+          >
+            <SelectTrigger className="w-full" id="taxIdentifierType">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="eu_vat">EU VAT ID</SelectItem>
+              <SelectItem value="us_ein">US EIN</SelectItem>
+              <SelectItem value="tax_id">Tax ID</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="space-y-2 sm:col-start-2">
+          <Label htmlFor="taxIdentifierValue">{taxIdentifierLabel({ type: identifierType })}</Label>
+          <Input
+            defaultValue={identifier?.value ?? ""}
+            id="taxIdentifierValue"
+            name="taxIdentifierValue"
+            placeholder={identifierType === "us_ein" ? "12-3456789" : undefined}
+          />
         </div>
       </div>
 

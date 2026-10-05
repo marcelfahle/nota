@@ -5,11 +5,14 @@ import {
   clientPayloadSchema,
   getClientValidationError,
   normalizeClientPayload,
+  taxIdentifierFromClientPayload,
+  withTaxIdentifier,
 } from "@/lib/api-clients";
-import { error, json, paginated, requireAuth } from "@/lib/api-response";
+import { error as apiError, json, paginated, requireAuth } from "@/lib/api-response";
 import { db } from "@/lib/db";
 import { clients, invoices } from "@/lib/db/schema";
-import { clientVatFields } from "@/lib/vat";
+import { TaxIdentifierValidationError } from "@/lib/tax-identifier";
+import { clientTaxIdentifierFields } from "@/lib/vat";
 
 function getPagination(url: URL) {
   const page = Math.max(1, Number.parseInt(url.searchParams.get("page") ?? "1", 10) || 1);
@@ -68,6 +71,10 @@ export async function GET(request: Request) {
         invoiceCount: sql<number>`count(${invoices.id})::int`,
         name: clients.name,
         notes: clients.notes,
+        taxIdentifierCanonicalValue: clients.taxIdentifierCanonicalValue,
+        taxIdentifierCountryCode: clients.taxIdentifierCountryCode,
+        taxIdentifierType: clients.taxIdentifierType,
+        taxIdentifierValue: clients.taxIdentifierValue,
         totalInvoiced: sql<string>`coalesce(sum(${invoices.total}::numeric), 0)`,
         updatedAt: clients.updatedAt,
         vatNumber: clients.vatNumber,
@@ -93,7 +100,7 @@ export async function GET(request: Request) {
       .limit(1),
   ]);
 
-  return paginated(clientRows, {
+  return paginated(clientRows.map(withTaxIdentifier), {
     page,
     perPage,
     total: totalRow?.total ?? 0,
@@ -110,30 +117,41 @@ export async function POST(request: Request) {
   try {
     payload = (await request.json()) as Record<string, unknown>;
   } catch {
-    return error("Invalid JSON body");
+    return apiError("Invalid JSON body");
   }
 
   const result = clientPayloadSchema.safeParse(normalizeClientPayload(payload));
   if (!result.success) {
-    return error(getClientValidationError(result));
+    return apiError(getClientValidationError(result));
   }
 
   if (
     result.data.bankAccountId &&
     !(await bankAccountBelongsToOrg(authResult.auth.org.id, result.data.bankAccountId))
   ) {
-    return error("Invalid bank account");
+    return apiError("Invalid bank account");
   }
 
+  let taxIdentifierFields;
+  try {
+    taxIdentifierFields = await clientTaxIdentifierFields(
+      taxIdentifierFromClientPayload(payload, result.data),
+    );
+  } catch (error) {
+    return apiError(
+      error instanceof TaxIdentifierValidationError ? error.message : "Invalid tax identifier",
+    );
+  }
+  const { taxIdentifier: _taxIdentifier, vatNumber: _vatNumber, ...values } = result.data;
   const [client] = await db
     .insert(clients)
     .values({
-      ...result.data,
-      ...(await clientVatFields(result.data.vatNumber)),
+      ...values,
+      ...taxIdentifierFields,
       orgId: authResult.auth.org.id,
       userId: authResult.auth.user.id,
     })
     .returning();
 
-  return json({ data: client }, 201);
+  return json({ data: withTaxIdentifier(client) }, 201);
 }

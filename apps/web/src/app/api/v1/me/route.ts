@@ -1,4 +1,5 @@
 import { json, requireAuth } from "@/lib/api-response";
+import { taxIdentifierFromColumns } from "@/lib/tax-identifier";
 
 export async function GET(request: Request) {
   const authResult = await requireAuth(request);
@@ -8,7 +9,10 @@ export async function GET(request: Request) {
 
   return json({
     data: {
-      org: authResult.auth.org,
+      org: {
+        ...authResult.auth.org,
+        taxIdentifier: taxIdentifierFromColumns(authResult.auth.org),
+      },
       role: authResult.auth.role,
       user: {
         email: authResult.auth.user.email,

@@ -5,11 +5,14 @@ import {
   clientPayloadSchema,
   getClientValidationError,
   normalizeClientPayload,
+  taxIdentifierFromClientPayload,
+  withTaxIdentifier,
 } from "@/lib/api-clients";
-import { error, json, requireAuth } from "@/lib/api-response";
+import { error as apiError, json, requireAuth } from "@/lib/api-response";
 import { db } from "@/lib/db";
 import { clients, invoices } from "@/lib/db/schema";
-import { clientVatFields } from "@/lib/vat";
+import { TaxIdentifierValidationError } from "@/lib/tax-identifier";
+import { clientTaxIdentifierFields } from "@/lib/vat";
 
 async function getScopedClient(clientId: string, orgId: string) {
   const [client] = await db
@@ -24,6 +27,10 @@ async function getScopedClient(clientId: string, orgId: string) {
       invoiceCount: sql<number>`count(${invoices.id})::int`,
       name: clients.name,
       notes: clients.notes,
+      taxIdentifierCanonicalValue: clients.taxIdentifierCanonicalValue,
+      taxIdentifierCountryCode: clients.taxIdentifierCountryCode,
+      taxIdentifierType: clients.taxIdentifierType,
+      taxIdentifierValue: clients.taxIdentifierValue,
       totalInvoiced: sql<string>`coalesce(sum(${invoices.total}::numeric), 0)`,
       updatedAt: clients.updatedAt,
       userId: clients.userId,
@@ -51,10 +58,10 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   const { id } = await params;
   const client = await getScopedClient(id, authResult.auth.org.id);
   if (!client) {
-    return error("Client not found", 404);
+    return apiError("Client not found", 404);
   }
 
-  return json({ data: client });
+  return json({ data: withTaxIdentifier(client) });
 }
 
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -66,42 +73,49 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   const { id } = await params;
   const existingClient = await getScopedClient(id, authResult.auth.org.id);
   if (!existingClient) {
-    return error("Client not found", 404);
+    return apiError("Client not found", 404);
   }
 
   let payload: Record<string, unknown>;
   try {
     payload = (await request.json()) as Record<string, unknown>;
   } catch {
-    return error("Invalid JSON body");
+    return apiError("Invalid JSON body");
   }
 
   const result = clientPayloadSchema.safeParse(normalizeClientPayload(payload));
   if (!result.success) {
-    return error(getClientValidationError(result));
+    return apiError(getClientValidationError(result));
   }
 
   if (
     result.data.bankAccountId &&
     !(await bankAccountBelongsToOrg(authResult.auth.org.id, result.data.bankAccountId))
   ) {
-    return error("Invalid bank account");
+    return apiError("Invalid bank account");
   }
-  const vatFields = Object.hasOwn(payload, "vatNumber")
-    ? await clientVatFields(result.data.vatNumber)
-    : {};
+  let taxFields = {};
+  try {
+    const taxIdentifier = taxIdentifierFromClientPayload(payload, result.data);
+    taxFields = taxIdentifier === undefined ? {} : await clientTaxIdentifierFields(taxIdentifier);
+  } catch (error) {
+    return apiError(
+      error instanceof TaxIdentifierValidationError ? error.message : "Invalid tax identifier",
+    );
+  }
+  const { taxIdentifier: _taxIdentifier, vatNumber: _vatNumber, ...values } = result.data;
 
   const [client] = await db
     .update(clients)
     .set({
-      ...result.data,
-      ...vatFields,
+      ...values,
+      ...taxFields,
       updatedAt: new Date(),
     })
     .where(and(eq(clients.id, id), eq(clients.orgId, authResult.auth.org.id)))
     .returning();
 
-  return json({ data: client });
+  return json({ data: withTaxIdentifier(client) });
 }
 
 export async function DELETE(request: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -113,11 +127,11 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
   const { id } = await params;
   const client = await getScopedClient(id, authResult.auth.org.id);
   if (!client) {
-    return error("Client not found", 404);
+    return apiError("Client not found", 404);
   }
 
   if (client.invoiceCount > 0) {
-    return error("Client cannot be deleted while invoices exist", 409);
+    return apiError("Client cannot be deleted while invoices exist", 409);
   }
 
   await db

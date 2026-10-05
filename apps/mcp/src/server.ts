@@ -239,6 +239,15 @@ function buildServer(client: NotaClient, options: NotaMcpServerOptions = {}) {
         email: z.string().email(),
         name: z.string().trim().min(1),
         notes: z.string().trim().optional(),
+        taxIdentifier: z
+          .object({
+            countryCode: z.string().length(2).nullable().optional(),
+            type: z.enum(["eu_vat", "us_ein", "tax_id"]),
+            value: z.string().trim().max(100),
+          })
+          .nullable()
+          .optional(),
+        /** @deprecated Use taxIdentifier. */
         vatNumber: z.string().trim().optional(),
       },
     },
@@ -659,7 +668,10 @@ function toToolError(error: unknown) {
 
 function formatClient(client: ClientRecord) {
   const details = [client.name, client.company, client.email].filter(Boolean).join(" | ");
-  return `${details}\nID: ${client.id}`;
+  const taxIdentifier = client.taxIdentifier
+    ? `\n${client.taxIdentifier.type === "eu_vat" ? "VAT ID" : client.taxIdentifier.type === "us_ein" ? "EIN" : "Tax ID"}: ${client.taxIdentifier.value}`
+    : "";
+  return `${details}${taxIdentifier}\nID: ${client.id}`;
 }
 
 function formatClientList(clients: Array<ClientRecord>) {
