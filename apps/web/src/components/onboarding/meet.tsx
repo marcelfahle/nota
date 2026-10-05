@@ -5,6 +5,7 @@ import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "rea
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { ADDRESS_FIELDS, addressNeedsReview } from "@/lib/onboarding-address";
 import type { ProfileFieldKey, SiteProfile } from "@/lib/site-reader/types";
 import { cn } from "@/lib/utils";
 
@@ -215,7 +216,7 @@ function VatStep({ profile, read }: { profile: SiteProfile; read: SiteRead }) {
       {reply === "valid-with-details" ? (
         <p className="flex items-start gap-2 font-sans text-sm" data-testid="onboarding-vat-result">
           <Check aria-hidden="true" className="mt-0.5 size-4 shrink-0" />
-          Valid. Your legal name and address came straight from the registry.
+          Valid. We used the registry details you hadn&rsquo;t already confirmed.
         </p>
       ) : reply ? (
         <p
@@ -285,10 +286,9 @@ export function Meet({ read }: { read: SiteRead }) {
   const fields = profile.fields;
   const reading = status === "reading";
   const location = fields.city ?? fields.country;
-  const foundElsewhere = location?.source === "search" && !location.confirmed;
-  const locationKeys = (["city", "region", "country", "countryCode"] as const).filter(
-    (key) => fields[key]?.source === "search",
-  );
+  const reviewLocation = addressNeedsReview(fields);
+  const foundElsewhere = location?.source === "search" && reviewLocation;
+  const locationKeys = ADDRESS_FIELDS.filter((key) => fields[key]);
   const guessed = fields.name?.detail === "guessed from your domain";
   const hasLegal = Boolean(fields.legalName && fields.street);
   const edit = (key: ProfileFieldKey) => (value: string) => read.edit(key, value);
@@ -374,26 +374,58 @@ export function Meet({ read }: { read: SiteRead }) {
             </>
           ) : null}
           {fields.city ? (
-            <Chip field="city" label="City" onCommit={edit("city")} value={fields.city.value} />
+            <Chip
+              field="city"
+              label="City"
+              onCommit={(next) => read.editAddress("city", next)}
+              value={fields.city.value}
+            />
           ) : null}
-          {fields.city && fields.country ? ", " : null}
-          {fields.country ? (
+          {fields.region || reviewLocation ? (
+            <>
+              ,{" "}
+              <Chip
+                field="region"
+                label="State or region"
+                onCommit={(next) => read.editAddress("region", next)}
+                value={fields.region?.value ?? ""}
+              />
+            </>
+          ) : null}
+          {fields.postalCode || reviewLocation ? (
+            <>
+              {" "}
+              <Chip
+                field="postalCode"
+                label="Postal code"
+                onCommit={(next) => read.editAddress("postalCode", next)}
+                value={fields.postalCode?.value ?? ""}
+              />
+            </>
+          ) : null}
+          {(fields.city || fields.region || fields.postalCode) && (fields.country || reviewLocation)
+            ? ", "
+            : null}
+          {fields.country || reviewLocation ? (
             <Chip
               field="country"
               label="Country"
-              onCommit={edit("country")}
-              value={fields.country.value}
+              onCommit={(next) => read.editAddress("country", next)}
+              value={fields.country?.value ?? ""}
             />
           ) : null}
           .{" "}
-          {foundElsewhere ? (
+          {fields.region?.detail === "split from your city entry" ? (
+            <>We split your city and state so you can check each one. </>
+          ) : null}
+          {reviewLocation ? (
             <button
               className="onboarding-confirm"
               data-testid="onboarding-confirm-location"
               onClick={() => read.confirm(locationKeys)}
               type="button"
             >
-              That&rsquo;s right
+              Check the full address, then confirm
             </button>
           ) : null}
         </Sentence>

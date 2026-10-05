@@ -60,6 +60,7 @@ export function InvoicePreview({
   const textOnColor =
     profile?.colors.find((candidate) => candidate.hex === color)?.text ?? (color ? "#FFFFFF" : INK);
   const cityLine = [fields.postalCode?.value, fields.city?.value].filter(Boolean).join(" ");
+  const regionLine = fields.region?.value;
   const today = new Date();
   const due = new Date(today.getTime() + 14 * 86_400_000);
   const amount = formatCurrency(1200, "EUR");
@@ -127,8 +128,14 @@ export function InvoicePreview({
                   <Slot missing="Postcode, city" value={cityLine || null} />
                   {fields.country?.value ? (
                     <span className="onboarding-land" key={fields.country.value}>
-                      {cityLine ? ", " : " "}
+                      {cityLine || regionLine ? ", " : " "}
+                      {regionLine ? `${regionLine}, ` : ""}
                       {fields.country.value}
+                    </span>
+                  ) : regionLine ? (
+                    <span className="onboarding-land">
+                      {cityLine ? ", " : " "}
+                      {regionLine}
                     </span>
                   ) : null}
                 </p>

@@ -2,26 +2,42 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import type {
-  ProfileFieldKey,
-  ReaderEvent,
-  ReaderStep,
-  SiteProfile,
+import { ADDRESS_FIELDS, addressChanges, type AddressFieldKey } from "@/lib/onboarding-address";
+import {
+  PROFILE_FIELDS,
+  type ProfileField,
+  type ProfileFieldKey,
+  type ReaderEvent,
+  type ReaderStep,
+  type SiteProfile,
 } from "@/lib/site-reader/types";
 
 export type ReadStatus = "done" | "error" | "idle" | "reading";
 export type StepState = "active" | "done" | "skipped";
 export type VatReply = "invalid" | "tax-id" | "unavailable" | "valid" | "valid-with-details";
 
-type Edits = { brandColor?: string; confirm: Set<string>; fields: Record<string, string> };
+type Edits = {
+  brandColor?: string;
+  confirm: Partial<Record<ProfileFieldKey, ProfileField>>;
+  fields: Record<string, string>;
+  review: Set<ProfileFieldKey>;
+};
+
+function emptyEdits(): Edits {
+  return { confirm: {}, fields: {}, review: new Set() };
+}
 
 // Events can arrive in one burst (a cached read replays instantly). Revealing
 // them a beat apart keeps the page reading like something is being written.
 const REVEAL_MS = 190;
 
-function apply(profile: SiteProfile, event: ReaderEvent): SiteProfile {
+function apply(profile: SiteProfile, event: ReaderEvent, edits: Edits): SiteProfile {
   if (event.type === "field") {
-    return { ...profile, fields: { ...profile.fields, [event.key]: event.field } };
+    if (Object.hasOwn(edits.fields, event.key) || edits.confirm[event.key]) {
+      return profile;
+    }
+    const field = edits.review.has(event.key) ? { ...event.field, confirmed: false } : event.field;
+    return { ...profile, fields: { ...profile.fields, [event.key]: field } };
   }
   if (event.type === "logo") {
     return { ...profile, favicon: event.favicon, logo: event.logo };
@@ -45,40 +61,46 @@ export function useSiteRead(initial: SiteProfile | null) {
   const queue = useRef<Array<ReaderEvent>>([]);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const abort = useRef<AbortController | null>(null);
-  const edits = useRef<Edits>({ confirm: new Set(), fields: {} });
+  const edits = useRef<Edits>(emptyEdits());
   const dirty = useRef(false);
   const saved = useRef(Boolean(initial));
   const flushTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const flushing = useRef<Promise<void> | null>(null);
   const settled = useRef<{ promise: Promise<void>; resolve: () => void } | null>(null);
 
   const flush = useCallback(async () => {
-    if (!saved.current || !dirty.current) {
-      return;
-    }
-    // Send each edit once: a replayed edit would overwrite what the registry
-    // or a later edit put in its place.
-    const sent = edits.current;
-    edits.current = { confirm: new Set(), fields: {} };
-    dirty.current = false;
-    const ok = await fetch("/api/onboarding/session", {
-      body: JSON.stringify({
-        brandColor: sent.brandColor,
-        confirm: [...sent.confirm],
-        fields: sent.fields,
-      }),
-      headers: { "content-type": "application/json" },
-      method: "PATCH",
-    })
-      .then((response) => response.ok)
-      .catch(() => false);
-    if (!ok) {
-      // Put them back for the next attempt; anything edited meanwhile wins.
-      edits.current = {
-        brandColor: edits.current.brandColor ?? sent.brandColor,
-        confirm: new Set([...sent.confirm, ...edits.current.confirm]),
-        fields: { ...sent.fields, ...edits.current.fields },
-      };
-      dirty.current = true;
+    const previous = flushing.current ?? Promise.resolve();
+    const operation = previous.then(async () => {
+      while (saved.current && dirty.current) {
+        // Send each edit once. Edits made during this request are sent by the
+        // next loop iteration, so account creation cannot race an older PATCH.
+        const sent = edits.current;
+        edits.current = emptyEdits();
+        dirty.current = false;
+        const ok = await fetch("/api/onboarding/session", {
+          body: JSON.stringify({ ...sent, review: [...sent.review] }),
+          headers: { "content-type": "application/json" },
+          method: "PATCH",
+        })
+          .then((response) => response.ok)
+          .catch(() => false);
+        if (!ok) {
+          // Put them back for the next attempt; anything edited meanwhile wins.
+          edits.current = {
+            brandColor: edits.current.brandColor ?? sent.brandColor,
+            confirm: { ...sent.confirm, ...edits.current.confirm },
+            fields: { ...sent.fields, ...edits.current.fields },
+            review: new Set([...sent.review, ...edits.current.review]),
+          };
+          dirty.current = true;
+          break;
+        }
+      }
+    });
+    flushing.current = operation;
+    await operation;
+    if (flushing.current === operation) {
+      flushing.current = null;
     }
   }, []);
 
@@ -105,7 +127,7 @@ export function useSiteRead(initial: SiteProfile | null) {
       setStatus("error");
       settled.current?.resolve();
     } else {
-      setProfile((current) => (current ? apply(current, event) : current));
+      setProfile((current) => (current ? apply(current, event, edits.current) : current));
     }
     if (queue.current.length > 0) {
       timer.current = setTimeout(drain, REVEAL_MS);
@@ -144,7 +166,7 @@ export function useSiteRead(initial: SiteProfile | null) {
       const controller = new AbortController();
       abort.current = controller;
       queue.current = [];
-      edits.current = { confirm: new Set(), fields: {} };
+      edits.current = emptyEdits();
       dirty.current = false;
       saved.current = false;
       let resolve = () => {};
@@ -240,11 +262,47 @@ export function useSiteRead(initial: SiteProfile | null) {
     [scheduleFlush],
   );
 
+  const editAddress = useCallback(
+    (key: AddressFieldKey, value: string) => {
+      const trimmed = value.trim();
+      setProfile((current) => {
+        if (!current) {
+          return current;
+        }
+        const fields = { ...current.fields };
+        const { changes, split } = addressChanges(key, trimmed, fields);
+        for (const [field, nextValue] of Object.entries(changes) as Array<
+          [AddressFieldKey, string]
+        >) {
+          edits.current.fields[field] = nextValue;
+          delete edits.current.confirm[field];
+          if (nextValue) {
+            fields[field] = {
+              confidence: 1,
+              confirmed: false,
+              ...(split ? { detail: "split from your city entry" } : {}),
+              source: "user",
+              value: nextValue,
+            };
+          } else {
+            delete fields[field];
+          }
+        }
+        for (const field of ADDRESS_FIELDS) {
+          if (fields[field]) {
+            edits.current.review.add(field);
+            fields[field] = { ...fields[field], confirmed: false };
+          }
+        }
+        return { ...current, fields };
+      });
+      scheduleFlush();
+    },
+    [scheduleFlush],
+  );
+
   const confirm = useCallback(
     (keys: Array<ProfileFieldKey>) => {
-      for (const key of keys) {
-        edits.current.confirm.add(key);
-      }
       setProfile((current) => {
         if (!current) {
           return current;
@@ -253,6 +311,8 @@ export function useSiteRead(initial: SiteProfile | null) {
         for (const key of keys) {
           if (fields[key]) {
             fields[key] = { ...fields[key], confirmed: true };
+            edits.current.confirm[key] = fields[key];
+            edits.current.review.delete(key);
           }
         }
         return { ...current, fields };
@@ -283,27 +343,68 @@ export function useSiteRead(initial: SiteProfile | null) {
   const checkVat = useCallback(
     async (vatNumber: string): Promise<VatReply | { error: string }> => {
       await settle();
-      try {
-        const response = await fetch("/api/onboarding/vat", {
-          body: JSON.stringify({ vatNumber }),
-          headers: { "content-type": "application/json" },
-          method: "POST",
-        });
-        const reply = (await response.json()) as {
-          error?: string;
-          outcome?: VatReply;
-          profile?: SiteProfile;
-        };
-        if (!response.ok || !reply.outcome || !reply.profile) {
-          return { error: reply.error ?? "We couldn't check that right now." };
+      let result: VatReply | { error: string } = {
+        error: "We couldn't check that right now.",
+      };
+      let returnedProfile: SiteProfile | null = null;
+      const previous = flushing.current ?? Promise.resolve();
+      const operation = previous.then(async () => {
+        try {
+          const response = await fetch("/api/onboarding/vat", {
+            body: JSON.stringify({ vatNumber }),
+            headers: { "content-type": "application/json" },
+            method: "POST",
+          });
+          const reply = (await response.json()) as {
+            error?: string;
+            outcome?: VatReply;
+            profile?: SiteProfile;
+          };
+          if (!response.ok || !reply.outcome || !reply.profile) {
+            result = { error: reply.error ?? "We couldn't check that right now." };
+            return;
+          }
+          result = reply.outcome;
+          returnedProfile = reply.profile;
+        } catch {
+          result = { error: "We couldn't check that right now." };
         }
-        setProfile(reply.profile);
-        return reply.outcome;
-      } catch {
-        return { error: "We couldn't check that right now." };
+      });
+      flushing.current = operation;
+      await operation;
+      if (flushing.current === operation) {
+        flushing.current = null;
       }
+      if (returnedProfile) {
+        setProfile((current) => {
+          if (!current) {
+            return returnedProfile;
+          }
+          const fields = { ...returnedProfile!.fields };
+          for (const key of PROFILE_FIELDS) {
+            const currentField = current.fields[key];
+            if (
+              Object.hasOwn(edits.current.fields, key) ||
+              edits.current.confirm[key] ||
+              edits.current.review.has(key) ||
+              currentField?.source === "user" ||
+              (currentField?.confirmed && currentField.source !== "registry")
+            ) {
+              if (currentField) {
+                fields[key] = currentField;
+              } else {
+                delete fields[key];
+              }
+            }
+          }
+          return { ...returnedProfile!, fields };
+        });
+      }
+      // Edits made while the registry was answering are ordered after it.
+      await flush();
+      return result;
     },
-    [settle],
+    [flush, settle],
   );
 
   useEffect(
@@ -316,7 +417,20 @@ export function useSiteRead(initial: SiteProfile | null) {
     [],
   );
 
-  return { checkVat, confirm, edit, error, pickColor, profile, read, reset, settle, status, steps };
+  return {
+    checkVat,
+    confirm,
+    edit,
+    editAddress,
+    error,
+    pickColor,
+    profile,
+    read,
+    reset,
+    settle,
+    status,
+    steps,
+  };
 }
 
 export type SiteRead = ReturnType<typeof useSiteRead>;

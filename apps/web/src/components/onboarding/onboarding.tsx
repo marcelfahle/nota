@@ -13,6 +13,7 @@ import { Label } from "@/components/ui/label";
 import { HOME_URL } from "@/lib/app-brand";
 import { authClient } from "@/lib/auth-client";
 import { continueAfterAuth } from "@/lib/auth-redirect";
+import { addressNeedsReview } from "@/lib/onboarding-address";
 import type { SiteProfile } from "@/lib/site-reader/types";
 import { cn } from "@/lib/utils";
 
@@ -187,6 +188,7 @@ export function Onboarding({ initialProfile }: { initialProfile: SiteProfile | n
   const { profile, status } = read;
   const name = profile?.fields.name?.value;
   const reading = status === "reading";
+  const addressUnreviewed = profile ? addressNeedsReview(profile.fields) : false;
 
   // A failed read returns to the question with the reason, not to a dead end.
   useEffect(() => {
@@ -378,7 +380,7 @@ export function Onboarding({ initialProfile }: { initialProfile: SiteProfile | n
               <Button
                 className="h-12 px-6 text-base font-semibold"
                 data-testid="onboarding-keep"
-                disabled={!name}
+                disabled={!name || addressUnreviewed}
                 onClick={() => transition(() => setStep("save"))}
                 type="button"
               >
@@ -408,7 +410,7 @@ export function Onboarding({ initialProfile }: { initialProfile: SiteProfile | n
             <Button
               className="h-12 flex-1 px-5 text-base font-semibold"
               data-testid="onboarding-keep-mobile"
-              disabled={!name}
+              disabled={!name || addressUnreviewed}
               onClick={() => transition(() => setStep("save"))}
               type="button"
             >
