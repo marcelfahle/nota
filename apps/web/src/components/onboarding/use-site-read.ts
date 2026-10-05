@@ -36,7 +36,9 @@ function apply(profile: SiteProfile, event: ReaderEvent, edits: Edits): SiteProf
     if (Object.hasOwn(edits.fields, event.key) || edits.confirm[event.key]) {
       return profile;
     }
-    const field = edits.review.has(event.key) ? { ...event.field, confirmed: false } : event.field;
+    const field = edits.review.has(event.key)
+      ? { ...event.field, confirmed: false, reviewRequired: true }
+      : event.field;
     return { ...profile, fields: { ...profile.fields, [event.key]: field } };
   }
   if (event.type === "logo") {
@@ -281,6 +283,7 @@ export function useSiteRead(initial: SiteProfile | null) {
               confidence: 1,
               confirmed: false,
               ...(split ? { detail: "split from your city entry" } : {}),
+              reviewRequired: true,
               source: "user",
               value: nextValue,
             };
@@ -291,7 +294,7 @@ export function useSiteRead(initial: SiteProfile | null) {
         for (const field of ADDRESS_FIELDS) {
           if (fields[field]) {
             edits.current.review.add(field);
-            fields[field] = { ...fields[field], confirmed: false };
+            fields[field] = { ...fields[field], confirmed: false, reviewRequired: true };
           }
         }
         return { ...current, fields };
@@ -311,6 +314,7 @@ export function useSiteRead(initial: SiteProfile | null) {
         for (const key of keys) {
           if (fields[key]) {
             fields[key] = { ...fields[key], confirmed: true };
+            delete fields[key].reviewRequired;
             edits.current.confirm[key] = fields[key];
             edits.current.review.delete(key);
           }

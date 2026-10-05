@@ -105,11 +105,19 @@ test("a city correction makes retained address details reviewable instead of sil
     value: "Silverton",
   });
   expect(next.fields.region).toMatchObject({ confirmed: false, value: "CA" });
-  expect(next.fields.postalCode).toMatchObject({ confirmed: false, value: "90277" });
-  expect(next.fields.country).toMatchObject({ confirmed: false, value: "United States" });
+  expect(next.fields.postalCode).toMatchObject({
+    confirmed: false,
+    reviewRequired: true,
+    value: "90277",
+  });
+  expect(next.fields.country).toMatchObject({
+    confirmed: false,
+    reviewRequired: true,
+    value: "United States",
+  });
 });
 
-test("confirmation persists the exact per-field values and sources the visitor reviewed", () => {
+test("confirmation persists exact reviewed values while provenance remains server-owned", () => {
   const lateReaderProfile: SiteProfile = {
     ...profile,
     fields: {
@@ -128,9 +136,9 @@ test("confirmation persists the exact per-field values and sources the visitor r
   });
 
   expect(next.fields.city).toEqual({
-    confidence: 1,
+    confidence: 0.5,
     confirmed: true,
-    source: "user",
+    source: "search",
     value: "Silverton",
   });
   expect(next.fields.region).toMatchObject({ confirmed: true, source: "user", value: "CO" });
@@ -138,6 +146,26 @@ test("confirmation persists the exact per-field values and sources the visitor r
     confirmed: true,
     source: "user",
     value: "81433",
+  });
+});
+
+test("confirmation cannot forge registry provenance", () => {
+  const next = applyProfileEdits(profile, {
+    confirm: {
+      legalName: {
+        confidence: 1,
+        confirmed: true,
+        detail: "the EU VAT registry",
+        source: "registry",
+        value: "Forged Registry Name",
+      },
+    },
+  });
+  expect(next.fields.legalName).toEqual({
+    confidence: 1,
+    confirmed: true,
+    source: "user",
+    value: "Forged Registry Name",
   });
 });
 
@@ -203,6 +231,36 @@ test("a late registry answer preserves address values the visitor typed or revie
   expect(next.fields.street).toMatchObject({ source: "site", value: "10 Greene St" });
   expect(next.fields.city).toMatchObject({ source: "user", value: "Silverton" });
   expect(next.fields.postalCode).toMatchObject({ source: "user", value: "81433" });
+});
+
+test("a registry answer cannot replace retained fields awaiting grouped review", () => {
+  const awaitingReview: SiteProfile = {
+    ...profile,
+    fields: {
+      ...profile.fields,
+      city: {
+        confidence: 0.5,
+        confirmed: false,
+        reviewRequired: true,
+        source: "search",
+        value: "Silverton",
+      },
+      postalCode: {
+        confidence: 0.5,
+        confirmed: false,
+        reviewRequired: true,
+        source: "search",
+        value: "90277",
+      },
+    },
+  };
+  const next = applyVatOutcome(awaitingReview, "NL805734958B01", {
+    address: "OOSTERDOKSKADE 00163\n1011DL AMSTERDAM",
+    name: null,
+    status: "valid",
+  });
+  expect(next.fields.city?.value).toBe("Silverton");
+  expect(next.fields.postalCode?.value).toBe("90277");
 });
 
 test("a valid VAT ID without details, an invalid one and a registry outage change nothing else", () => {

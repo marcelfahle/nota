@@ -133,18 +133,12 @@ export type ProfileEdits = {
   review?: Array<string>;
 };
 
-function isProfileField(value: unknown): value is ProfileField {
+function reviewedValue(value: unknown) {
   if (!value || typeof value !== "object") {
-    return false;
+    return null;
   }
-  const field = value as Partial<ProfileField>;
-  return (
-    typeof field.value === "string" &&
-    field.value.trim().length > 0 &&
-    typeof field.confidence === "number" &&
-    Number.isFinite(field.confidence) &&
-    ["registry", "search", "site", "user"].includes(field.source ?? "")
-  );
+  const raw = (value as { value?: unknown }).value;
+  return typeof raw === "string" && raw.trim() ? raw : null;
 }
 
 /** Applies the visitor's own edits. Whatever they type becomes theirs: source "user". */
@@ -166,21 +160,27 @@ export function applyProfileEdits(profile: SiteProfile, edits: ProfileEdits): Si
     if (PROFILE_FIELDS.includes(key as ProfileFieldKey)) {
       const field = next.fields[key as ProfileFieldKey];
       if (field) {
-        next.fields[key as ProfileFieldKey] = { ...field, confirmed: false };
+        next.fields[key as ProfileFieldKey] = {
+          ...field,
+          confirmed: false,
+          reviewRequired: true,
+        };
       }
     }
   }
   for (const [key, reviewed] of Object.entries(edits.confirm ?? {})) {
-    if (PROFILE_FIELDS.includes(key as ProfileFieldKey) && isProfileField(reviewed)) {
-      next.fields[key as ProfileFieldKey] = {
-        confidence: Math.max(0, Math.min(1, reviewed.confidence)),
-        confirmed: true,
-        ...(typeof reviewed.detail === "string"
-          ? { detail: reviewed.detail.trim().slice(0, 250) }
-          : {}),
-        source: reviewed.source,
-        value: reviewed.value.trim().slice(0, FIELD_LIMITS[key as ProfileFieldKey]),
-      };
+    const field = key as ProfileFieldKey;
+    const raw = reviewedValue(reviewed);
+    if (PROFILE_FIELDS.includes(field) && raw) {
+      const value = raw.trim().slice(0, FIELD_LIMITS[field]);
+      const existing = next.fields[field];
+      if (existing?.value === value) {
+        const confirmed = { ...existing, confirmed: true };
+        delete confirmed.reviewRequired;
+        next.fields[field] = confirmed;
+      } else {
+        next.fields[field] = { confidence: 1, confirmed: true, source: "user", value };
+      }
     }
   }
   if (typeof edits.brandColor === "string" && /^#[\da-f]{6}$/i.test(edits.brandColor)) {
@@ -216,7 +216,11 @@ function registry(value: string) {
 }
 
 function canApplyRegistryField(field: ProfileField | undefined) {
-  return !field || field.source === "registry" || (!field.confirmed && field.source !== "user");
+  return (
+    !field ||
+    field.source === "registry" ||
+    (!field.reviewRequired && !field.confirmed && field.source !== "user")
+  );
 }
 
 /** Records a registry answer without replacing details the visitor already reviewed or typed. */

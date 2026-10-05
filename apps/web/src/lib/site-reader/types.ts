@@ -22,6 +22,8 @@ export type ProfileField = {
   confirmed?: boolean;
   /** Where exactly: "your footer", "Impressum", "Crunchbase". */
   detail?: string;
+  /** A retained address value conflicts with an edit and must be reviewed as part of the group. */
+  reviewRequired?: boolean;
   source: ProfileSource;
   value: string;
 };
