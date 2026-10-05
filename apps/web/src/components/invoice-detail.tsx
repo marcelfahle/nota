@@ -3,6 +3,7 @@
 import { ArrowLeft, BadgeCheck, Copy, Download, FileCode, Pencil, Send } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import posthog from "posthog-js";
 import { useState } from "react";
 
 import {
@@ -194,6 +195,17 @@ export function InvoiceDetailView({ activities, business, invoice, role }: Invoi
     if (result?.error) {
       setMessage({ kind: "error", text: result.error });
     } else {
+      const event =
+        name === "send"
+          ? "invoice_sent"
+          : name === "mark-sent"
+            ? "invoice_marked_sent"
+            : name === "reminder"
+              ? "invoice_reminder_sent"
+              : null;
+      if (event) {
+        posthog.capture(event, { currency, invoice_kind: invoice.kind });
+      }
       router.refresh();
     }
     setPending(null);
@@ -217,6 +229,10 @@ export function InvoiceDetailView({ activities, business, invoice, role }: Invoi
     if (result.warning) {
       setMessage({ kind: "notice", text: result.warning });
     }
+    posthog.capture("invoice_payment_recorded", {
+      currency,
+      payment_method: paymentMethod,
+    });
     router.refresh();
     setPending(null);
   }
@@ -263,6 +279,7 @@ export function InvoiceDetailView({ activities, business, invoice, role }: Invoi
       router.push("/invoices");
       return;
     }
+    posthog.capture("invoice_cancelled", { currency, invoice_kind: invoice.kind });
     router.refresh();
     setPending(null);
   }

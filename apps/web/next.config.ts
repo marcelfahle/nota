@@ -1,3 +1,4 @@
+import { withPostHogConfig } from "@posthog/nextjs-config";
 import { withBotId } from "botid/next/config";
 import type { NextConfig } from "next";
 
@@ -20,4 +21,18 @@ const nextConfig: NextConfig = {
   serverExternalPackages: ["sharp"],
 };
 
-export default withBotId(nextConfig);
+// Runs during the actual Vercel/CI build so uploaded maps match deployed chunks.
+// The personal key is build-only; never prefix it with NEXT_PUBLIC_.
+const configuredNext = withBotId(nextConfig);
+export default process.env.POSTHOG_API_KEY && process.env.POSTHOG_PROJECT_ID
+  ? withPostHogConfig(configuredNext, {
+      host: process.env.NEXT_PUBLIC_POSTHOG_HOST,
+      personalApiKey: process.env.POSTHOG_API_KEY,
+      projectId: process.env.POSTHOG_PROJECT_ID,
+      sourcemaps: {
+        deleteAfterUpload: true,
+        enabled: true,
+        releaseName: "nota-web",
+      },
+    })
+  : configuredNext;

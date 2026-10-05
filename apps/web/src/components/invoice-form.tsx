@@ -2,6 +2,7 @@
 
 import { Plus, Trash2 } from "lucide-react";
 import { useRouter } from "next/navigation";
+import posthog from "posthog-js";
 import { useActionState, useEffect, useState, useCallback } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -131,6 +132,12 @@ export function InvoiceForm({
         );
         formData.set("taxRate", taxRate);
         formData.set("currency", currency);
+        posthog.capture("invoice_submitted", {
+          currency,
+          invoice_mode: defaultValues ? "edit" : "create",
+          line_item_count: items.length,
+          total,
+        });
         formAction(formData);
       }}
       className="space-y-8"

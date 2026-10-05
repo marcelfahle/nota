@@ -15,6 +15,8 @@ import {
 } from "./types";
 
 export type ReadOptions = {
+  /** Groups reader generations from one onboarding session into one AI session and trace. */
+  observability?: { sessionId: string; traceId: string };
   /** False when the daily spend ceiling is reached: fetch only, no model, no search. */
   paid?: boolean;
   /** Test seams. Production uses the real network, Parallel and the model. */
@@ -269,7 +271,13 @@ export async function* readSite(
     setField("vatNumber", site(findVatNumber(corpus), "your website", 0.85));
     let facts: SiteFacts | null = null;
     if (canModel && pages.length > 0) {
-      facts = await services.readSiteFacts({ domain, pages }, { signal: options.signal });
+      facts = await services.readSiteFacts(
+        { domain, pages },
+        {
+          observability: options.observability,
+          signal: options.signal,
+        },
+      );
     }
     if (facts) {
       const where = pageLabel(facts.legalPage);
@@ -335,7 +343,7 @@ export async function* readSite(
         results,
         summary: profile.fields.summary?.value,
       },
-      { signal: options.signal },
+      { observability: options.observability, signal: options.signal },
     );
     const label = location?.sourceUrl ? searchSourceLabel(location.sourceUrl, domain) : null;
     if (location?.country && label) {

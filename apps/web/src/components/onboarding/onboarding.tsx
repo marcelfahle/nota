@@ -2,6 +2,7 @@
 
 import { ArrowLeft, ArrowRight, Check, Globe } from "lucide-react";
 import Link from "next/link";
+import posthog from "posthog-js";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { flushSync } from "react-dom";
 
@@ -95,6 +96,11 @@ function SaveForm({ onBack, settle }: { onBack: () => void; settle: () => Promis
       );
       return;
     }
+    posthog.identify(data.user.id, {
+      email: data.user.email,
+      name: data.user.name,
+    });
+    posthog.capture("onboarding_account_created");
     continueAfterAuth(data);
   }
 
