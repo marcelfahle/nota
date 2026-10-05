@@ -121,17 +121,10 @@ function VatStep({ profile, read }: { profile: SiteProfile; read: SiteRead }) {
   const [error, setError] = useState<string | null>(null);
   const country = fields.countryCode?.value?.toUpperCase();
   const outsideEu = Boolean(country) && !EU.has(country!);
-  const [type, setType] = useState<TaxIdentifierType>(
-    profile.taxIdentifier?.type ?? (outsideEu ? "tax_id" : "eu_vat"),
-  );
-  const typeChosenByUser = useRef(false);
+  const suggestedType = profile.taxIdentifier?.type ?? (outsideEu ? "tax_id" : "eu_vat");
+  const [chosenType, setChosenType] = useState<TaxIdentifierType | null>(null);
+  const type = chosenType ?? suggestedType;
   const hasLegal = Boolean(fields.legalName && fields.street);
-
-  useEffect(() => {
-    if (!typeChosenByUser.current) {
-      setType(profile.taxIdentifier?.type ?? (outsideEu ? "tax_id" : "eu_vat"));
-    }
-  }, [outsideEu, profile.taxIdentifier?.type]);
 
   async function onSubmit(event: FormEvent) {
     event.preventDefault();
@@ -204,8 +197,7 @@ function VatStep({ profile, read }: { profile: SiteProfile; read: SiteRead }) {
           className="h-11 rounded-md border border-input bg-card px-3 text-sm"
           id="onboarding-tax-id-type"
           onChange={(event) => {
-            typeChosenByUser.current = true;
-            setType(event.target.value as TaxIdentifierType);
+            setChosenType(event.target.value as TaxIdentifierType);
             setReply(null);
           }}
           value={type}
