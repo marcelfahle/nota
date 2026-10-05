@@ -1,6 +1,7 @@
 import { Document, Font, Image, Link, Page, StyleSheet, Text, View } from "@react-pdf/renderer";
 
 import { formatIbanDisplay } from "@/lib/iban";
+import { formatTaxIdentifier, type TaxIdentifier } from "@/lib/tax-identifier";
 
 // ---------------------------------------------------------------------------
 // Register Inter font family
@@ -45,14 +46,14 @@ type InvoicePdfProps = {
     iban?: string | null;
     logoSrc?: string | null;
     name?: string | null;
-    vatNumber?: string | null;
+    taxIdentifier?: TaxIdentifier | null;
   };
   client: {
     address?: string | null;
     company?: string | null;
     email: string;
     name: string;
-    vatNumber?: string | null;
+    taxIdentifier?: TaxIdentifier | null;
   };
   invoice: {
     currency: string;
@@ -413,7 +414,9 @@ export function InvoicePdf({ business, client, invoice }: InvoicePdfProps) {
                   {line}
                 </Text>
               ))}
-            {client.vatNumber && <Text style={styles.clientVat}>VAT: {client.vatNumber}</Text>}
+            {client.taxIdentifier && (
+              <Text style={styles.clientVat}>{formatTaxIdentifier(client.taxIdentifier)}</Text>
+            )}
           </View>
           <View>
             <View style={styles.dateRow}>
@@ -522,7 +525,9 @@ export function InvoicePdf({ business, client, invoice }: InvoicePdfProps) {
         {/* ── Footer ── */}
         <View fixed style={styles.footer}>
           <View>
-            {business.vatNumber && <Text style={styles.footerText}>VAT: {business.vatNumber}</Text>}
+            {business.taxIdentifier && (
+              <Text style={styles.footerText}>{formatTaxIdentifier(business.taxIdentifier)}</Text>
+            )}
             {business.name && <Text style={styles.footerText}>{business.name}</Text>}
           </View>
         </View>

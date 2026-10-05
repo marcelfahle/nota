@@ -6,6 +6,7 @@ import { formatOrgAddress, getPdfLogoSrc } from "@/lib/branding";
 import { db } from "@/lib/db";
 import { bankAccounts, clients, invoices, lineItems } from "@/lib/db/schema";
 import { buildInvoiceFilename } from "@/lib/invoice-filename";
+import { taxIdentifierFromColumns, type TaxIdentifierType } from "@/lib/tax-identifier";
 
 export type InvoicePdfOrg = {
   brandColor: string | null;
@@ -20,6 +21,10 @@ export type InvoicePdfOrg = {
   postalCode: string | null;
   region: string | null;
   street: string | null;
+  taxIdentifierCanonicalValue?: string | null;
+  taxIdentifierCountryCode?: string | null;
+  taxIdentifierType?: TaxIdentifierType | null;
+  taxIdentifierValue?: string | null;
   vatNumber: string | null;
 };
 
@@ -113,14 +118,14 @@ export async function renderInvoicePdfForOrg(
         iban: bankAccount?.iban ?? null,
         logoSrc,
         name: org.legalName ?? org.businessName ?? org.name,
-        vatNumber: org.vatNumber,
+        taxIdentifier: invoice.sellerTaxIdentifier ?? taxIdentifierFromColumns(org),
       },
       client: {
         address: client.address,
         company: client.company,
         email: client.email,
         name: client.name,
-        vatNumber: client.vatNumber,
+        taxIdentifier: invoice.clientTaxIdentifier ?? taxIdentifierFromColumns(client),
       },
       invoice: {
         currency: invoice.currency ?? "EUR",

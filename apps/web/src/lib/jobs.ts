@@ -22,6 +22,7 @@ import { sendEmail } from "@/lib/email";
 import { getAppEnv, getEmailEnv } from "@/lib/env";
 import { buildInvoiceFilename } from "@/lib/invoice-filename";
 import { reminderPayloadSchema } from "@/lib/proposal-service";
+import { taxIdentifierFromColumns } from "@/lib/tax-identifier";
 
 const JOB_LOCK_TIMEOUT_MS = 1000 * 60 * 10;
 
@@ -138,14 +139,14 @@ async function sendInvoiceEmail(invoiceId: string, recipient?: string) {
         bankDetails,
         logoSrc,
         name: org.legalName ?? org.businessName ?? org.name,
-        vatNumber: org.vatNumber,
+        taxIdentifier: invoice.sellerTaxIdentifier ?? taxIdentifierFromColumns(org),
       },
       client: {
         address: client.address,
         company: client.company,
         email: client.email,
         name: client.name,
-        vatNumber: client.vatNumber,
+        taxIdentifier: invoice.clientTaxIdentifier ?? taxIdentifierFromColumns(client),
       },
       invoice: {
         currency: invoice.currency ?? "EUR",
