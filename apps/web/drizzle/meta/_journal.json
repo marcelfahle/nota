@@ -141,6 +141,13 @@
       "when": 1791134814139,
       "tag": "0019_workspace-deactivation",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1791183984347,
+      "tag": "0020_brief_sentinel",
+      "breakpoints": true
     }
   ]
 }

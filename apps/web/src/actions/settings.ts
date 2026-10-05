@@ -6,7 +6,7 @@ import { z } from "zod";
 
 import { getCurrentUser } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { orgs } from "@/lib/db/schema";
+import { invoiceNumberEvents, orgs } from "@/lib/db/schema";
 import { deleteManagedLogo, uploadOrgFavicon, uploadOrgLogo } from "@/lib/logo-storage";
 import { canManageSettings, getInsufficientPermissionsError } from "@/lib/roles";
 
@@ -171,14 +171,48 @@ export async function updateSettings(
     return { error: result.error.issues[0].message };
   }
 
-  const { org, role } = await getCurrentUser();
+  const { org, role, user } = await getCurrentUser();
 
   if (!canManageSettings(role)) {
     return { error: getInsufficientPermissionsError() };
   }
 
   try {
-    await db.update(orgs).set(result.data).where(eq(orgs.id, org.id));
+    await db.transaction(async (tx) => {
+      await tx.update(orgs).set(result.data).where(eq(orgs.id, org.id));
+      if (
+        result.data.nextInvoiceNumber !== undefined &&
+        result.data.nextInvoiceNumber !== org.nextInvoiceNumber
+      ) {
+        await tx.insert(invoiceNumberEvents).values({
+          action: "counter_changed",
+          kind: "invoice",
+          metadata: {
+            changedBy: user.id,
+            from: org.nextInvoiceNumber,
+            to: result.data.nextInvoiceNumber,
+          },
+          number: String(result.data.nextInvoiceNumber),
+          orgId: org.id,
+          source: "web",
+        });
+      }
+      const formatChanges = {
+        invoiceDigits: [org.invoiceDigits, result.data.invoiceDigits],
+        invoicePrefix: [org.invoicePrefix, result.data.invoicePrefix],
+        invoiceSeparator: [org.invoiceSeparator, result.data.invoiceSeparator],
+      };
+      if (Object.values(formatChanges).some(([from, to]) => from !== to)) {
+        await tx.insert(invoiceNumberEvents).values({
+          action: "format_changed",
+          kind: "invoice",
+          metadata: { changedBy: user.id, changes: formatChanges },
+          number: String(result.data.nextInvoiceNumber ?? org.nextInvoiceNumber),
+          orgId: org.id,
+          source: "web",
+        });
+      }
+    });
   } catch {
     return { error: "Could not update settings right now" };
   }
