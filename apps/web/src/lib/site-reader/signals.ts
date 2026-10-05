@@ -1,7 +1,12 @@
 // Deterministic signals from a homepage's HTML. No parser dependency: the few
 // tags we need are matched directly, and nothing from the page is executed.
 
-import { normalizeTaxIdentifier, type TaxIdentifier } from "@/lib/tax-identifier";
+import {
+  normalizeTaxIdentifier,
+  taxIdentifierFromLegacyVatNumber,
+  TaxIdentifierValidationError,
+  type TaxIdentifier,
+} from "@/lib/tax-identifier";
 
 import { elementBlocks, inlineStyles, openTags, stripElements, visibleText } from "./html";
 
@@ -195,11 +200,22 @@ export function findVatNumber(text: string) {
 
 const EIN_LABEL = /(?:\bEIN\b|Employer Identification Number)[^\d]{0,30}(\d{2}[\s-]?\d{7})/i;
 
+export function normalizeDiscoveredTaxIdentifier(value: string) {
+  try {
+    return taxIdentifierFromLegacyVatNumber(value);
+  } catch (error) {
+    if (error instanceof TaxIdentifierValidationError) {
+      return null;
+    }
+    throw error;
+  }
+}
+
 /** A labelled US EIN or EU VAT ID. Unlabelled number-like values are ignored. */
 export function findTaxIdentifier(text: string) {
   const vatNumber = findVatNumber(text);
   if (vatNumber) {
-    return normalizeTaxIdentifier({ type: "eu_vat", value: vatNumber });
+    return normalizeDiscoveredTaxIdentifier(vatNumber);
   }
   const ein = text.match(EIN_LABEL)?.[1];
   return ein ? normalizeTaxIdentifier({ type: "us_ein", value: ein }) : null;
@@ -408,7 +424,7 @@ export function extractSignals(html: string, pageUrl: string): SiteSignals {
       ?.replaceAll(/[\s.-]/g, "")
       .toUpperCase() ?? findVatNumber(text);
   const taxIdentifier = vatNumber
-    ? normalizeTaxIdentifier({ type: "eu_vat", value: vatNumber })
+    ? normalizeDiscoveredTaxIdentifier(vatNumber)
     : findTaxIdentifier(text);
 
   return {

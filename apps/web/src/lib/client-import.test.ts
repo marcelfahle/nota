@@ -58,3 +58,15 @@ test("import previews reject malformed files and make duplicates and currency pr
   expect(previewClientImport(csv, []).hash).toBe(previewClientImport(csv, []).hash);
   expect(previewClientImport('"Name","Email"\n"Ada","ada@b.test"', []).counts.ready).toBe(1);
 });
+
+test("invalid tax identifiers are excluded without blocking valid import rows", () => {
+  const preview = previewClientImport(
+    "Name,Email,Tax ID,VAT Number\nBad tax,bad-tax@example.test,A,\nBad VAT,bad-vat@example.test,,DE1\nGood,good@example.test,AB-123,",
+    [],
+  );
+
+  expect(preview.counts).toEqual({ duplicate: 0, invalid: 2, ready: 1, total: 3 });
+  expect(preview.rows[0].reason).toBe("Enter a tax identifier");
+  expect(preview.rows[1].reason).toBe("Enter an EU VAT ID with its country prefix");
+  expect(preview.rows[2].status).toBe("ready");
+});

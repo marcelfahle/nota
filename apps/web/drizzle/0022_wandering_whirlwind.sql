@@ -21,10 +21,12 @@ UPDATE "orgs" SET
   "tax_identifier_type" = CASE
     WHEN left(upper(regexp_replace("vat_number", '[^A-Za-z0-9]', '', 'g')), 2) IN
       ('AT','BE','BG','CY','CZ','DE','DK','EE','EL','ES','FI','FR','HR','HU','IE','IT','LT','LU','LV','MT','NL','PL','PT','RO','SE','SI','SK','XI')
+      AND char_length(regexp_replace("vat_number", '[^A-Za-z0-9]', '', 'g')) BETWEEN 4 AND 20
     THEN 'eu_vat' ELSE 'tax_id' END,
   "tax_identifier_country_code" = CASE
     WHEN left(upper(regexp_replace("vat_number", '[^A-Za-z0-9]', '', 'g')), 2) IN
       ('AT','BE','BG','CY','CZ','DE','DK','EE','EL','ES','FI','FR','HR','HU','IE','IT','LT','LU','LV','MT','NL','PL','PT','RO','SE','SI','SK','XI')
+      AND char_length(regexp_replace("vat_number", '[^A-Za-z0-9]', '', 'g')) BETWEEN 4 AND 20
     THEN left(upper(regexp_replace("vat_number", '[^A-Za-z0-9]', '', 'g')), 2) ELSE NULL END
 WHERE "vat_number" IS NOT NULL AND btrim("vat_number") <> '';--> statement-breakpoint
 
@@ -34,10 +36,12 @@ UPDATE "clients" SET
   "tax_identifier_type" = CASE
     WHEN left(upper(regexp_replace("vat_number", '[^A-Za-z0-9]', '', 'g')), 2) IN
       ('AT','BE','BG','CY','CZ','DE','DK','EE','EL','ES','FI','FR','HR','HU','IE','IT','LT','LU','LV','MT','NL','PL','PT','RO','SE','SI','SK','XI')
+      AND char_length(regexp_replace("vat_number", '[^A-Za-z0-9]', '', 'g')) BETWEEN 4 AND 20
     THEN 'eu_vat' ELSE 'tax_id' END,
   "tax_identifier_country_code" = CASE
     WHEN left(upper(regexp_replace("vat_number", '[^A-Za-z0-9]', '', 'g')), 2) IN
       ('AT','BE','BG','CY','CZ','DE','DK','EE','EL','ES','FI','FR','HR','HU','IE','IT','LT','LU','LV','MT','NL','PL','PT','RO','SE','SI','SK','XI')
+      AND char_length(regexp_replace("vat_number", '[^A-Za-z0-9]', '', 'g')) BETWEEN 4 AND 20
     THEN left(upper(regexp_replace("vat_number", '[^A-Za-z0-9]', '', 'g')), 2) ELSE NULL END
 WHERE "vat_number" IS NOT NULL AND btrim("vat_number") <> '';--> statement-breakpoint
 
@@ -47,10 +51,12 @@ UPDATE "users" SET
   "tax_identifier_type" = CASE
     WHEN left(upper(regexp_replace("vat_number", '[^A-Za-z0-9]', '', 'g')), 2) IN
       ('AT','BE','BG','CY','CZ','DE','DK','EE','EL','ES','FI','FR','HR','HU','IE','IT','LT','LU','LV','MT','NL','PL','PT','RO','SE','SI','SK','XI')
+      AND char_length(regexp_replace("vat_number", '[^A-Za-z0-9]', '', 'g')) BETWEEN 4 AND 20
     THEN 'eu_vat' ELSE 'tax_id' END,
   "tax_identifier_country_code" = CASE
     WHEN left(upper(regexp_replace("vat_number", '[^A-Za-z0-9]', '', 'g')), 2) IN
       ('AT','BE','BG','CY','CZ','DE','DK','EE','EL','ES','FI','FR','HR','HU','IE','IT','LT','LU','LV','MT','NL','PL','PT','RO','SE','SI','SK','XI')
+      AND char_length(regexp_replace("vat_number", '[^A-Za-z0-9]', '', 'g')) BETWEEN 4 AND 20
     THEN left(upper(regexp_replace("vat_number", '[^A-Za-z0-9]', '', 'g')), 2) ELSE NULL END
 WHERE "vat_number" IS NOT NULL AND btrim("vat_number") <> '';--> statement-breakpoint
 

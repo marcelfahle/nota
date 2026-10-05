@@ -54,6 +54,22 @@ describe("tax identifiers", () => {
     ).toMatchObject({ type: "us_ein", value: "12-3456789" });
   });
 
+  test("malformed legacy storage degrades to a neutral identifier on reads", () => {
+    expect(taxIdentifierFromColumns({ vatNumber: "DE1" })).toEqual({
+      canonicalValue: "DE1",
+      countryCode: null,
+      type: "tax_id",
+      value: "DE1",
+    });
+    expect(
+      taxIdentifierFromColumns({
+        taxIdentifierCountryCode: "not-a-country",
+        taxIdentifierType: "eu_vat",
+        taxIdentifierValue: "-",
+      }),
+    ).toMatchObject({ canonicalValue: "-", countryCode: null, type: "tax_id", value: "-" });
+  });
+
   test("rejects invalid type-specific values", () => {
     expect(() => normalizeTaxIdentifier({ type: "us_ein", value: "123" })).toThrow(
       "nine-digit EIN",

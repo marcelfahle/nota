@@ -1,5 +1,3 @@
-import { normalizeTaxIdentifier } from "@/lib/tax-identifier";
-
 import { pickBrandColors } from "./colors";
 import { fromDataUrl } from "./data-url";
 import { visibleText } from "./html";
@@ -7,7 +5,13 @@ import { dominantColors, fetchImage } from "./logo";
 import { modelConfigured, readLocation, readSiteFacts, type SiteFacts } from "./model";
 import { extractPages, parallelConfigured, searchWeb, type ParallelPage } from "./parallel";
 import { safeFetch, UnsafeUrlError, type SafeFetchOptions } from "./safe-fetch";
-import { EMAIL_NOISE, extractSignals, findTaxIdentifier, type SiteSignals } from "./signals";
+import {
+  EMAIL_NOISE,
+  extractSignals,
+  findTaxIdentifier,
+  normalizeDiscoveredTaxIdentifier,
+  type SiteSignals,
+} from "./signals";
 import {
   emptyProfile,
   nameFromDomain,
@@ -301,9 +305,12 @@ export async function* readSite(
         ),
       );
       setField("legalName", site(facts.legalName, where, 0.8));
-      setField("vatNumber", site(facts.vatNumber, where, 0.8));
-      if (facts.vatNumber) {
-        profile.taxIdentifier = normalizeTaxIdentifier({ type: "eu_vat", value: facts.vatNumber })!;
+      const factTaxIdentifier = facts.vatNumber
+        ? normalizeDiscoveredTaxIdentifier(facts.vatNumber)
+        : null;
+      setField("vatNumber", site(factTaxIdentifier?.value, where, 0.8));
+      if (factTaxIdentifier) {
+        profile.taxIdentifier = factTaxIdentifier;
       }
       for (const key of [
         "street",

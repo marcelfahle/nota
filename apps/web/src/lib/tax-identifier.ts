@@ -113,18 +113,43 @@ export function taxIdentifierFromLegacyVatNumber(value?: string | null) {
   );
 }
 
-export function taxIdentifierFromColumns(columns: TaxIdentifierColumns) {
-  if (
-    TAX_IDENTIFIER_TYPES.includes(columns.taxIdentifierType as TaxIdentifierType) &&
-    columns.taxIdentifierValue
-  ) {
-    return normalizeTaxIdentifier({
-      countryCode: columns.taxIdentifierCountryCode,
-      type: columns.taxIdentifierType as TaxIdentifierType,
-      value: columns.taxIdentifierValue,
-    });
+function fallbackStoredTaxIdentifier(columns: TaxIdentifierColumns) {
+  const value = (columns.taxIdentifierValue ?? columns.vatNumber)?.trim();
+  if (!value) {
+    return null;
   }
-  return taxIdentifierFromLegacyVatNumber(columns.vatNumber);
+  const storedCountry = columns.taxIdentifierCountryCode?.trim().toUpperCase();
+  return {
+    canonicalValue:
+      columns.taxIdentifierCanonicalValue?.trim() || normalizeVatNumber(value) || value,
+    countryCode: storedCountry && /^[A-Z]{2}$/.test(storedCountry) ? storedCountry : null,
+    type: "tax_id",
+    value,
+  } satisfies TaxIdentifier;
+}
+
+export function taxIdentifierFromColumns(columns: TaxIdentifierColumns) {
+  try {
+    if (
+      TAX_IDENTIFIER_TYPES.includes(columns.taxIdentifierType as TaxIdentifierType) &&
+      columns.taxIdentifierValue
+    ) {
+      return normalizeTaxIdentifier({
+        countryCode: columns.taxIdentifierCountryCode,
+        type: columns.taxIdentifierType as TaxIdentifierType,
+        value: columns.taxIdentifierValue,
+      });
+    }
+    if (columns.taxIdentifierValue) {
+      return fallbackStoredTaxIdentifier(columns);
+    }
+    return taxIdentifierFromLegacyVatNumber(columns.vatNumber);
+  } catch (error) {
+    if (!(error instanceof TaxIdentifierValidationError)) {
+      throw error;
+    }
+    return fallbackStoredTaxIdentifier(columns);
+  }
 }
 
 export function invoiceTaxIdentifier(

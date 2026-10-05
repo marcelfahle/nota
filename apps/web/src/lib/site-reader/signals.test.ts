@@ -86,6 +86,18 @@ test("a synthetic EIN is taken only next to an EIN label", () => {
   expect(findTaxIdentifier("Reference 12-3456789")).toBeNull();
 });
 
+test("non-VIES and malformed discovered identifiers remain safe and neutral", () => {
+  expect(findTaxIdentifier("VAT: GB123456789")).toMatchObject({
+    type: "tax_id",
+    value: "GB123456789",
+  });
+  const signals = extractSignals(
+    '<script type="application/ld+json">{"@type":"Organization","name":"Example","vatID":"-"}</script>',
+    "https://example.test/",
+  );
+  expect(signals.taxIdentifier).toBeNull();
+});
+
 test("placeholder and asset emails are ignored", () => {
   expect(findEmail('<a href="mailto:support@yourcompany.com">x</a>', "acme.com")).toBeNull();
   expect(findEmail("logo@2x.png and someone@example.com", "acme.com")).toBeNull();
