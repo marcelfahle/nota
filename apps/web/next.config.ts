@@ -40,6 +40,7 @@ export default process.env.POSTHOG_API_KEY && process.env.POSTHOG_PROJECT_ID
         deleteAfterUpload: true,
         enabled: true,
         releaseName: "nota-web",
+        releaseVersion: process.env.VERCEL_GIT_COMMIT_SHA || process.env.GITHUB_SHA,
       },
     })
   : configuredNext;
