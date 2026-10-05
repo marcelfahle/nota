@@ -202,7 +202,11 @@ export function ChatClientImport({ file, onBusyChange, onComplete, onDismiss }: 
                   {row.client.address ? (
                     <p className="mt-1 whitespace-pre-line">{row.client.address}</p>
                   ) : null}
-                  {row.client.vatNumber ? <p>VAT: {row.client.vatNumber}</p> : null}
+                  {row.client.taxIdentifier ? (
+                    <p>Tax ID: {row.client.taxIdentifier.value}</p>
+                  ) : row.client.vatNumber ? (
+                    <p>VAT ID: {row.client.vatNumber}</p>
+                  ) : null}
                   {row.client.notes ? (
                     <p className="mt-1 whitespace-pre-line">{row.client.notes}</p>
                   ) : null}

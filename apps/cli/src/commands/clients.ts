@@ -1,7 +1,7 @@
 import { readFile } from "node:fs/promises";
 import type { Command } from "commander";
 
-import type { ClientCreateInput } from "@nota-app/sdk";
+import type { ClientCreateInput, TaxIdentifierInput } from "@nota-app/sdk";
 
 import {
   interactive,
@@ -23,6 +23,8 @@ async function buildClientInput(options: {
   email?: string;
   name?: string;
   notes?: string;
+  taxId?: string;
+  taxIdType?: TaxIdentifierInput["type"];
   vatNumber?: string;
 }): Promise<ClientCreateInput> {
   if (!options.name?.trim() || !options.email?.trim()) requireInput("--name and --email");
@@ -58,16 +60,22 @@ async function buildClientInput(options: {
       : "EUR");
   const notes =
     options.notes?.trim() ||
-    (isFullyInteractive
-      ? (await input({ message: "Notes (optional)", theme: promptTheme() }, promptContext)).trim()
-      : "");
-  const vatNumber =
+    (isFullyInteractive ? (await input({ message: "Notes (optional)", theme: promptTheme() }, promptContext)).trim() : "");
+  const taxId =
+    options.taxId?.trim() ||
     options.vatNumber?.trim() ||
-    (isFullyInteractive
-      ? (
-          await input({ message: "VAT number (optional)", theme: promptTheme() }, promptContext)
-        ).trim()
-      : "");
+    (isFullyInteractive ? (await input({ message: "Tax identifier (optional)", theme: promptTheme() }, promptContext)).trim() : "");
+  const taxIdType =
+    options.taxIdType ??
+    (options.vatNumber
+      ? "eu_vat"
+      : taxId && isFullyInteractive
+        ? ((await input({
+            default: "tax_id",
+            message: "Tax identifier type (eu_vat, us_ein, tax_id)",
+            theme: promptTheme(),
+          }, promptContext)) as TaxIdentifierInput["type"])
+        : "tax_id");
 
   return {
     address: address || undefined,
@@ -76,7 +84,7 @@ async function buildClientInput(options: {
     email,
     name,
     notes: notes || undefined,
-    vatNumber: vatNumber || undefined,
+    taxIdentifier: taxId ? { type: taxIdType, value: taxId } : undefined,
   };
 }
 
@@ -178,7 +186,9 @@ export function registerClientCommands(program: Command) {
     .option("--company <company>")
     .option("--address <address>")
     .option("--currency <currency>")
-    .option("--vat-number <vatNumber>")
+    .option("--tax-id <taxId>")
+    .option("--tax-id-type <taxIdType>", "eu_vat, us_ein, or tax_id")
+    .option("--vat-number <vatNumber>", "Deprecated alias for an EU VAT ID")
     .option("--notes <notes>")
     .action(async (...args) => {
       const client = await requireClient();

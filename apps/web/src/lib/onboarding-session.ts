@@ -8,10 +8,17 @@ import { storeOrgImage } from "@/lib/logo-storage";
 import { fromDataUrl } from "@/lib/site-reader/data-url";
 import {
   PROFILE_FIELDS,
+  type ProfileField,
   type ProfileFieldKey,
   type SiteProfile,
   type VatOutcome,
 } from "@/lib/site-reader/types";
+import {
+  normalizeTaxIdentifier,
+  taxIdentifierFields,
+  taxIdentifierFromLegacyVatNumber,
+  type TaxIdentifier,
+} from "@/lib/tax-identifier";
 
 // A website read is only a preview: anyone can type anyone's domain. It lives
 // here, under a random cookie, for a day, and reaches an account only when its
@@ -125,10 +132,20 @@ const FIELD_LIMITS: Record<ProfileFieldKey, number> = {
 
 export type ProfileEdits = {
   brandColor?: string;
-  /** Fields found by search that the visitor accepts as they are. */
-  confirm?: Array<string>;
+  /** Exact field values the visitor reviewed and accepted. */
+  confirm?: Record<string, unknown>;
   fields?: Record<string, unknown>;
+  /** Retained address fields that conflict with an edit and need review. */
+  review?: Array<string>;
 };
+
+function reviewedValue(value: unknown) {
+  if (!value || typeof value !== "object") {
+    return null;
+  }
+  const raw = (value as { value?: unknown }).value;
+  return typeof raw === "string" && raw.trim() ? raw : null;
+}
 
 /** Applies the visitor's own edits. Whatever they type becomes theirs: source "user". */
 export function applyProfileEdits(profile: SiteProfile, edits: ProfileEdits): SiteProfile {
@@ -145,10 +162,31 @@ export function applyProfileEdits(profile: SiteProfile, edits: ProfileEdits): Si
       next.fields[field] = { confidence: 1, confirmed: true, source: "user", value };
     }
   }
-  for (const key of edits.confirm ?? []) {
-    const field = next.fields[key as ProfileFieldKey];
-    if (field && PROFILE_FIELDS.includes(key as ProfileFieldKey)) {
-      next.fields[key as ProfileFieldKey] = { ...field, confirmed: true };
+  for (const key of edits.review ?? []) {
+    if (PROFILE_FIELDS.includes(key as ProfileFieldKey)) {
+      const field = next.fields[key as ProfileFieldKey];
+      if (field) {
+        next.fields[key as ProfileFieldKey] = {
+          ...field,
+          confirmed: false,
+          reviewRequired: true,
+        };
+      }
+    }
+  }
+  for (const [key, reviewed] of Object.entries(edits.confirm ?? {})) {
+    const field = key as ProfileFieldKey;
+    const raw = reviewedValue(reviewed);
+    if (PROFILE_FIELDS.includes(field) && raw) {
+      const value = raw.trim().slice(0, FIELD_LIMITS[field]);
+      const existing = next.fields[field];
+      if (existing?.value === value) {
+        const confirmed = { ...existing, confirmed: true };
+        delete confirmed.reviewRequired;
+        next.fields[field] = confirmed;
+      } else {
+        next.fields[field] = { confidence: 1, confirmed: true, source: "user", value };
+      }
     }
   }
   if (typeof edits.brandColor === "string" && /^#[\da-f]{6}$/i.test(edits.brandColor)) {
@@ -183,26 +221,65 @@ function registry(value: string) {
   } as const;
 }
 
-/** Records a registry answer on the profile. Registry details replace what was scraped. */
+function canApplyRegistryField(field: ProfileField | undefined) {
+  return (
+    !field ||
+    field.source === "registry" ||
+    (!field.reviewRequired && !field.confirmed && field.source !== "user")
+  );
+}
+
+/** Records a registry answer without replacing details the visitor already reviewed or typed. */
 export function applyVatOutcome(
   profile: SiteProfile,
   vatNumber: string,
   outcome: VatOutcome,
 ): SiteProfile {
-  const next: SiteProfile = { ...profile, fields: { ...profile.fields }, vat: outcome };
-  next.fields.vatNumber = { confidence: 1, confirmed: true, source: "user", value: vatNumber };
-  if (outcome.status !== "valid") {
+  return applyTaxIdentifierOutcome(
+    profile,
+    normalizeTaxIdentifier({ type: "eu_vat", value: vatNumber })!,
+    outcome,
+  );
+}
+
+export function applyTaxIdentifierOutcome(
+  profile: SiteProfile,
+  taxIdentifier: TaxIdentifier,
+  outcome?: VatOutcome,
+): SiteProfile {
+  const next: SiteProfile = {
+    ...profile,
+    fields: { ...profile.fields },
+    taxIdentifier,
+    ...(outcome ? { vat: outcome } : {}),
+  };
+  if (!outcome) {
+    delete next.vat;
+  }
+  next.fields.vatNumber = {
+    confidence: 1,
+    confirmed: true,
+    source: "user",
+    value: taxIdentifier.value,
+  };
+  if (outcome?.status !== "valid") {
     return next;
   }
-  if (outcome.name) {
+  if (outcome.name && canApplyRegistryField(next.fields.legalName)) {
     next.fields.legalName = registry(outcome.name);
   }
   if (outcome.address) {
     const parts = splitRegistryAddress(outcome.address);
-    next.fields.street = registry(parts.street);
+    if (canApplyRegistryField(next.fields.street)) {
+      next.fields.street = registry(parts.street);
+    }
     if (parts.postalCode && parts.city) {
-      next.fields.postalCode = registry(parts.postalCode);
-      next.fields.city = registry(parts.city);
+      if (canApplyRegistryField(next.fields.postalCode)) {
+        next.fields.postalCode = registry(parts.postalCode);
+      }
+      if (canApplyRegistryField(next.fields.city)) {
+        next.fields.city = registry(parts.city);
+      }
     }
   }
   return next;
@@ -227,7 +304,6 @@ export function orgValuesFromProfile(profile: SiteProfile, now = new Date()) {
     postalCode: "postalCode",
     region: "region",
     street: "street",
-    vatNumber: "vatNumber",
   } as const;
   for (const [key, column] of Object.entries(columns) as Array<
     [keyof typeof columns, (typeof columns)[keyof typeof columns]]
@@ -250,7 +326,23 @@ export function orgValuesFromProfile(profile: SiteProfile, now = new Date()) {
     values.brandColor = profile.brandColor;
     sources.brandColor = { at, confirmed: true, detail: "your website", source: "site" };
   }
-  if (profile.vat && profile.fields.vatNumber) {
+  const taxIdentifier =
+    profile.taxIdentifier ?? taxIdentifierFromLegacyVatNumber(profile.fields.vatNumber?.value);
+  Object.assign(values, taxIdentifierFields(taxIdentifier));
+  if (taxIdentifier && profile.fields.vatNumber) {
+    const taxSource = {
+      at,
+      confirmed: true,
+      detail: profile.fields.vatNumber.detail,
+      source: profile.fields.vatNumber.source,
+    };
+    sources.taxIdentifierCanonicalValue = taxSource;
+    sources.taxIdentifierCountryCode = taxSource;
+    sources.taxIdentifierType = taxSource;
+    sources.taxIdentifierValue = taxSource;
+    sources.vatNumber = taxSource;
+  }
+  if (profile.vat && taxIdentifier?.type === "eu_vat") {
     values.vatStatus = profile.vat.status;
     values.vatRegistryName = profile.vat.name;
     values.vatRegistryAddress = profile.vat.address;

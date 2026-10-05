@@ -58,6 +58,7 @@ import {
   getInsufficientPermissionsError,
 } from "@/lib/roles";
 import { createPaymentLink, deactivatePaymentLink } from "@/lib/stripe";
+import { invoiceTaxIdentifier } from "@/lib/tax-identifier";
 
 export type InvoiceServiceContext = {
   orgId: string;
@@ -365,6 +366,10 @@ export async function getInvoiceDetail(orgId: string, invoiceId: string) {
         email: clients.email,
         id: clients.id,
         name: clients.name,
+        taxIdentifierCanonicalValue: clients.taxIdentifierCanonicalValue,
+        taxIdentifierCountryCode: clients.taxIdentifierCountryCode,
+        taxIdentifierType: clients.taxIdentifierType,
+        taxIdentifierValue: clients.taxIdentifierValue,
         vatNumber: clients.vatNumber,
         vatStatus: clients.vatStatus,
       })
@@ -432,7 +437,12 @@ export async function getInvoiceDetail(orgId: string, invoiceId: string) {
     ...invoice,
     activityLog: activities,
     balance: settlement.balance,
-    client,
+    client: client
+      ? {
+          ...client,
+          taxIdentifier: invoiceTaxIdentifier(invoice.status, invoice.clientTaxIdentifier, client),
+        }
+      : null,
     creditedAmount: settlement.creditedAmount,
     lastViewedAt: viewRow?.lastViewedAt ?? null,
     lineItems: items.map((item) => ({
@@ -799,8 +809,18 @@ export async function sendInvoice(
       await tx
         .update(invoices)
         .set({
+          clientTaxIdentifier: invoiceTaxIdentifier(
+            invoice.status,
+            invoice.clientTaxIdentifier,
+            client,
+          ),
           publicToken: invoice.publicToken ?? randomBytes(24).toString("base64url"),
           revision: sql`${invoices.revision} + 1`,
+          sellerTaxIdentifier: invoiceTaxIdentifier(
+            invoice.status,
+            invoice.sellerTaxIdentifier,
+            org,
+          ),
           sentAt,
           status: "sent",
           stripeAccountId: accountId,

@@ -36,7 +36,7 @@ import {
   sendReminder,
   type InvoiceMutationInput,
 } from "@/lib/invoice-service";
-import { clientVatFields } from "@/lib/vat";
+import { clientTaxIdentifierFields } from "@/lib/vat";
 
 export type ChatToolContext = Pick<AuthenticatedUserContext, "org" | "role" | "user">;
 
@@ -601,7 +601,7 @@ export function createChatTools(auth: ChatToolContext) {
               notes: input.notes,
               orgId: auth.org.id,
               userId: auth.user.id,
-              ...(await clientVatFields(input.vatNumber)),
+              ...(await clientTaxIdentifierFields(input.taxIdentifier)),
             })
             .returning({
               company: clients.company,
@@ -625,7 +625,14 @@ export function createChatTools(auth: ChatToolContext) {
         email: z.string().email(),
         name: z.string().trim().min(1),
         notes: z.string().trim().optional(),
-        vatNumber: z.string().trim().optional(),
+        taxIdentifier: z
+          .object({
+            countryCode: z.string().length(2).nullable().optional(),
+            type: z.enum(["eu_vat", "us_ein", "tax_id"]),
+            value: z.string().trim().max(100),
+          })
+          .nullable()
+          .optional(),
       }),
     }),
     create_invoice: tool({

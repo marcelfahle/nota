@@ -1,6 +1,11 @@
 import { ArrowRight } from "lucide-react";
 
 import type { SiteProfile } from "@/lib/site-reader/types";
+import {
+  formatTaxIdentifier,
+  isViesCountry,
+  taxIdentifierFromLegacyVatNumber,
+} from "@/lib/tax-identifier";
 import { cn, formatCurrency } from "@/lib/utils";
 
 const INK = "#1F1B16";
@@ -46,7 +51,7 @@ export function InvoicePreview({
   brief?: boolean;
   className?: string;
   compact?: boolean;
-  /** Address and VAT lines under the name. On by default at full size. */
+  /** Address and tax-identifier lines under the name. On by default at full size. */
   details?: boolean;
   /** A favicon loaded in the browser while the address is still being typed. */
   icon?: string | null;
@@ -55,11 +60,16 @@ export function InvoicePreview({
   testId?: string;
 }) {
   const fields = profile?.fields ?? {};
+  const taxIdentifier =
+    profile?.taxIdentifier ?? taxIdentifierFromLegacyVatNumber(fields.vatNumber?.value);
+  const missingTaxIdentifier =
+    fields.countryCode?.value && isViesCountry(fields.countryCode.value) ? "VAT ID" : "Tax ID";
   const name = fields.name?.value;
   const color = profile?.brandColor ?? null;
   const textOnColor =
     profile?.colors.find((candidate) => candidate.hex === color)?.text ?? (color ? "#FFFFFF" : INK);
   const cityLine = [fields.postalCode?.value, fields.city?.value].filter(Boolean).join(" ");
+  const regionLine = fields.region?.value;
   const today = new Date();
   const due = new Date(today.getTime() + 14 * 86_400_000);
   const amount = formatCurrency(1200, "EUR");
@@ -127,16 +137,19 @@ export function InvoicePreview({
                   <Slot missing="Postcode, city" value={cityLine || null} />
                   {fields.country?.value ? (
                     <span className="onboarding-land" key={fields.country.value}>
-                      {cityLine ? ", " : " "}
+                      {cityLine || regionLine ? ", " : " "}
+                      {regionLine ? `${regionLine}, ` : ""}
                       {fields.country.value}
+                    </span>
+                  ) : regionLine ? (
+                    <span className="onboarding-land">
+                      {cityLine ? ", " : " "}
+                      {regionLine}
                     </span>
                   ) : null}
                 </p>
                 <p>
-                  <Slot
-                    missing="VAT ID"
-                    value={fields.vatNumber?.value ? `VAT ${fields.vatNumber.value}` : null}
-                  />
+                  <Slot missing={missingTaxIdentifier} value={formatTaxIdentifier(taxIdentifier)} />
                 </p>
               </>
             ) : null}

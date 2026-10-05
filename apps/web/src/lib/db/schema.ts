@@ -17,6 +17,7 @@ import {
 } from "drizzle-orm/pg-core";
 
 import type { SiteProfile } from "@/lib/site-reader/types";
+import type { TaxIdentifier } from "@/lib/tax-identifier";
 
 export const orgRoleEnum = pgEnum("org_role", ["owner", "admin", "member"]);
 export const invoiceKindEnum = pgEnum("invoice_kind", ["invoice", "credit_note"]);
@@ -64,6 +65,10 @@ export const users = pgTable(
     nextInvoiceNumber: integer("next_invoice_number").default(1),
     // Legacy: passwords live in accounts.password now. Kept nullable for rollback.
     passwordHash: text("password_hash"),
+    taxIdentifierCanonicalValue: text("tax_identifier_canonical_value"),
+    taxIdentifierCountryCode: text("tax_identifier_country_code"),
+    taxIdentifierType: text("tax_identifier_type", { enum: ["eu_vat", "us_ein", "tax_id"] }),
+    taxIdentifierValue: text("tax_identifier_value"),
     theme: text("theme", { enum: ["system", "light", "dark"] })
       .notNull()
       .default("system"),
@@ -123,6 +128,10 @@ export const orgs = pgTable("orgs", {
   stripePayoutsEnabled: boolean("stripe_payouts_enabled").notNull().default(false),
   stripeSubscriptionId: text("stripe_subscription_id").unique(),
   stripeSubscriptionStatus: text("stripe_subscription_status"),
+  taxIdentifierCanonicalValue: text("tax_identifier_canonical_value"),
+  taxIdentifierCountryCode: text("tax_identifier_country_code"),
+  taxIdentifierType: text("tax_identifier_type", { enum: ["eu_vat", "us_ein", "tax_id"] }),
+  taxIdentifierValue: text("tax_identifier_value"),
   vatNumber: text("vat_number"),
   vatRegistryAddress: text("vat_registry_address"),
   vatRegistryName: text("vat_registry_name"),
@@ -239,6 +248,10 @@ export const clients = pgTable("clients", {
   name: text().notNull(),
   notes: text(),
   orgId: uuid("org_id").references(() => orgs.id),
+  taxIdentifierCanonicalValue: text("tax_identifier_canonical_value"),
+  taxIdentifierCountryCode: text("tax_identifier_country_code"),
+  taxIdentifierType: text("tax_identifier_type", { enum: ["eu_vat", "us_ein", "tax_id"] }),
+  taxIdentifierValue: text("tax_identifier_value"),
   updatedAt: timestamp("updated_at").defaultNow(),
   userId: uuid("user_id")
     .notNull()
@@ -272,6 +285,7 @@ export const invoices = pgTable(
     clientId: uuid("client_id")
       .notNull()
       .references(() => clients.id),
+    clientTaxIdentifier: jsonb("client_tax_identifier").$type<TaxIdentifier>(),
     createdAt: timestamp("created_at").defaultNow(),
     creditsInvoiceId: uuid("credits_invoice_id").references((): AnyPgColumn => invoices.id),
     currency: text().default("EUR"),
@@ -287,6 +301,7 @@ export const invoices = pgTable(
     publicToken: text("public_token").unique(),
     reverseCharge: text("reverse_charge").default("false"),
     revision: integer().notNull().default(1),
+    sellerTaxIdentifier: jsonb("seller_tax_identifier").$type<TaxIdentifier>(),
     sentAt: timestamp("sent_at"),
     source: invoiceSourceEnum().notNull().default("web"),
     sourceClient: text("source_client"),

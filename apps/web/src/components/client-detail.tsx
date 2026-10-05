@@ -17,6 +17,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { formatTaxIdentifier, taxIdentifierFromColumns } from "@/lib/tax-identifier";
 import { formatCurrency } from "@/lib/utils";
 
 type BankAccountOption = {
@@ -35,6 +36,10 @@ type Client = {
   id: string;
   name: string;
   notes: string | null;
+  taxIdentifierCanonicalValue: string | null;
+  taxIdentifierCountryCode: string | null;
+  taxIdentifierType: "eu_vat" | "tax_id" | "us_ein" | null;
+  taxIdentifierValue: string | null;
   vatNumber: string | null;
 };
 
@@ -131,7 +136,10 @@ export function ClientDetailView({
       ) : (
         <div className="mb-8 grid max-w-2xl gap-4 sm:grid-cols-2">
           <DetailItem label="Address" value={client.address} />
-          <DetailItem label="VAT Number" value={client.vatNumber} />
+          <DetailItem
+            label="Tax identifier"
+            value={formatTaxIdentifier(taxIdentifierFromColumns(client))}
+          />
           <DetailItem label="Currency" value={client.defaultCurrency ?? "EUR"} />
           <DetailItem label="Notes" value={client.notes} />
           {bankAccounts.length >= 2 && (

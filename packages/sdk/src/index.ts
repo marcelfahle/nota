@@ -11,6 +11,17 @@ export type PaginatedResult<T> = {
 
 export type OrgRole = "owner" | "admin" | "member";
 
+export type TaxIdentifier = {
+  canonicalValue: string;
+  countryCode: string | null;
+  type: "eu_vat" | "tax_id" | "us_ein";
+  value: string;
+};
+
+export type TaxIdentifierInput = Pick<TaxIdentifier, "type" | "value"> & {
+  countryCode?: string | null;
+};
+
 export type NotaUser = {
   email: string;
   id: string;
@@ -36,6 +47,7 @@ export type NotaOrg = {
   postalCode?: string | null;
   region?: string | null;
   street?: string | null;
+  taxIdentifier?: TaxIdentifier | null;
   vatNumber?: string | null;
   website?: string | null;
 };
@@ -54,6 +66,7 @@ export type ClientRecord = {
   address?: string | null;
   defaultCurrency?: string | null;
   notes?: string | null;
+  taxIdentifier?: TaxIdentifier | null;
   vatNumber?: string | null;
   bankAccountId?: string | null;
   invoiceCount?: number;
@@ -74,6 +87,8 @@ export type ClientCreateInput = {
   address?: string;
   defaultCurrency?: string;
   notes?: string;
+  taxIdentifier?: TaxIdentifierInput | null;
+  /** @deprecated Use taxIdentifier with type eu_vat. */
   vatNumber?: string;
   bankAccountId?: string | null;
 };
@@ -176,6 +191,7 @@ export type InvoiceDetail = {
     name: string;
     email: string;
     defaultCurrency?: string | null;
+    taxIdentifier?: TaxIdentifier | null;
   } | null;
   lineItems: Array<InvoiceLineItem>;
   lastViewedAt: string | null;

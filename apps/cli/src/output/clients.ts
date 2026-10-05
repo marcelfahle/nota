@@ -26,7 +26,12 @@ export function printClientDetail(client: ClientRecord, recentInvoices: InvoiceS
   u.field("Email", client.email);
   if (client.company) u.field("Company", client.company);
   if (client.address) u.field("Address", client.address);
-  if (client.vatNumber) u.field("VAT", client.vatNumber);
+  if (client.taxIdentifier) {
+    const label = client.taxIdentifier.type === "eu_vat" ? "VAT ID" : client.taxIdentifier.type === "us_ein" ? "EIN" : "Tax ID";
+    u.field(label, client.taxIdentifier.value);
+  } else if (client.vatNumber) {
+    u.field("VAT ID", client.vatNumber);
+  }
   u.field("Default currency", client.defaultCurrency || "Not set");
   u.field("Invoices", String(client.invoiceCount ?? 0));
   // The client aggregate has no currency breakdown; do not label a mixed-currency total as its default currency.

@@ -3,6 +3,7 @@ import { ArrowRight, Download } from "lucide-react";
 import { RubberStamp } from "@/components/nota-marks";
 import { formatOrgAddress } from "@/lib/branding";
 import type { PublicInvoice } from "@/lib/public-invoice";
+import { formatTaxIdentifier, invoiceTaxIdentifier } from "@/lib/tax-identifier";
 import { formatCurrency } from "@/lib/utils";
 
 function formatDate(value: string | Date) {
@@ -42,6 +43,16 @@ export function PublicInvoiceView({ invoice, token }: { invoice: PublicInvoice; 
   const isPaid = !isCreditNote && invoice.settlementStatus === "paid";
   const paymentLinkUrl = !isCreditNote && !isPaid ? invoice.stripePaymentLinkUrl : null;
   const brandColor = invoice.organization.brandColor ?? "#86efac";
+  const sellerTaxIdentifier = invoiceTaxIdentifier(
+    invoice.status,
+    invoice.sellerTaxIdentifier,
+    invoice.organization,
+  );
+  const clientTaxIdentifier = invoiceTaxIdentifier(
+    invoice.status,
+    invoice.clientTaxIdentifier,
+    invoice.client,
+  );
 
   return (
     <main className="min-h-dvh bg-[#efede8] px-3 py-5 text-[#1f1b16] sm:px-6 sm:py-10">
@@ -67,9 +78,7 @@ export function PublicInvoiceView({ invoice, token }: { invoice: PublicInvoice; 
               <div className="min-w-0 text-xs leading-5 text-[#6b655c]">
                 <p className="truncate text-sm font-bold text-[#1f1b16]">{businessName}</p>
                 {businessAddress ? <p className="whitespace-pre-line">{businessAddress}</p> : null}
-                {invoice.organization.vatNumber ? (
-                  <p>VAT {invoice.organization.vatNumber}</p>
-                ) : null}
+                {sellerTaxIdentifier ? <p>{formatTaxIdentifier(sellerTaxIdentifier)}</p> : null}
               </div>
             </div>
             <div className="shrink-0 text-right">
@@ -87,6 +96,11 @@ export function PublicInvoiceView({ invoice, token }: { invoice: PublicInvoice; 
               {clientAddress ? (
                 <p className="mt-0.5 text-xs leading-5 whitespace-pre-line text-[#6b655c]">
                   {clientAddress}
+                </p>
+              ) : null}
+              {clientTaxIdentifier ? (
+                <p className="mt-0.5 text-xs text-[#6b655c]">
+                  {formatTaxIdentifier(clientTaxIdentifier)}
                 </p>
               ) : null}
             </div>

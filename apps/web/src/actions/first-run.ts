@@ -18,6 +18,8 @@ import {
   canSendInvoice,
   getInsufficientPermissionsError,
 } from "@/lib/roles";
+import { TAX_IDENTIFIER_TYPES, TaxIdentifierValidationError } from "@/lib/tax-identifier";
+import { clientTaxIdentifierFields } from "@/lib/vat";
 
 const MAX_UNCONFIRMED_TEST_COPIES = 3;
 
@@ -27,7 +29,8 @@ const profileSchema = z.object({
   legalName: z.string().trim().min(1, "Legal name is required").max(250),
   postalCode: z.string().trim().max(40),
   street: z.string().trim().min(1, "Street and number are required").max(500),
-  vatNumber: z.string().trim().max(100),
+  taxIdentifierType: z.enum(TAX_IDENTIFIER_TYPES),
+  taxIdentifierValue: z.string().trim().max(100),
 });
 
 const bankSchema = z.object({
@@ -59,7 +62,8 @@ export async function saveFirstRunProfile(
     legalName: formData.get("legalName"),
     postalCode: formData.get("postalCode"),
     street: formData.get("street"),
-    vatNumber: formData.get("vatNumber"),
+    taxIdentifierType: formData.get("taxIdentifierType"),
+    taxIdentifierValue: formData.get("taxIdentifierValue"),
   });
   if (!parsed.success) {
     return { error: parsed.error.issues[0].message };
@@ -77,10 +81,27 @@ export async function saveFirstRunProfile(
       profileSources[field] = { at, confirmed: true, source: "user" };
     }
   }
-  await db
-    .update(orgs)
-    .set({ ...parsed.data, profileSources })
-    .where(eq(orgs.id, org.id));
+  try {
+    const { taxIdentifierType, taxIdentifierValue, ...profile } = parsed.data;
+    await db
+      .update(orgs)
+      .set({
+        ...profile,
+        ...(await clientTaxIdentifierFields({
+          type: taxIdentifierType,
+          value: taxIdentifierValue,
+        })),
+        profileSources,
+      })
+      .where(eq(orgs.id, org.id));
+  } catch (error) {
+    return {
+      error:
+        error instanceof TaxIdentifierValidationError
+          ? error.message
+          : "Could not save legal details",
+    };
+  }
   revalidatePath("/home");
   return { success: true };
 }
