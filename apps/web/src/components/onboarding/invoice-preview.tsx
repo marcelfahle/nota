@@ -1,7 +1,11 @@
 import { ArrowRight } from "lucide-react";
 
 import type { SiteProfile } from "@/lib/site-reader/types";
-import { formatTaxIdentifier, taxIdentifierFromLegacyVatNumber } from "@/lib/tax-identifier";
+import {
+  formatTaxIdentifier,
+  isViesCountry,
+  taxIdentifierFromLegacyVatNumber,
+} from "@/lib/tax-identifier";
 import { cn, formatCurrency } from "@/lib/utils";
 
 const INK = "#1F1B16";
@@ -47,7 +51,7 @@ export function InvoicePreview({
   brief?: boolean;
   className?: string;
   compact?: boolean;
-  /** Address and VAT lines under the name. On by default at full size. */
+  /** Address and tax-identifier lines under the name. On by default at full size. */
   details?: boolean;
   /** A favicon loaded in the browser while the address is still being typed. */
   icon?: string | null;
@@ -58,6 +62,8 @@ export function InvoicePreview({
   const fields = profile?.fields ?? {};
   const taxIdentifier =
     profile?.taxIdentifier ?? taxIdentifierFromLegacyVatNumber(fields.vatNumber?.value);
+  const missingTaxIdentifier =
+    fields.countryCode?.value && isViesCountry(fields.countryCode.value) ? "VAT ID" : "Tax ID";
   const name = fields.name?.value;
   const color = profile?.brandColor ?? null;
   const textOnColor =
@@ -143,7 +149,7 @@ export function InvoicePreview({
                   ) : null}
                 </p>
                 <p>
-                  <Slot missing="Tax ID" value={formatTaxIdentifier(taxIdentifier)} />
+                  <Slot missing={missingTaxIdentifier} value={formatTaxIdentifier(taxIdentifier)} />
                 </p>
               </>
             ) : null}
