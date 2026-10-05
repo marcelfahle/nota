@@ -115,9 +115,12 @@ jobs:
           test "$(curl --silent http://127.0.0.1:3000/api/health)" = '{"status":"ok"}'
           curl --fail --silent --header 'Authorization: Bearer ci-cron-secret' \
             http://127.0.0.1:3000/api/doctor | grep '"status":"ok"'
-          bun run --cwd apps/cli dev -- invoices create --client 'Alice Example' \
-            --item 'Self-host smoke | 1 | 125' --tax-rate 21
-          bun run --cwd apps/cli dev -- invoices send INV-0004
+          create_output="$(bun run --cwd apps/cli dev -- invoices create --client 'Alice Example' \
+            --item 'Self-host smoke | 1 | 125' --tax-rate 21)"
+          printf '%s\n' "$create_output"
+          draft_number="$(printf '%s\n' "$create_output" | sed -n 's/^Created \(DRAFT-[^ ]*\).*/\1/p')"
+          test -n "$draft_number"
+          bun run --cwd apps/cli dev -- invoices send "$draft_number"
           bun run --cwd apps/cli dev -- invoices pdf INV-0004 --output /tmp/INV-0004.pdf
           test "$(head -c 4 /tmp/INV-0004.pdf)" = '%PDF'
           docker compose --env-file .env.self-hosted exec -T web grep 'INV-0004' /data/mail/sends.jsonl

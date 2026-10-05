@@ -148,6 +148,13 @@
       "when": 1791184783861,
       "tag": "0020_large_pepper_potts",
       "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1791194842520,
+      "tag": "0021_little_strong_guy",
+      "breakpoints": true
     }
   ]
 }

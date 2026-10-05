@@ -307,6 +307,28 @@ export const invoices = pgTable(
   (table) => [unique("invoices_org_id_number_unique").on(table.orgId, table.number)],
 );
 
+export const invoiceNumberEvents = pgTable(
+  "invoice_number_events",
+  {
+    action: text().notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    id: uuid().defaultRandom().primaryKey(),
+    invoiceId: uuid("invoice_id").references(() => invoices.id, { onDelete: "set null" }),
+    kind: invoiceKindEnum().notNull(),
+    metadata: jsonb(),
+    number: text().notNull(),
+    orgId: uuid("org_id")
+      .notNull()
+      .references(() => orgs.id, { onDelete: "cascade" }),
+    source: invoiceSourceEnum().notNull().default("web"),
+    sourceClient: text("source_client"),
+  },
+  (table) => [
+    index("invoice_number_events_org_created_idx").on(table.orgId, table.createdAt),
+    index("invoice_number_events_invoice_idx").on(table.invoiceId),
+  ],
+);
+
 export const lineItems = pgTable("line_items", {
   amount: numeric({ precision: 19, scale: 4 }).notNull(),
   description: text().notNull(),
@@ -596,10 +618,19 @@ export const invoicesRelations = relations(invoices, ({ many, one }) => ({
   }),
   jobs: many(jobs),
   lineItems: many(lineItems),
+  numberEvents: many(invoiceNumberEvents),
   org: one(orgs, { fields: [invoices.orgId], references: [orgs.id] }),
   payments: many(payments),
   proposals: many(proposals),
   user: one(users, { fields: [invoices.userId], references: [users.id] }),
+}));
+
+export const invoiceNumberEventsRelations = relations(invoiceNumberEvents, ({ one }) => ({
+  invoice: one(invoices, {
+    fields: [invoiceNumberEvents.invoiceId],
+    references: [invoices.id],
+  }),
+  org: one(orgs, { fields: [invoiceNumberEvents.orgId], references: [orgs.id] }),
 }));
 
 export const lineItemsRelations = relations(lineItems, ({ one }) => ({
