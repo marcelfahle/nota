@@ -83,6 +83,9 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
+      - name: Build SDK for CLI smoke commands
+        run: bun run build:sdk
+
       - name: Configure disposable stack
         run: |
           cp .env.self-hosted.example .env.self-hosted
