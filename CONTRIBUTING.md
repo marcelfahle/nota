@@ -7,7 +7,10 @@ Thanks for contributing.
 This repository is organized as a monorepo under `apps/`.
 
 - `apps/web` is the production app today.
-- `apps/cli` and `apps/mcp` are reserved for the CLI and MCP server.
+- `apps/cli` is the published terminal client; `apps/mcp` serves local and remote agent integrations.
+- `packages/sdk` is their shared REST client.
+
+Nota is maintained by No Rules Software SL.
 
 ## Local workflow
 
@@ -43,13 +46,13 @@ non-disposable data.
 Setup creates `apps/web/.env` with local database/auth defaults only if neither
 `.env` nor `.env.local` exists. Existing configuration and injected environment
 variables still control the app, so check the database target before running
-database-backed browser tests. Stripe, Resend, Anthropic, and Blob integrations
+database-backed browser tests. Stripe, Helo, Anthropic, and Blob integrations
 require separate development secrets; setup does not copy credentials into the
 snapshot. After changing dependencies, rerun `.agents/setup`.
 
 ## Before opening a PR
 
-Run the shared checks from the repository root:
+Run focused tests and static checks for the surfaces you changed. Before a release or a cross-surface change, run the shared checks from the repository root:
 
 ```bash
 bun run test:web
@@ -67,7 +70,7 @@ bun run test:e2e:web
 
 ## Guidelines
 
-- Keep the app intentionally single-owner unless the change explicitly expands scope.
+- Preserve workspace isolation and the existing owner/admin/member permissions across every surface.
 - Do not commit secrets or real `.env` files.
 - Prefer small, reviewable pull requests with a clear problem statement.
 - Update docs and runbooks when behavior or deployment requirements change.

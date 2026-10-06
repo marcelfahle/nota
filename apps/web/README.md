@@ -22,7 +22,7 @@
 - Drizzle ORM
 - Neon Postgres
 - Stripe
-- Resend
+- Helo
 - Vercel AI SDK with Anthropic
 - Bun for local commands
 
@@ -75,7 +75,9 @@ Open `http://localhost:3000/login`.
 - `DATABASE_URL`: Postgres connection string
 - `SESSION_SECRET`: HMAC secret for signed session cookies
 - `APP_URL`: absolute app URL used in invites and password reset emails
-- `RESEND_API_KEY`: API key used to send invites, invoices, reminders, and payment emails
+- `HELO_API_KEY`: Helo API credential for authentication, invites, and invoice emails
+- `HELO_CHANNEL_ID`: Helo channel UUID (sandbox locally; live for real delivery)
+- `EMAIL_FROM_ADDRESS`: sender on a verified Helo domain, for example `hello@withnota.com`
 - `STRIPE_SECRET_KEY`: Nota's platform key in hosted mode, or your own key in self-hosted direct mode
 - `STRIPE_WEBHOOK_SECRET`: webhook signing secret for `/api/webhooks/stripe`
 - `CRON_SECRET`: bearer token expected by `/api/cron/overdue` and `/api/cron/jobs`
@@ -84,7 +86,7 @@ Open `http://localhost:3000/login`.
 
 ### Recommended
 
-- `RESEND_FROM_EMAIL`: branded sender, for example `Your Business <billing@example.com>`
+- `EMAIL_FROM_NAME`: sender display name (defaults to `Nota`)
 - `NOTA_CHAT_MODEL`: override the default `claude-sonnet-5-5` model used by `/api/chat` (adaptive thinking, low effort)
 
 ### Stripe
@@ -156,7 +158,7 @@ bun run db:studio
 3. Run Drizzle migrations against the production database.
 4. Seed the first owner account once.
 5. Configure a Stripe webhook that points to `https://your-domain.com/api/webhooks/stripe`.
-6. Configure a verified sending domain in Resend and set `RESEND_FROM_EMAIL`.
+6. Follow the [Helo setup runbook](../../docs/runbooks/helo-email.md) to verify the sender domain and configure email.
 7. Keep `vercel.json` committed so Vercel runs the overdue and job crons.
 
 ## Tests

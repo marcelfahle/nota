@@ -6,8 +6,8 @@ const optionalString = z.preprocess(
 );
 const optionalUrl = z.preprocess((value) => (value === "" ? undefined : value), z.url().optional());
 
-function createEnvGetter<T extends z.ZodRawShape>(schema: z.ZodObject<T>) {
-  let cached: z.infer<typeof schema> | null = null;
+function createEnvGetter<T>(schema: z.ZodType<T>) {
+  let cached: T | null = null;
 
   return () => {
     if (!cached) {
@@ -53,13 +53,18 @@ export const getBetterAuthEnv = createEnvGetter(
 export const getEmailEnv = createEnvGetter(
   z
     .object({
-      EMAIL_FROM: z.string().min(1).default("Nota <nota@localhost>"),
+      EMAIL_FROM: optionalString,
+      EMAIL_FROM_ADDRESS: z.preprocess(
+        (value) => (value === "" ? undefined : value),
+        z.email().optional(),
+      ),
+      EMAIL_FROM_NAME: z.string().min(1).default("Nota"),
       EMAIL_LOG_PATH: z.string().min(1).default("/data/mail/sends.jsonl"),
       EMAIL_PROVIDER: z.enum(["helo", "smtp", "log"]).default("helo"),
       HELO_API_KEY: optionalString,
       HELO_CHANNEL_ID: z.preprocess(
         (value) => (value === "" ? undefined : value),
-        z.string().uuid().optional(),
+        z.uuid().optional(),
       ),
       SMTP_URL: optionalString,
     })
@@ -70,6 +75,22 @@ export const getEmailEnv = createEnvGetter(
       if (env.EMAIL_PROVIDER === "smtp" && !env.SMTP_URL) {
         context.addIssue({ code: "custom", message: "SMTP_URL is required for SMTP email" });
       }
+    })
+    .transform((env) => {
+      const from =
+        env.EMAIL_FROM ??
+        (env.EMAIL_FROM_ADDRESS
+          ? env.EMAIL_FROM_NAME + " <" + env.EMAIL_FROM_ADDRESS + ">"
+          : "Nota <nota@localhost>");
+      const match = from.match(/^\s*(.*?)\s*<([^>]+)>\s*$/);
+      return {
+        ...env,
+        EMAIL_FROM: from,
+        EMAIL_FROM_ADDRESS: env.EMAIL_FROM_ADDRESS ?? (match ? match[2].trim() : from.trim()),
+        EMAIL_FROM_NAME: match
+          ? match[1].replaceAll(/^"|"$/g, "").trim() || env.EMAIL_FROM_NAME
+          : env.EMAIL_FROM_NAME,
+      };
     }),
 );
 

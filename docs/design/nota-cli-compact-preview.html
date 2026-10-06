@@ -1,0 +1,34 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>Nota CLI — compact output</title><style>body{margin:0;padding:36px;background:#faf9f6;color:#24241f;font:15px system-ui}main{max-width:980px;margin:auto}h1{font-size:24px;letter-spacing:-.6px}p{color:#64645d;line-height:1.6}section{margin:28px 0}h2{font-size:12px;font-weight:500;text-transform:uppercase;letter-spacing:.08em}pre{overflow:auto;background:#20211e;color:#eeeede;border-radius:8px;padding:20px 12px;font:13px/1.6 ui-monospace,SFMono-Regular,Consolas,monospace}code{font-family:ui-monospace,monospace}a{color:inherit}</style><main><h1>nota / compact CLI</h1><p>Actual 0.2.0 command renderer, captured at three terminal widths. Fixture invoices only. Colors are disabled here so spacing and labels can be judged independently.</p><section><h2>80 columns</h2><pre>
+  Invoices
+  INVOICE   CLIENT                            TOTAL  STATUS     DUE
+  INV-0042  Oxide Studio                  €4,800.00  overdue    28 Sep
+  INV-0043  Linear Forms                  €3,200.00  part paid  12 Oct
+  INV-0044  Good Company                  €1,500.00  draft      4 Nov
+  INV-0041  Oxide Studio                  €2,400.00  paid       30 Sep
+  4 shown · 4 matching · page 1</pre></section><section><h2>40 columns</h2><pre>
+  Invoices
+  INV-0042 · €4,800.00
+  Oxide Studio · overdue · due 28 Sep
+  INV-0043 · €3,200.00
+  Linear Forms · part paid · due 12 Oc
+  t
+  INV-0044 · €1,500.00
+  Good Company · draft · due 4 Nov
+  INV-0041 · €2,400.00
+  Oxide Studio · paid · due 30 Sep
+  4 shown · 4 matching · page 1</pre></section><section><h2>32 columns</h2><pre>
+  Invoices
+  INV-0042 · €4,800.00
+  Oxide Studio · overdue · due
+   28 Sep
+  INV-0043 · €3,200.00
+  Linear Forms · part paid · d
+  ue 12 Oct
+  INV-0044 · €1,500.00
+  Good Company · draft · due 4
+   Nov
+  INV-0041 · €2,400.00
+  Oxide Studio · paid · due 30
+   Sep
+  4 shown · 4 matching · page
+  1</pre></section><p>Lists stay compact. Use <code>nota invoices show INV-0042</code> for details, <code>--activity</code> for history, and <code>--json</code> for automation.</p></main></html>

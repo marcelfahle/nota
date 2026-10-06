@@ -3,7 +3,7 @@ import { createHash, randomBytes } from "node:crypto";
 import { verifyBearerToken } from "better-auth/oauth2";
 import { and, eq, lt } from "drizzle-orm";
 
-import { getAuthIssuer, getMcpResource } from "@/lib/auth-config";
+import { getApiResource, getAuthIssuer, getMcpResource } from "@/lib/auth-config";
 import { db } from "@/lib/db";
 import { apiKeys, oauthClients, oauthConsents, orgMembers, orgs, users } from "@/lib/db/schema";
 import { getUserContextById, type AuthenticatedRole } from "@/lib/user-context";
@@ -19,6 +19,7 @@ type UserRecord = typeof users.$inferSelect;
 export type ApiRequestAuthContext = {
   /** The `nota_` key used, or null for an OAuth access token (ChatGPT, Claude). */
   apiKey: ApiKeyRecord | null;
+  oauthClientId?: string;
   org: OrgRecord;
   role: AuthenticatedRole;
   source: "api" | "cli" | "mcp";
@@ -87,19 +88,26 @@ export async function createApiKey(orgId: string, userId: string, name: string) 
 }
 
 /**
- * OAuth access tokens are JWTs that Better Auth issues to MCP clients, bound to
- * the MCP resource. The MCP route forwards them here unchanged.
+ * Accept Nota-issued JWTs bound to either the REST API or MCP resource.
+ * Consent and current membership remain authoritative after token issuance.
  */
-async function authenticateOAuthToken(token: string): Promise<ApiRequestAuthContext | null> {
+async function authenticateOAuthToken(
+  token: string,
+  request: Request,
+): Promise<ApiRequestAuthContext | null> {
   let clientId: string | undefined;
   let userId: string | undefined;
+  let isApiToken = false;
   try {
     const claims = await verifyBearerToken(token, {
       jwksUrl: `${getAuthIssuer()}/api/auth/jwks`,
-      verifyOptions: { audience: getMcpResource(), issuer: getAuthIssuer() },
+      verifyOptions: { audience: [getMcpResource(), getApiResource()], issuer: getAuthIssuer() },
     });
     userId = typeof claims.sub === "string" ? claims.sub : undefined;
     clientId = typeof claims.client_id === "string" ? claims.client_id : undefined;
+    isApiToken =
+      claims.aud === getApiResource() ||
+      (Array.isArray(claims.aud) && claims.aud.includes(getApiResource()));
   } catch {
     return null;
   }
@@ -135,9 +143,14 @@ async function authenticateOAuthToken(token: string): Promise<ApiRequestAuthCont
     );
   return {
     apiKey: null,
+    oauthClientId: clientId,
     org: context.org,
     role: context.role,
-    source: "mcp",
+    source: isApiToken
+      ? request.headers.get("user-agent")?.includes("nota-cli")
+        ? "cli"
+        : "api"
+      : "mcp",
     sourceClient: client?.name ?? null,
     user: context.user,
   };
@@ -151,7 +164,7 @@ export async function authenticateApiRequest(
     return null;
   }
   if (!token.startsWith(API_KEY_PREFIX)) {
-    return authenticateOAuthToken(token);
+    return authenticateOAuthToken(token, request);
   }
 
   const keyHash = hashApiKey(token);
