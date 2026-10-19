@@ -1,4 +1,4 @@
-import { ArrowRight, Download } from "lucide-react";
+import { ArrowRight, Download, FileCode } from "lucide-react";
 
 import { RubberStamp } from "@/components/nota-marks";
 import { formatOrgAddress } from "@/lib/branding";
@@ -301,13 +301,25 @@ export function PublicInvoiceView({ invoice, token }: { invoice: PublicInvoice; 
           ) : null}
 
           <footer className="mt-9 flex flex-wrap items-center justify-between gap-4 border-t border-black/10 pt-5 text-xs text-[#6b655c]">
-            <a
-              className="inline-flex items-center gap-2 font-medium text-[#1f1b16] underline-offset-4 hover:underline"
-              href={`/api/public/invoices/${token}/pdf`}
-            >
-              <Download className="size-4" />
-              Download PDF
-            </a>
+            <span className="flex flex-wrap items-center gap-4">
+              <a
+                className="inline-flex items-center gap-2 font-medium text-[#1f1b16] underline-offset-4 hover:underline"
+                href={`/api/public/invoices/${token}/pdf`}
+              >
+                <Download className="size-4" />
+                Download PDF
+              </a>
+              {invoice.xrechnungAvailable ? (
+                <a
+                  className="inline-flex items-center gap-2 font-medium text-[#1f1b16] underline-offset-4 hover:underline"
+                  data-testid="public-invoice-xrechnung"
+                  href={`/api/public/invoices/${token}/xrechnung`}
+                >
+                  <FileCode className="size-4" />
+                  Download XRechnung XML
+                </a>
+              ) : null}
+            </span>
             {invoice.organization.website ? (
               <span className="font-mono">
                 {invoice.organization.website.replace(/^https?:\/\//, "")}

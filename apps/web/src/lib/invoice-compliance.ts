@@ -1,3 +1,4 @@
+import { attachesXRechnung, type EInvoiceDelivery } from "@/lib/e-invoice-delivery";
 import { invoiceTaxIdentifier, isViesCountry, type TaxIdentifier } from "@/lib/tax-identifier";
 import { requiresZeroRate, TAX_TREATMENT_LABELS, type TaxTreatment } from "@/lib/tax-treatment";
 import { toCountryCode } from "@/lib/xrechnung";
@@ -300,4 +301,13 @@ export function validateForXRechnung(input: ComplianceInput): Array<string> {
     problems.add("Add a contact phone number for your business in Settings.");
   }
   return [...problems];
+}
+
+/**
+ * Problems that stop an invoice from being emailed. A workspace that attaches
+ * the XRechnung must satisfy the export rules before anything is queued, so the
+ * customer never gets a PDF without the XML it was promised.
+ */
+export function validateForSending(input: ComplianceInput, delivery: EInvoiceDelivery) {
+  return attachesXRechnung(delivery) ? validateForXRechnung(input) : validateForIssuance(input);
 }

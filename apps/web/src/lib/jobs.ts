@@ -15,10 +15,12 @@ import {
   proposals,
   users,
 } from "@/lib/db/schema";
+import { type InvoiceAttachment, parseInvoiceAttachments } from "@/lib/e-invoice-delivery";
 import { sendEmail } from "@/lib/email";
 import { getAppEnv } from "@/lib/env";
 import { renderInvoicePdfForOrg } from "@/lib/invoice-pdf-service";
 import { reminderPayloadSchema } from "@/lib/proposal-service";
+import { renderXRechnungForOrg } from "@/lib/xrechnung-service";
 
 const JOB_LOCK_TIMEOUT_MS = 1000 * 60 * 10;
 
@@ -29,6 +31,8 @@ type EmailJobType =
   | "send_payment_received_email";
 
 type EmailJobPayload = {
+  /** Decided at send time, so a settings change later never alters what was promised. */
+  attachments: Array<InvoiceAttachment>;
   invoiceId: string;
   proposalId?: string;
   recipient?: string;
@@ -50,6 +54,7 @@ function parseEmailJobPayload(payload: Record<string, unknown>): EmailJobPayload
     return null;
   }
   return {
+    attachments: parseInvoiceAttachments(payload.attachments),
     invoiceId: payload.invoiceId,
     proposalId: typeof payload.proposalId === "string" ? payload.proposalId : undefined,
     recipient: typeof payload.recipient === "string" ? payload.recipient : undefined,
@@ -117,21 +122,40 @@ async function getInvoiceEmailContext(invoiceId: string) {
   };
 }
 
-async function sendInvoiceEmail(invoiceId: string, recipient?: string, idempotencyKey?: string) {
-  const { bankDetails, client, invoice, logoSrc, org } = await getInvoiceEmailContext(invoiceId);
+/**
+ * The files one invoice email carries: the PDF, plus the XRechnung XML under
+ * the same base name when the send decided so. Both come from the shared
+ * invoice document loader, so they always describe the same invoice.
+ */
+export async function renderInvoiceAttachments(
+  org: Parameters<typeof renderInvoicePdfForOrg>[0],
+  invoiceId: string,
+  attachments: Array<InvoiceAttachment>,
+  options: { logoSrc?: string | null } = {},
+) {
+  const pdf = await renderInvoicePdfForOrg(org, invoiceId, options);
+  const files = [
+    { content: Buffer.from(pdf.buffer), contentType: "application/pdf", filename: pdf.filename },
+  ];
+  if (attachments.includes("xml")) {
+    const { filename, xml } = await renderXRechnungForOrg(org, invoiceId);
+    files.push({ content: Buffer.from(xml, "utf8"), contentType: "application/xml", filename });
+  }
+  return files;
+}
 
-  const pdf = await renderInvoicePdfForOrg(org, invoiceId, { logoSrc });
+async function sendInvoiceEmail(
+  invoiceId: string,
+  attachments: Array<InvoiceAttachment>,
+  recipient?: string,
+  idempotencyKey?: string,
+) {
+  const { bankDetails, client, invoice, logoSrc, org } = await getInvoiceEmailContext(invoiceId);
 
   const businessName = org.legalName ?? org.businessName ?? org.name ?? APP_NAME;
 
   await sendEmail({
-    attachments: [
-      {
-        content: Buffer.from(pdf.buffer),
-        contentType: "application/pdf",
-        filename: pdf.filename,
-      },
-    ],
+    attachments: await renderInvoiceAttachments(org, invoiceId, attachments, { logoSrc }),
     idempotencyKey,
     react: InvoiceSentEmail({
       bankDetails,
@@ -144,6 +168,7 @@ async function sendInvoiceEmail(invoiceId: string, recipient?: string, idempoten
       paymentLinkUrl: invoice.stripePaymentLinkUrl,
       testCopy: Boolean(recipient),
       total: invoice.total ?? "0",
+      xmlAttached: attachments.includes("xml"),
     }),
     // A copy sent to the sender is labelled as one in the subject and the body.
     subject: recipient
@@ -297,13 +322,14 @@ async function sendPaymentReceivedEmail(invoiceId: string, idempotencyKey?: stri
 async function performEmailJob(type: EmailJobType, payload: EmailJobPayload, jobId: string) {
   switch (type) {
     case "send_invoice_email":
-      await sendInvoiceEmail(payload.invoiceId, undefined, jobId);
+      await sendInvoiceEmail(payload.invoiceId, payload.attachments, undefined, jobId);
       return;
     case "send_invoice_test_email":
       if (!payload.recipient) {
         throw new Error("Test invoice recipient is missing");
       }
-      await sendInvoiceEmail(payload.invoiceId, payload.recipient, jobId);
+      // A test copy of a draft may still be incomplete, so it carries the PDF only.
+      await sendInvoiceEmail(payload.invoiceId, ["pdf"], payload.recipient, jobId);
       return;
     case "send_invoice_reminder_email":
       await sendInvoiceReminderEmail(payload.invoiceId, payload.reminder, payload, jobId);

@@ -26,6 +26,8 @@ type InvoiceSentEmailProps = {
   /** A copy the sender mailed to themselves. It must never pass for a real invoice. */
   testCopy?: boolean;
   total: string;
+  /** The XRechnung XML travels with the PDF. */
+  xmlAttached?: boolean;
 };
 
 function formatCurrencyEmail(amount: string, currency: string): string {
@@ -55,6 +57,7 @@ export function InvoiceSentEmail({
   reminder = false,
   testCopy = false,
   total,
+  xmlAttached = false,
 }: InvoiceSentEmailProps) {
   const actionUrl = invoiceUrl ?? paymentLinkUrl;
   const subject = reminder
@@ -87,6 +90,12 @@ export function InvoiceSentEmail({
               ? `This is a friendly reminder that invoice ${invoiceNumber} is still outstanding. Please find the details below.`
               : `Please find your invoice from ${businessName} below.`}
           </Text>
+
+          {xmlAttached ? (
+            <Text style={styles.text}>
+              The invoice is attached as a PDF and as XRechnung XML for your accounting software.
+            </Text>
+          ) : null}
 
           <Section style={styles.invoiceBox}>
             <Text style={styles.invoiceLabel}>Invoice</Text>

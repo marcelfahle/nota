@@ -169,6 +169,13 @@
       "when": 1792433184027,
       "tag": "0023_german-invoice-model",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1792436441178,
+      "tag": "0024_einvoice-delivery",
+      "breakpoints": true
     }
   ]
 }

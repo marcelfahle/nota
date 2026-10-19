@@ -5,6 +5,7 @@ import { ApiKeysSettings } from "@/components/api-keys-settings";
 import { BillingSettings } from "@/components/billing-settings";
 import { BrandSettings } from "@/components/brand-settings";
 import { ConnectedApps } from "@/components/connected-apps";
+import { EmailSettings } from "@/components/email-settings";
 import { GoogleAccount } from "@/components/google-account";
 import { BankAccountsSettings, NumberingSettings } from "@/components/settings-form";
 import { SettingsTabs } from "@/components/settings-tabs";
@@ -173,14 +174,7 @@ export default async function SettingsPage({
             </div>
           ),
           brand: <BrandSettings canManage={canManage} settings={brandSettings} />,
-          email: (
-            <section className="space-y-2">
-              <h2 className="text-lg font-semibold">Email</h2>
-              <p className="text-sm text-muted-foreground">
-                Invoice email settings will appear here when custom sending is available.
-              </p>
-            </section>
-          ),
+          email: <EmailSettings canManage={canManage} eInvoiceDelivery={org.eInvoiceDelivery} />,
           numbering: (
             <NumberingSettings
               canManageSettings={canManage}

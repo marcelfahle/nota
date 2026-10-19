@@ -19,11 +19,13 @@ import {
   proposals,
   users,
 } from "@/lib/db/schema";
+import { invoiceAttachmentsFor } from "@/lib/e-invoice-delivery";
 import { getDeploymentEnv, getStripeMode } from "@/lib/env";
 import {
   complianceInput,
   taxTreatmentConflict,
   validateForIssuance,
+  validateForSending,
 } from "@/lib/invoice-compliance";
 import { resolveDueDateChange } from "@/lib/invoice-due-date";
 import {
@@ -530,10 +532,13 @@ export async function getInvoiceDetail(orgId: string, invoiceId: string) {
         }
       : null,
     creditedAmount: settlement.creditedAmount,
-    // Drafts list what still blocks issuance; issued documents already passed.
+    // Drafts list what still blocks sending; issued documents already passed.
     issueProblems:
       invoice.status === "draft" && client && org
-        ? validateForIssuance(complianceInput(org, client, invoice, items.length))
+        ? validateForSending(
+            complianceInput(org, client, invoice, items.length),
+            org.eInvoiceDelivery,
+          )
         : [],
     lastViewedAt: viewRow?.lastViewedAt ?? null,
     lineItems: items.map((item) => ({
@@ -915,10 +920,16 @@ export async function sendInvoice(
         .select({ lineItemCount: count() })
         .from(lineItems)
         .where(eq(lineItems.invoiceId, invoiceId));
-      const problems = validateForIssuance(complianceInput(org, client, invoice, lineItemCount));
+      // The XML is validated here, before anything is queued, so the email job
+      // only ever renders a document that is known to be complete.
+      const problems = validateForSending(
+        complianceInput(org, client, invoice, lineItemCount),
+        org.eInvoiceDelivery,
+      );
       if (problems.length) {
         return issuanceError(problems);
       }
+      const attachments = invoiceAttachmentsFor(org.eInvoiceDelivery);
       const account =
         deployment.PAYMENT_MODE === "stripe"
           ? paymentAccount(mode, org.stripeAccountId, org.stripeChargesEnabled)
@@ -968,6 +979,7 @@ export async function sendInvoice(
       await tx.insert(activityLog).values({
         action: "sent",
         invoiceId,
+        metadata: { attachments },
         ...sourceFields(context),
       });
       if (!org.firstRunCompletedAt) {
@@ -1020,7 +1032,7 @@ export async function sendInvoice(
       await expireInvoiceProposals(tx, invoiceId);
       await tx
         .insert(jobs)
-        .values({ invoiceId, payload: { invoiceId }, type: "send_invoice_email" });
+        .values({ invoiceId, payload: { attachments, invoiceId }, type: "send_invoice_email" });
       return { invoiceId, success: true };
     });
     if ("error" in result) {
