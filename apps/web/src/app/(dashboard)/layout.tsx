@@ -6,6 +6,7 @@ import { getCurrentUser } from "@/lib/auth";
 import { billingStatus } from "@/lib/billing";
 import { db } from "@/lib/db";
 import { clients, invoices, jobs, proposals } from "@/lib/db/schema";
+import { orgLocale } from "@/lib/utils";
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
   const { org, user } = await getCurrentUser();
@@ -122,6 +123,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
         pending: emailJobSummary?.pending ?? 0,
         processing: emailJobSummary?.processing ?? 0,
       }}
+      locale={orgLocale(org)}
       logoUrl={org.logoUrl}
       navCounts={{
         overdue: overdueSummary?.count ?? 0,

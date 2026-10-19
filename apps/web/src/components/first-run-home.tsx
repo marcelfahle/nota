@@ -29,7 +29,7 @@ import {
   taxIdentifierFromColumns,
   type TaxIdentifierType,
 } from "@/lib/tax-identifier";
-import { cn, formatCurrency } from "@/lib/utils";
+import { cn, formatCurrency, formatDate, orgLocale } from "@/lib/utils";
 
 type FirstRunInvoice = {
   client: { email: string; name: string };
@@ -73,15 +73,6 @@ export type FirstRunHomeData = {
 };
 
 type Editor = "bank" | "profile" | null;
-
-function formatDate(value: string) {
-  return new Intl.DateTimeFormat("en-GB", {
-    day: "numeric",
-    month: "short",
-    timeZone: "UTC",
-    year: "numeric",
-  }).format(new Date(`${value}T00:00:00Z`));
-}
 
 function readableTextColor(background: string) {
   const channels = background.match(/[\da-f]{2}/gi)?.map((channel) => Number.parseInt(channel, 16));
@@ -302,6 +293,7 @@ export function FirstRunHome({ data }: { data: FirstRunHomeData }) {
   const [pending, startTransition] = useTransition();
   const invoice = data.invoice;
   const currency = invoice?.currency ?? "EUR";
+  const locale = orgLocale(data.org);
   const total = Number(invoice?.total ?? 0);
   const brandColor = data.org.brandColor ?? "#d1fd39";
   const addressLine = [data.org.postalCode, data.org.city].filter(Boolean).join(" ");
@@ -508,13 +500,13 @@ export function FirstRunHome({ data }: { data: FirstRunHomeData }) {
               <div>
                 <p className="nota-label text-[#6b655c]">Issued</p>
                 <p className="mt-2 font-mono text-xs">
-                  {invoice ? formatDate(invoice.issuedAt) : "When drafted"}
+                  {invoice ? formatDate(invoice.issuedAt, locale) : "When drafted"}
                 </p>
               </div>
               <div>
                 <p className="nota-label text-[#6b655c]">Due</p>
                 <p className="mt-2 font-mono text-xs">
-                  {invoice ? formatDate(invoice.dueAt) : "14 days later"}
+                  {invoice ? formatDate(invoice.dueAt, locale) : "14 days later"}
                 </p>
               </div>
             </section>
@@ -539,7 +531,7 @@ export function FirstRunHome({ data }: { data: FirstRunHomeData }) {
                           {Number(item.quantity)}
                         </td>
                         <td className="py-4 text-right font-mono text-xs font-medium">
-                          {formatCurrency(Number(item.amount), currency)}
+                          {formatCurrency(Number(item.amount), currency, locale)}
                         </td>
                       </tr>
                     ))
@@ -557,7 +549,7 @@ export function FirstRunHome({ data }: { data: FirstRunHomeData }) {
             <div className="mt-5 flex items-end justify-between gap-5 sm:mt-6">
               <p className="nota-label pb-1">Total due</p>
               <p className="font-mono text-2xl font-bold tracking-[-0.04em] sm:text-3xl">
-                {invoice ? <Landed value={formatCurrency(total, currency)} /> : "—"}
+                {invoice ? <Landed value={formatCurrency(total, currency, locale)} /> : "—"}
               </p>
             </div>
 
@@ -710,6 +702,7 @@ export function FirstRunHome({ data }: { data: FirstRunHomeData }) {
         <ChatPanel
           dockAction={nextStep}
           inputRef={inputRef}
+          locale={locale}
           mode="first-run"
           onDockSubmit={() => scrollRef.current?.scrollTo({ behavior: "smooth", top: 0 })}
           onOpenChange={setChatOpen}

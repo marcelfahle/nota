@@ -11,38 +11,34 @@ import {
 } from "@react-email/components";
 
 import { APP_NAME } from "@/lib/app-brand";
+import { formatCurrency, formatDate, type Locale } from "@/lib/utils";
 
 type PaymentReceivedEmailProps = {
   clientName: string;
   currency: string;
   invoiceNumber: string;
+  locale?: Locale;
   paidAt: string;
   total: string;
 };
 
-function formatCurrencyEmail(amount: string, currency: string): string {
-  return new Intl.NumberFormat("en-US", {
-    currency,
-    style: "currency",
-  }).format(Number.parseFloat(amount));
+function formatCurrencyEmail(amount: string, currency: string, locale: Locale): string {
+  return formatCurrency(Number.parseFloat(amount), currency, locale);
 }
 
-function formatDateEmail(dateStr: string): string {
-  return new Date(dateStr).toLocaleDateString("en-US", {
-    day: "numeric",
-    month: "long",
-    year: "numeric",
-  });
+function formatDateEmail(dateStr: string, locale: Locale): string {
+  return formatDate(dateStr, locale, { day: "numeric", month: "long", year: "numeric" });
 }
 
 export function PaymentReceivedEmail({
   clientName,
   currency,
   invoiceNumber,
+  locale = "en-US",
   paidAt,
   total,
 }: PaymentReceivedEmailProps) {
-  const subject = `Payment received: ${invoiceNumber} — ${formatCurrencyEmail(total, currency)}`;
+  const subject = `Payment received: ${invoiceNumber} — ${formatCurrencyEmail(total, currency, locale)}`;
 
   return (
     <Html>
@@ -62,9 +58,9 @@ export function PaymentReceivedEmail({
 
           <Section style={styles.invoiceBox}>
             <Text style={styles.invoiceLabel}>Amount Paid</Text>
-            <Text style={styles.invoiceAmount}>{formatCurrencyEmail(total, currency)}</Text>
+            <Text style={styles.invoiceAmount}>{formatCurrencyEmail(total, currency, locale)}</Text>
             <Text style={styles.invoiceDetail}>Invoice {invoiceNumber}</Text>
-            <Text style={styles.invoiceDetail}>Paid on {formatDateEmail(paidAt)}</Text>
+            <Text style={styles.invoiceDetail}>Paid on {formatDateEmail(paidAt, locale)}</Text>
           </Section>
 
           <Hr style={styles.hr} />

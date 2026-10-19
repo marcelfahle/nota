@@ -15,7 +15,7 @@ import {
   type StripeDockItem,
 } from "@/components/stripe-dev-dock";
 import { Button } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
+import { cn, type Locale } from "@/lib/utils";
 
 function readChatOpen(userId: string) {
   try {
@@ -40,6 +40,7 @@ export function DashboardShell({
   domain,
   emailJobItems,
   emailJobSummary,
+  locale,
   logoUrl,
   navCounts,
   stripeDockItems,
@@ -52,6 +53,7 @@ export function DashboardShell({
   domain: string | null;
   emailJobItems: Array<EmailJobDockItem>;
   emailJobSummary: EmailJobDockSummary;
+  locale: Locale;
   logoUrl: string | null;
   navCounts: { overdue: number; proposals: number };
   stripeDockItems: Array<StripeDockItem>;
@@ -341,6 +343,7 @@ export function DashboardShell({
           {isHome ? null : (
             <ChatPanel
               inputRef={chatInput}
+              locale={locale}
               mode="panel"
               onOpenChange={setChatOpen}
               open={chatOpen}

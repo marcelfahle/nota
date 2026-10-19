@@ -5,6 +5,7 @@ import { formatOrgAddress, getPdfLogoSrc } from "@/lib/branding";
 import { type InvoiceDocumentOrg, loadInvoiceDocument } from "@/lib/invoice-document";
 import { formatVariableDecimal } from "@/lib/money";
 import { formatClientAddress } from "@/lib/postal-address";
+import { orgLocale } from "@/lib/utils";
 
 export type InvoicePdfOrg = InvoiceDocumentOrg;
 
@@ -28,6 +29,7 @@ export async function renderInvoicePdfForOrg(
         bic: bankAccount?.bic ?? null,
         brandColor: org.brandColor,
         iban: bankAccount?.iban ?? null,
+        locale: orgLocale(org),
         logoSrc,
         name: org.legalName ?? org.businessName ?? org.name,
         taxIdentifier: document.sellerTaxIdentifier,

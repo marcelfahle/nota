@@ -1,4 +1,4 @@
-import { formatCurrency } from "@/lib/utils";
+import { formatCurrency, formatDate, type Locale } from "@/lib/utils";
 
 type InvoiceListStatusInput = {
   balance: string;
@@ -24,7 +24,12 @@ export function getInvoiceListStatus(invoice: InvoiceListStatusInput) {
   return invoice.status ?? "draft";
 }
 
-export function formatInvoiceDueDate(date: string, status: string | null, today = new Date()) {
+export function formatInvoiceDueDate(
+  date: string,
+  status: string | null,
+  today = new Date(),
+  locale: Locale = "en-US",
+) {
   if (status === "overdue") {
     const due = Date.parse(`${date}T00:00:00Z`);
     const todayUtc = Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate());
@@ -34,15 +39,15 @@ export function formatInvoiceDueDate(date: string, status: string | null, today 
     }
   }
 
-  return new Date(`${date}T00:00:00Z`).toLocaleDateString("en-US", {
-    day: "numeric",
-    month: "short",
-    timeZone: "UTC",
-  });
+  return formatDate(date, locale, { day: "numeric", month: "short" });
 }
 
-export function matchesInvoiceSearch(invoice: InvoiceSearchInput, query: string) {
-  const normalized = query.trim().toLocaleLowerCase();
+export function matchesInvoiceSearch(
+  invoice: InvoiceSearchInput,
+  query: string,
+  locale: Locale = "en-US",
+) {
+  const normalized = query.trim().replaceAll("\u00A0", " ").toLocaleLowerCase();
   if (!normalized) {
     return true;
   }
@@ -53,6 +58,6 @@ export function matchesInvoiceSearch(invoice: InvoiceSearchInput, query: string)
     invoice.number,
     String(total),
     total.toFixed(2),
-    formatCurrency(total, invoice.currency ?? "EUR"),
-  ].some((value) => value?.toLocaleLowerCase().includes(normalized));
+    formatCurrency(total, invoice.currency ?? "EUR", locale),
+  ].some((value) => value?.replaceAll("\u00A0", " ").toLocaleLowerCase().includes(normalized));
 }

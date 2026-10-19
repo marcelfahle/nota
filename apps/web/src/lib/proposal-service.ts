@@ -5,6 +5,7 @@ import { db } from "@/lib/db";
 import { activityLog, clients, invoices, jobs, orgs, proposals } from "@/lib/db/schema";
 import type { InvoiceServiceContext } from "@/lib/invoice-service";
 import { canSendInvoiceReminder, getInsufficientPermissionsError } from "@/lib/roles";
+import { orgLocale } from "@/lib/utils";
 
 export const reminderPayloadSchema = z.object({
   businessName: z.string(),
@@ -12,6 +13,8 @@ export const reminderPayloadSchema = z.object({
   currency: z.string(),
   dueAt: z.string(),
   invoiceNumber: z.string(),
+  // Optional so reminder proposals stored before locale support still send.
+  locale: z.enum(["de-DE", "en-US"]).optional(),
   paymentLinkUrl: z.string().nullable(),
   subject: z.string(),
   to: z.string().email(),
@@ -46,6 +49,7 @@ export async function createReminderProposal(
     currency: row.invoice.currency ?? "EUR",
     dueAt: row.invoice.dueAt,
     invoiceNumber: row.invoice.number,
+    locale: orgLocale(row.org),
     paymentLinkUrl: row.invoice.stripePaymentLinkUrl,
     subject: `Reminder: Invoice ${row.invoice.number} — ${businessName}`,
     to: row.client.email,

@@ -10,7 +10,7 @@ import { getCurrentUser } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { bankAccounts, clients, invoices, jobs, payments, proposals } from "@/lib/db/schema";
 import { getInvoiceDetail } from "@/lib/invoice-service";
-import { formatCurrency } from "@/lib/utils";
+import { formatCurrency, type Locale, orgLocale } from "@/lib/utils";
 
 const balance = sql<string>`greatest(coalesce(${invoices.total}::numeric, 0) - coalesce((select sum(p.amount) from payments p where p.invoice_id = ${invoices.id}), 0) - abs(coalesce((select sum(c.total::numeric) from invoices c where c.credits_invoice_id = ${invoices.id} and c.kind = 'credit_note' and c.status in ('sent', 'overdue', 'paid')), 0)), 0)`;
 
@@ -147,6 +147,7 @@ export default async function HomePage() {
     return (
       <HomeContent
         empty
+        locale={orgLocale(org)}
         summary={
           <div className="space-y-2">
             <h1>Welcome to Nota.</h1>
@@ -160,6 +161,7 @@ export default async function HomePage() {
   }
 
   const defaultCurrency = org.defaultCurrency ?? "EUR";
+  const locale = orgLocale(org);
   const owed = new Map<string, number>();
   const overdue = new Map<string, number>();
   for (const invoice of invoiceList) {
@@ -178,18 +180,19 @@ export default async function HomePage() {
 
   return (
     <HomeContent
+      locale={locale}
       summary={
         <div className="space-y-2.5">
           <h1>
             <HighlighterSwipe>
-              {formatMoneyTotals(receivedByCurrency, defaultCurrency)}
+              {formatMoneyTotals(receivedByCurrency, defaultCurrency, locale)}
             </HighlighterSwipe>
             {` in so far this ${month}.`}
           </h1>
           <p className="text-lg text-muted-foreground">
-            {formatMoneyTotals(owed, defaultCurrency)} still owed to you,{" "}
+            {formatMoneyTotals(owed, defaultCurrency, locale)} still owed to you,{" "}
             <span className="text-destructive">
-              {formatMoneyTotals(overdue, defaultCurrency)} of it late.
+              {formatMoneyTotals(overdue, defaultCurrency, locale)} of it late.
             </span>
           </p>
         </div>
@@ -219,8 +222,12 @@ export default async function HomePage() {
                     {proposal.clientName} is {daysLate} day{daysLate === 1 ? "" : "s"} late
                   </strong>{" "}
                   on{" "}
-                  {formatCurrency(Number(proposal.balance), proposal.currency ?? defaultCurrency)}.{" "}
-                  <span className="text-muted-foreground">{sentence(proposal.reason)}</span>
+                  {formatCurrency(
+                    Number(proposal.balance),
+                    proposal.currency ?? defaultCurrency,
+                    locale,
+                  )}
+                  . <span className="text-muted-foreground">{sentence(proposal.reason)}</span>
                 </HomeProposal>
               );
             })}
@@ -266,6 +273,7 @@ export default async function HomePage() {
                     {formatCurrency(
                       Number(invoice.total ?? 0),
                       invoice.currency ?? defaultCurrency,
+                      locale,
                     )}
                   </span>
                 </Link>
@@ -278,15 +286,15 @@ export default async function HomePage() {
   );
 }
 
-function formatMoneyTotals(totals: Map<string, number>, defaultCurrency: string) {
+function formatMoneyTotals(totals: Map<string, number>, defaultCurrency: string, locale: Locale) {
   const amounts = [...totals]
     .filter(([, amount]) => amount !== 0)
     .sort(([left], [right]) => left.localeCompare(right))
-    .map(([currency, amount]) => formatCurrency(amount, currency));
+    .map(([currency, amount]) => formatCurrency(amount, currency, locale));
 
   return amounts.length > 0
-    ? new Intl.ListFormat("en-US", { style: "long", type: "conjunction" }).format(amounts)
-    : formatCurrency(0, defaultCurrency);
+    ? new Intl.ListFormat(locale, { style: "long", type: "conjunction" }).format(amounts)
+    : formatCurrency(0, defaultCurrency, locale);
 }
 
 function sentence(value: string) {

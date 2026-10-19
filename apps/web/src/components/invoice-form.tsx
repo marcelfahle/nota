@@ -24,7 +24,7 @@ import {
   TAX_TREATMENTS,
   type TaxTreatment,
 } from "@/lib/tax-treatment";
-import { formatCurrency } from "@/lib/utils";
+import { formatCurrency, type Locale } from "@/lib/utils";
 
 type LineItem = {
   description: string;
@@ -64,6 +64,7 @@ type InvoiceFormProps = {
     taxRate?: string;
     taxTreatment?: TaxTreatment;
   };
+  locale?: Locale;
   org: { countryCode: string | null; defaultTaxTreatment: TaxTreatment };
   redirectTo?: string;
   submitLabel?: string;
@@ -91,6 +92,7 @@ export function InvoiceForm({
   action,
   clients,
   defaultValues,
+  locale = "en-US",
   org,
   redirectTo = "/invoices",
   submitLabel = "Save Draft",
@@ -366,7 +368,7 @@ export function InvoiceForm({
                 </button>
               </div>
               <p className="text-right text-sm font-medium text-zinc-900 sm:order-none">
-                {formatCurrency(lineAmounts[index], currency)}
+                {formatCurrency(lineAmounts[index], currency, locale)}
               </p>
             </div>
           ))}
@@ -413,7 +415,7 @@ export function InvoiceForm({
         <div className="space-y-2">
           <div className="flex items-center justify-between text-sm">
             <span className="text-zinc-500">Subtotal</span>
-            <span className="font-medium">{formatCurrency(subtotal, currency)}</span>
+            <span className="font-medium">{formatCurrency(subtotal, currency, locale)}</span>
           </div>
           <div className="flex items-center gap-2 text-sm">
             <span className="text-zinc-500">VAT</span>
@@ -430,11 +432,13 @@ export function InvoiceForm({
               value={taxRate}
             />
             <span className="text-zinc-500">%</span>
-            <span className="ml-auto font-medium">{formatCurrency(taxAmount, currency)}</span>
+            <span className="ml-auto font-medium">
+              {formatCurrency(taxAmount, currency, locale)}
+            </span>
           </div>
           <div className="flex items-center justify-between border-t border-zinc-200 pt-2 text-sm">
             <span className="font-semibold">Total</span>
-            <span className="text-lg font-semibold">{formatCurrency(total, currency)}</span>
+            <span className="text-lg font-semibold">{formatCurrency(total, currency, locale)}</span>
           </div>
         </div>
       </div>

@@ -71,6 +71,7 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
       business={{
         address: formatOrgAddress(org),
         brandColor: org.brandColor,
+        country: org.country,
         logoUrl: org.logoUrl,
         name: org.businessName || org.name,
       }}

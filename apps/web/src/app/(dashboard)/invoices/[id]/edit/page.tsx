@@ -8,6 +8,7 @@ import { InvoiceForm } from "@/components/invoice-form";
 import { getCurrentUser } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { clients, invoices, lineItems } from "@/lib/db/schema";
+import { orgLocale } from "@/lib/utils";
 
 export default async function EditInvoicePage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -82,6 +83,7 @@ export default async function EditInvoicePage({ params }: { params: Promise<{ id
             taxRate: invoice.taxRate ?? "0",
             taxTreatment: invoice.taxTreatment,
           }}
+          locale={orgLocale(org)}
           org={{ countryCode: org.countryCode, defaultTaxTreatment: org.defaultTaxTreatment }}
           redirectTo={`/invoices/${id}`}
           submitLabel="Update Invoice"
