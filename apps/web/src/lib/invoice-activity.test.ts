@@ -20,3 +20,19 @@ test("older and manual send entries keep their plain label", () => {
     "Payment reminder sent",
   );
 });
+
+test("credit notes and their originals name each other", () => {
+  expect(
+    invoiceActivityText(
+      { action: "created", metadata: { creditsInvoiceId: "inv_1", originalNumber: "INV-0007" } },
+      "EUR",
+    ),
+  ).toBe("Credit note created for INV-0007");
+  expect(
+    invoiceActivityText(
+      { action: "credited", metadata: { creditNoteId: "cn_1", creditNoteNumber: "GS-0001" } },
+      "EUR",
+    ),
+  ).toBe("Credited by GS-0001");
+  expect(invoiceActivityText({ action: "created", metadata: null }, "EUR")).toBe("Invoice created");
+});

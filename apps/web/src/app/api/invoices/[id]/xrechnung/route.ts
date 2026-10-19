@@ -1,15 +1,16 @@
 import { NextResponse } from "next/server";
 
 import { getCurrentUser } from "@/lib/auth";
+import { loadInvoiceXml } from "@/lib/invoice-documents";
 import { XRechnungValidationError } from "@/lib/xrechnung";
-import { InvoiceDocumentError, renderXRechnungForOrg } from "@/lib/xrechnung-service";
+import { InvoiceDocumentError } from "@/lib/xrechnung-service";
 
 export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const { org } = await getCurrentUser();
 
   try {
-    const { filename, xml } = await renderXRechnungForOrg(org, id);
+    const { filename, xml } = await loadInvoiceXml(org, id);
     return new Response(xml, {
       headers: {
         "Content-Disposition": `attachment; filename="${filename}"`,

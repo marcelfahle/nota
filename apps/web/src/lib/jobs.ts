@@ -18,9 +18,9 @@ import {
 import { type InvoiceAttachment, parseInvoiceAttachments } from "@/lib/e-invoice-delivery";
 import { sendEmail } from "@/lib/email";
 import { getAppEnv } from "@/lib/env";
-import { renderInvoicePdfForOrg } from "@/lib/invoice-pdf-service";
+import type { InvoiceDocumentOrg } from "@/lib/invoice-document";
+import { loadInvoicePdf, loadInvoiceXml } from "@/lib/invoice-documents";
 import { reminderPayloadSchema } from "@/lib/proposal-service";
-import { renderXRechnungForOrg } from "@/lib/xrechnung-service";
 
 const JOB_LOCK_TIMEOUT_MS = 1000 * 60 * 10;
 
@@ -124,21 +124,22 @@ async function getInvoiceEmailContext(invoiceId: string) {
 
 /**
  * The files one invoice email carries: the PDF, plus the XRechnung XML under
- * the same base name when the send decided so. Both come from the shared
- * invoice document loader, so they always describe the same invoice.
+ * the same base name when the send decided so. An issued invoice attaches the
+ * originals stored at issuance, byte for byte; only a draft (a test copy) or
+ * an invoice issued before originals were kept is rendered here.
  */
 export async function renderInvoiceAttachments(
-  org: Parameters<typeof renderInvoicePdfForOrg>[0],
+  org: InvoiceDocumentOrg,
   invoiceId: string,
   attachments: Array<InvoiceAttachment>,
   options: { logoSrc?: string | null } = {},
 ) {
-  const pdf = await renderInvoicePdfForOrg(org, invoiceId, options);
+  const pdf = await loadInvoicePdf(org, invoiceId, options);
   const files = [
     { content: Buffer.from(pdf.buffer), contentType: "application/pdf", filename: pdf.filename },
   ];
   if (attachments.includes("xml")) {
-    const { filename, xml } = await renderXRechnungForOrg(org, invoiceId);
+    const { filename, xml } = await loadInvoiceXml(org, invoiceId);
     files.push({ content: Buffer.from(xml, "utf8"), contentType: "application/xml", filename });
   }
   return files;

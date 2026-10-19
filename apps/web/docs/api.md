@@ -331,6 +331,11 @@ Returns one invoice with:
 - `client`
 - `lineItems`
 - `activityLog`
+- `documents`: the originals stored at issuance, one entry per file with `kind` (`pdf` or
+  `xrechnung`), `sha256`, `byteSize`, `filename` and `createdAt`. Empty for drafts and for invoices
+  issued before originals were kept.
+- `issuedSnapshot`: seller, buyer, bank and totals exactly as rendered at issuance; `null` on drafts
+  and on older issued invoices.
 
 ### PATCH /invoices/:id
 
@@ -430,7 +435,10 @@ Notes:
 
 ### GET /invoices/:id/pdf
 
-Downloads the invoice PDF.
+Downloads the invoice PDF. For an issued invoice this is the original stored at issuance, byte for
+byte what the customer received; later changes to the client, the workspace, bank details or the
+template do not affect it. A draft is rendered live. Invoices issued before originals were kept
+(no `documents` entry on `GET /invoices/:id`) are rendered from the current data.
 
 ```bash
 curl "$NOTA_API_BASE_URL/invoices/invoice_uuid/pdf" \
@@ -440,7 +448,9 @@ curl "$NOTA_API_BASE_URL/invoices/invoice_uuid/pdf" \
 
 ### GET /invoices/:id/xrechnung
 
-Downloads the XRechnung 3.0 (UBL) XML export.
+Downloads the XRechnung 3.0 (UBL) XML export. For an issued invoice with a stored XML original
+(the workspace attached it, or the export validated at issuance) this is that original; otherwise
+the XML is rendered live.
 
 ```bash
 curl "$NOTA_API_BASE_URL/invoices/invoice_uuid/xrechnung" \

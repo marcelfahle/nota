@@ -4,9 +4,10 @@ import { z } from "zod";
 import { getCurrentUser } from "@/lib/auth";
 import { getPdfLogoSrc } from "@/lib/branding";
 import { invoiceStatusEnum } from "@/lib/db/schema";
+import { loadInvoicePdf } from "@/lib/invoice-documents";
 import { listInvoicesForExport, MAX_INVOICE_ARCHIVE_SIZE } from "@/lib/invoice-export";
 import { normalizeInvoiceStatus } from "@/lib/invoice-lifecycle";
-import { InvoicePdfDataError, renderInvoicePdfForOrg } from "@/lib/invoice-pdf-service";
+import { InvoicePdfDataError } from "@/lib/invoice-pdf-service";
 import {
   buildInvoiceArchiveFilename,
   getUniqueInvoiceArchiveEntryName,
@@ -82,7 +83,7 @@ export async function GET(request: Request) {
 
     for (let index = 0; index < rows.length; index += 3) {
       const batch = await Promise.all(
-        rows.slice(index, index + 3).map((row) => renderInvoicePdfForOrg(org, row.id, { logoSrc })),
+        rows.slice(index, index + 3).map((row) => loadInvoicePdf(org, row.id, { logoSrc })),
       );
       for (const pdf of batch) {
         files[getUniqueInvoiceArchiveEntryName(pdf.filename, usedFilenames)] = pdf.buffer;

@@ -59,6 +59,14 @@ type ActivityEntry = {
   sourceClient: string | null;
 };
 
+type StoredDocument = {
+  byteSize: number;
+  createdAt: string;
+  id: string;
+  kind: "pdf" | "xrechnung";
+  sha256: string;
+};
+
 type InvoiceDetailProps = {
   activities: Array<ActivityEntry>;
   business: {
@@ -67,6 +75,8 @@ type InvoiceDetailProps = {
     logoUrl: string | null;
     name: string;
   };
+  /** Issued originals, exactly as the customer received them. */
+  documents: Array<StoredDocument>;
   invoice: {
     balance: string;
     buyerReference: string | null;
@@ -123,6 +133,18 @@ function formatDate(value: string) {
   }).format(new Date(value));
 }
 
+function formatBytes(size: number) {
+  return size < 1024 ? `${size} B` : `${Math.round(size / 1024)} KB`;
+}
+
+/** The invoice a history entry points at: the credit note, or the original it corrects. */
+function relatedInvoiceId(metadata: unknown) {
+  const record =
+    metadata && typeof metadata === "object" ? (metadata as Record<string, unknown>) : null;
+  const id = record?.creditNoteId ?? record?.creditsInvoiceId;
+  return typeof id === "string" ? id : null;
+}
+
 function formatServicePeriod(start: string | null, end: string | null) {
   if (!start || !end) {
     return null;
@@ -162,7 +184,13 @@ function sourceLabel(activity: ActivityEntry) {
   return "Nota";
 }
 
-export function InvoiceDetailView({ activities, business, invoice, role }: InvoiceDetailProps) {
+export function InvoiceDetailView({
+  activities,
+  business,
+  documents,
+  invoice,
+  role,
+}: InvoiceDetailProps) {
   const router = useRouter();
   const currency = invoice.currency ?? "EUR";
   const status = normalizeInvoiceStatus(invoice.status);
@@ -293,6 +321,26 @@ export function InvoiceDetailView({ activities, business, invoice, role }: Invoi
           : status === "cancelled"
             ? "Cancelled"
             : null;
+
+  // One list, newest first: what happened and the originals stored at issuance.
+  const history = [
+    ...activities.map((activity) => ({
+      createdAt: activity.createdAt,
+      detail: `${formatDate(activity.createdAt)} · via ${sourceLabel(activity)}`,
+      href: null,
+      id: activity.id,
+      relatedId: relatedInvoiceId(activity.metadata),
+      text: invoiceActivityText(activity, currency),
+    })),
+    ...documents.map((document) => ({
+      createdAt: document.createdAt,
+      detail: `${formatDate(document.createdAt)} · sha256 ${document.sha256.slice(0, 12)} · ${formatBytes(document.byteSize)}`,
+      href: `/api/invoices/${invoice.id}/${document.kind === "pdf" ? "pdf" : "xrechnung"}`,
+      id: document.id,
+      relatedId: null,
+      text: document.kind === "pdf" ? "Original PDF stored" : "Original XRechnung XML stored",
+    })),
+  ].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 
   return (
     <article aria-labelledby="invoice-title" className="min-w-0 space-y-6">
@@ -643,15 +691,41 @@ export function InvoiceDetailView({ activities, business, invoice, role }: Invoi
                 </span>
               ) : null}
             </div>
-            {activities.length ? (
+            {history.length ? (
               <ol className="mt-5 space-y-5">
-                {activities.map((activity) => (
-                  <li className="grid grid-cols-[8px_1fr] gap-3" key={activity.id}>
+                {history.map((entry) => (
+                  <li className="grid grid-cols-[8px_1fr] gap-3" key={entry.id}>
                     <span className="mt-1.5 size-2 rounded-full bg-foreground" />
                     <div>
-                      <p className="text-sm">{invoiceActivityText(activity, currency)}</p>
+                      <p className="text-sm">
+                        {entry.text}
+                        {entry.href ? (
+                          <>
+                            {" · "}
+                            <a
+                              className="underline underline-offset-4"
+                              href={entry.href}
+                              rel="noopener noreferrer"
+                              target="_blank"
+                            >
+                              Download
+                            </a>
+                          </>
+                        ) : null}
+                        {entry.relatedId ? (
+                          <>
+                            {" · "}
+                            <Link
+                              className="underline underline-offset-4"
+                              href={`/invoices/${entry.relatedId}`}
+                            >
+                              Open
+                            </Link>
+                          </>
+                        ) : null}
+                      </p>
                       <p className="mt-1 font-mono text-[11px] text-muted-foreground">
-                        {formatDate(activity.createdAt)} · via {sourceLabel(activity)}
+                        {entry.detail}
                       </p>
                     </div>
                   </li>

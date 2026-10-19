@@ -74,6 +74,13 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
         logoUrl: org.logoUrl,
         name: org.businessName || org.name,
       }}
+      documents={invoice.documents.map((document) => ({
+        byteSize: document.byteSize,
+        createdAt: document.createdAt.toISOString(),
+        id: document.id,
+        kind: document.kind,
+        sha256: document.sha256,
+      }))}
       invoice={{
         ...invoice,
         client: invoice.client

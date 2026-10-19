@@ -141,10 +141,12 @@ When the XML is attached:
 - The list of attachments is written into the email job's payload and into the invoice's `sent`
   activity entry (`metadata.attachments: ["pdf", "xml"]`). The history on the invoice page reads
   "Sent with PDF and XRechnung XML". A settings change after the send does not alter either.
-- Both files come from the shared invoice document loader (`loadInvoiceDocument`), so the PDF and
-  the XML always describe the same invoice. The email says in one sentence that the XML is attached.
+- Both files are rendered once, at issuance, from the shared invoice document loader
+  (`loadInvoiceDocument`) and stored; the email attaches the stored bytes. See "Issued originals"
+  below. The email says in one sentence that the XML is attached.
 - The public invoice page offers "Download XRechnung XML" next to the PDF, under the same token,
-  when the setting is on and the export has no problems.
+  when an XML was stored at issuance (or, for older invoices, when the setting is on and the
+  export has no problems).
 
 What does not carry the XML:
 
@@ -155,9 +157,62 @@ What does not carry the XML:
 - "Mark sent". Nothing leaves Nota, so only the issuance rules apply and the entry stays
   "Invoice sent".
 
-If the XML cannot be rendered when the job runs (the data was complete at send time, so this takes
-a settings edit in between), the job fails and retries like any other email failure; it never sends
-the PDF alone. Frozen originals of what was sent are the next task (NOTA-57).
+The email job never renders an issued invoice: it attaches the originals stored at issuance. Only
+an invoice issued before originals were kept is rendered when the job runs; if its XML cannot be
+rendered then, the job fails and retries like any other email failure and never sends the PDF alone.
+
+## Issued originals
+
+Once an invoice or credit note is issued ("Send" or "Mark as sent"), what the customer received is
+kept byte for byte and cannot be changed from inside Nota.
+
+What is frozen, and where:
+
+- `invoices.issued_snapshot` (JSON on the invoice row): the seller (name, address lines, structured
+  address, country, contact name/email/phone, tax identifier, brand colour, logo URL), the buyer
+  (name, company, email, address lines, structured address, country, public-sector flag, tax
+  identifier), the bank account (IBAN, BIC, free-text details) and the totals (currency, subtotal,
+  tax, tax rate, tax treatment, total), exactly as rendered. Line items, dates, notes and the
+  number were already immutable after issuance. The renderers read this snapshot for issued
+  documents and never the live workspace or client rows. The tax identifiers in
+  `seller_tax_identifier` / `client_tax_identifier` from NOTA-54 are copied into it unchanged.
+- `invoice_documents` (one row per file): kind (`pdf` or `xrechnung`), SHA-256, byte size, file
+  name, content type and the storage key. The files live on the configured storage backend
+  (Vercel Blob as private blobs, S3, or the local directory) under
+  `invoices/<workspace id>/<invoice id>/<number>.pdf|.xml`. Nota never hands out a URL to them;
+  every download goes through Nota's authorization. On S3 the bucket policy must not grant
+  anonymous read on the `invoices/` prefix (see `docs/self-hosting.md`). The PDF is always stored;
+  the XML when the workspace attaches it, or when the export validates anyway. "Mark as sent"
+  never requires the XML: it is stored when it validates and skipped otherwise.
+- Rendering and storing happen inside the issuance transaction, after the number is allocated and
+  the snapshot written. If rendering or storage fails, the transaction rolls back: no number is
+  consumed, nothing is sent, a file already written is removed again, and the user sees "could not
+  be sent, try again". The logo is fetched before the transaction so no network wait happens under
+  the row locks.
+
+What this means afterwards:
+
+- The invoice page, the REST API (`GET /invoices/:id/pdf`, `GET /invoices/:id/xrechnung`), the
+  public token page, the invoice archive, the SDK, CLI and MCP (all via the API) serve the stored
+  original when one exists. A download whose stored file is missing or whose hash no longer matches
+  is an error, never a silent re-render. The public page shows the frozen addresses, buyer and bank
+  details too (branding stays live), and offers the XML only when one was stored. Drafts keep
+  rendering live. Invoices issued before this change have neither snapshot nor stored files and
+  keep rendering from the current rows, as before; there is no backfill, because nobody can know
+  what those customers received.
+- Editing an issued invoice stays refused. Corrections happen through a credit note (which is an
+  issued document with its own originals) or a new invoice. The history on the invoice page shows
+  each stored original with its short SHA-256 and size and a download link; a credit note's history
+  names the invoice it corrects, and the original's history names each credit note, both with a
+  link.
+- Originals are never deleted while the invoice exists. Deleting a workspace (operator flow) removes
+  its documents from storage together with everything else.
+
+Nota keeps the files; it does not claim to meet GoBD or any other retention regime. Retention
+periods, immutability of the storage backend, audit trails outside Nota and backups remain the
+business owner's responsibility. To keep your own copies, fetch the originals with the API: the
+two endpoints above return the stored bytes with the stored file name, and `GET /invoices/:id`
+lists the stored documents with their hashes so a copy can be verified.
 
 ## Validation
 
