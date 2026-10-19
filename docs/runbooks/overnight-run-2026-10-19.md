@@ -13,7 +13,8 @@ Software SL, Kleinunternehmer text per § 19 UStG.
    Check it out, `bun install`, point `apps/web/.env.local` at a fresh local database, run
    `bun run --cwd apps/web db:migrate` and `db:seed`, and walk through it as a German workspace.
 3. Local dev on german-core needs `STORAGE=local` and `LOCAL_STORAGE_PATH` in `.env.local` (see `.env.example`), or issuing fails because the Blob token is missing. The issuance catch block now logs the real cause.
-4. Review order that reads well: #55 (already yours) → #59 → #60 → #62 → #61 → #63 → #64 → #66 → #67, or just #65 for the German set.
+4. #66 and #67 appear as "merged" on GitHub because their base branch `mfahle/german-core` received their commits when I pushed the integration merges. Nothing reached main. Their diffs are still readable there.
+5. Review order that reads well: #55 (already yours) → #59 → #60 → #62 → #61 → #63 → #64 → #66 → #67, or just #65 for the German set.
 
 ## What landed
 
@@ -26,9 +27,9 @@ Software SL, Kleinunternehmer text per § 19 UStG.
 | #62 | mfahle/super-admin-support-tools | Super admin: lookup by email, read-only "view as owner" (signed cookie, 30 min, method guard in proxy), audit log table and page | #55 | CI green |
 | #63 | mfahle/nota-55-kosit-validation | NOTA-55: official KoSIT validator 1.6.3 + XRechnung 3.0.2 (2026-08-31) in CI, 7 fixtures, 0 errors, 0 warnings; mod-97 IBAN check | #61 | CI green |
 | #64 | mfahle/nota-56-einvoice-email | NOTA-56: `eInvoiceDelivery` setting, PDF + XML attached to invoice emails, send refuses incomplete documents, public XML download | #61 | CI green |
-| #65 | mfahle/german-core | Integration of #61 + #63 + #64 + #60 + #67 + #66, head 7d0da11. Migrations 0023 to 0026 in sequence. 321/26/8 tests, validator 7/7. | #55 | CI re-running at hand-off |
-| #66 | mfahle/nota-57-frozen-originals | NOTA-57: `issued_snapshot`, `invoice_documents`, stored PDF/XML originals served byte-for-byte, history with hashes, credit note links | #65 | CI green (after a test-isolation fix) |
-| #67 | mfahle/nota-58-german-localization | NOTA-58: next-intl, 947 German strings, user UI locale + org document locale + per-invoice document locale, PDF/public/emails/app in German. Includes #60 until that lands. | #65 | CI pending at hand-off |
+| #65 | mfahle/german-core | Integration of #61 + #63 + #64 + #60 + #67 + #66, head 496f8fb. Migrations 0023 to 0026 in sequence. 321/26/8 tests, validator 7/7, browser regressions pass. | #55 | CI green |
+| #66 | mfahle/nota-57-frozen-originals | NOTA-57: `issued_snapshot`, `invoice_documents`, stored PDF/XML originals served byte-for-byte, history with hashes, credit note links | #65 | CI green; GitHub shows it as merged into german-core (auto-closed when I pushed the merge) |
+| #67 | mfahle/nota-58-german-localization | NOTA-58: next-intl, 947 German strings, user UI locale + org document locale + per-invoice document locale, PDF/public/emails/app in German. Includes #60. | #65 | Its own run failed on the browser fixture tests (chat panel mounted without the next-intl provider); the one-file fix e3d2f50 is in #65, which is green. GitHub shows #67 as merged into german-core. |
 
 ## Verified
 
