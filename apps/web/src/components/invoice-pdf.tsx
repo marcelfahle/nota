@@ -2,6 +2,7 @@ import { Document, Font, Image, Link, Page, StyleSheet, Text, View } from "@reac
 
 import { formatIbanDisplay } from "@/lib/iban";
 import { formatTaxIdentifier, type TaxIdentifier } from "@/lib/tax-identifier";
+import { type TaxTreatment, taxTreatmentNote } from "@/lib/tax-treatment";
 
 // ---------------------------------------------------------------------------
 // Register Inter font family
@@ -56,6 +57,7 @@ type InvoicePdfProps = {
     taxIdentifier?: TaxIdentifier | null;
   };
   invoice: {
+    buyerReference?: string | null;
     currency: string;
     dueAt: string;
     issuedAt: string;
@@ -65,10 +67,12 @@ type InvoicePdfProps = {
     number: string;
     originalNumber?: string | null;
     paymentLinkUrl?: string | null;
-    reverseCharge?: string | null;
+    servicePeriodEnd?: string | null;
+    servicePeriodStart?: string | null;
     subtotal: string;
     taxAmount: string;
     taxRate: string;
+    taxTreatment: TaxTreatment;
     total: string;
   };
 };
@@ -275,11 +279,6 @@ const styles = StyleSheet.create({
     fontSize: 9,
     fontWeight: 500,
   },
-  reverseCharge: {
-    color: c.tertiary,
-    fontSize: 8,
-    marginTop: 12,
-  },
   section: {
     flexDirection: "row" as const,
     justifyContent: "space-between" as const,
@@ -314,6 +313,11 @@ const styles = StyleSheet.create({
     flexDirection: "row" as const,
     fontSize: 9,
     paddingVertical: 12,
+  },
+  taxNote: {
+    color: c.tertiary,
+    fontSize: 8,
+    marginTop: 12,
   },
   totalLabel: {
     color: c.tertiary,
@@ -365,6 +369,13 @@ function formatDatePdf(dateStr: string): string {
   });
 }
 
+function formatServicePeriod(start?: string | null, end?: string | null): string | null {
+  if (!start || !end) {
+    return null;
+  }
+  return start === end ? formatDatePdf(start) : `${formatDatePdf(start)} – ${formatDatePdf(end)}`;
+}
+
 // ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
@@ -374,6 +385,8 @@ export function InvoicePdf({ business, client, invoice }: InvoicePdfProps) {
   const hasPaymentDetails = business.iban || business.bankDetails || invoice.paymentLinkUrl;
   const accent = /^#[\da-f]{6}$/i.test(business.brandColor ?? "") ? business.brandColor! : c.text;
   const isCreditNote = invoice.kind === "credit_note";
+  const servicePeriod = formatServicePeriod(invoice.servicePeriodStart, invoice.servicePeriodEnd);
+  const taxNote = taxTreatmentNote(invoice.taxTreatment);
 
   return (
     <Document>
@@ -427,6 +440,22 @@ export function InvoicePdf({ business, client, invoice }: InvoicePdfProps) {
               <Text style={styles.dateLabel}>Due</Text>
               <Text style={styles.dateValueDue}>{formatDatePdf(invoice.dueAt)}</Text>
             </View>
+            {servicePeriod ? (
+              <View style={styles.dateRow}>
+                <Text style={styles.dateLabel}>
+                  {invoice.servicePeriodStart === invoice.servicePeriodEnd
+                    ? "Service date"
+                    : "Service period"}
+                </Text>
+                <Text style={styles.dateValue}>{servicePeriod}</Text>
+              </View>
+            ) : null}
+            {invoice.buyerReference ? (
+              <View style={styles.dateRow}>
+                <Text style={styles.dateLabel}>Buyer ref.</Text>
+                <Text style={styles.dateValue}>{invoice.buyerReference}</Text>
+              </View>
+            ) : null}
           </View>
         </View>
 
@@ -454,9 +483,9 @@ export function InvoicePdf({ business, client, invoice }: InvoicePdfProps) {
             <Text style={styles.totalLabel}>Subtotal</Text>
             <Text style={styles.totalValue}>{formatCurrencyPdf(invoice.subtotal, currency)}</Text>
           </View>
-          {taxRate > 0 && (
+          {(taxRate > 0 || invoice.taxTreatment !== "standard") && (
             <View style={styles.totalRow}>
-              <Text style={styles.totalLabel}>Tax ({invoice.taxRate}%)</Text>
+              <Text style={styles.totalLabel}>VAT ({invoice.taxRate}%)</Text>
               <Text style={styles.totalValue}>
                 {formatCurrencyPdf(invoice.taxAmount, currency)}
               </Text>
@@ -469,12 +498,8 @@ export function InvoicePdf({ business, client, invoice }: InvoicePdfProps) {
           </View>
         </View>
 
-        {/* ── Reverse Charge ── */}
-        {invoice.reverseCharge === "true" && (
-          <Text style={styles.reverseCharge}>
-            Reverse charge — VAT not applicable per Article 196 of the EU VAT Directive
-          </Text>
-        )}
+        {/* ── Tax treatment note (§ 14 Abs. 4 Nr. 8 UStG) ── */}
+        {taxNote ? <Text style={styles.taxNote}>{taxNote}</Text> : null}
 
         {/* ── Payment Details ── */}
         {hasPaymentDetails && !isCreditNote && (

@@ -2,8 +2,10 @@ import { ArrowRight, Download } from "lucide-react";
 
 import { RubberStamp } from "@/components/nota-marks";
 import { formatOrgAddress } from "@/lib/branding";
+import { formatClientAddress } from "@/lib/postal-address";
 import type { PublicInvoice } from "@/lib/public-invoice";
 import { formatTaxIdentifier, invoiceTaxIdentifier } from "@/lib/tax-identifier";
+import { taxTreatmentNote } from "@/lib/tax-treatment";
 import { formatCurrency } from "@/lib/utils";
 
 function formatDate(value: string | Date) {
@@ -38,7 +40,16 @@ export function PublicInvoiceView({ invoice, token }: { invoice: PublicInvoice; 
   const currency = invoice.currency ?? "EUR";
   const businessName = invoice.organization.businessName ?? invoice.organization.name;
   const businessAddress = formatOrgAddress(invoice.organization);
-  const clientAddress = [invoice.client.company, invoice.client.address].filter(Boolean).join("\n");
+  const clientAddress = [invoice.client.company, formatClientAddress(invoice.client)]
+    .filter(Boolean)
+    .join("\n");
+  const servicePeriod =
+    invoice.servicePeriodStart && invoice.servicePeriodEnd
+      ? invoice.servicePeriodStart === invoice.servicePeriodEnd
+        ? formatDate(invoice.servicePeriodStart)
+        : `${formatDate(invoice.servicePeriodStart)} – ${formatDate(invoice.servicePeriodEnd)}`
+      : null;
+  const taxNote = taxTreatmentNote(invoice.taxTreatment);
   const isCreditNote = invoice.kind === "credit_note";
   const isPaid = !isCreditNote && invoice.settlementStatus === "paid";
   const paymentLinkUrl = !isCreditNote && !isPaid ? invoice.stripePaymentLinkUrl : null;
@@ -112,6 +123,22 @@ export function PublicInvoiceView({ invoice, token }: { invoice: PublicInvoice; 
               <h2 className="nota-label text-[#6b655c]">Due</h2>
               <p className="mt-2 font-mono text-xs sm:text-sm">{formatDate(invoice.dueAt)}</p>
             </div>
+            {servicePeriod ? (
+              <div>
+                <h2 className="nota-label text-[#6b655c]">
+                  {invoice.servicePeriodStart === invoice.servicePeriodEnd
+                    ? "Service date"
+                    : "Service period"}
+                </h2>
+                <p className="mt-2 font-mono text-xs sm:text-sm">{servicePeriod}</p>
+              </div>
+            ) : null}
+            {invoice.buyerReference ? (
+              <div>
+                <h2 className="nota-label text-[#6b655c]">Buyer reference</h2>
+                <p className="mt-2 font-mono text-xs sm:text-sm">{invoice.buyerReference}</p>
+              </div>
+            ) : null}
           </section>
 
           <section aria-labelledby="line-items-heading" className="py-7 sm:py-9">
@@ -167,10 +194,7 @@ export function PublicInvoiceView({ invoice, token }: { invoice: PublicInvoice; 
                 </dd>
               </div>
               <div className="flex justify-between gap-6">
-                <dt className="text-[#6b655c]">
-                  VAT {formatPercentage(invoice.taxRate)}%
-                  {invoice.reverseCharge === "true" ? " · reverse charge" : ""}
-                </dt>
+                <dt className="text-[#6b655c]">VAT {formatPercentage(invoice.taxRate)}%</dt>
                 <dd className="font-mono">
                   {formatCurrency(Number(invoice.taxAmount ?? 0), currency)}
                 </dd>
@@ -190,6 +214,7 @@ export function PublicInvoiceView({ invoice, token }: { invoice: PublicInvoice; 
                 {formatCurrency(Number(isPaid ? invoice.total : invoice.balance), currency)}
               </p>
             </div>
+            {taxNote ? <p className="mt-4 text-xs text-[#6b655c]">{taxNote}</p> : null}
             {isPaid ? (
               <div className="mt-8 flex justify-end pr-3">
                 <RubberStamp>Paid</RubberStamp>

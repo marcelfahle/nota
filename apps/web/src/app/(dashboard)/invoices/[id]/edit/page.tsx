@@ -29,10 +29,12 @@ export default async function EditInvoicePage({ params }: { params: Promise<{ id
 
   const clientList = await db
     .select({
+      defaultBuyerReference: clients.defaultBuyerReference,
       defaultCurrency: clients.defaultCurrency,
       email: clients.email,
       id: clients.id,
       name: clients.name,
+      publicSector: clients.publicSector,
     })
     .from(clients)
     .where(eq(clients.orgId, org.id))
@@ -63,6 +65,7 @@ export default async function EditInvoicePage({ params }: { params: Promise<{ id
           action={boundUpdateAction}
           clients={clientList}
           defaultValues={{
+            buyerReference: invoice.buyerReference,
             clientId: invoice.clientId,
             currency: invoice.currency ?? "EUR",
             dueAt: invoice.dueAt,
@@ -74,9 +77,12 @@ export default async function EditInvoicePage({ params }: { params: Promise<{ id
               unitPrice: item.unitPrice,
             })),
             notes: invoice.notes,
-            reverseCharge: invoice.reverseCharge ?? "false",
+            servicePeriodEnd: invoice.servicePeriodEnd,
+            servicePeriodStart: invoice.servicePeriodStart,
             taxRate: invoice.taxRate ?? "0",
+            taxTreatment: invoice.taxTreatment,
           }}
+          org={{ countryCode: org.countryCode, defaultTaxTreatment: org.defaultTaxTreatment }}
           redirectTo={`/invoices/${id}`}
           submitLabel="Update Invoice"
         />

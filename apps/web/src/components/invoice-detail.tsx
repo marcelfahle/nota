@@ -46,6 +46,7 @@ import {
   canSendInvoice,
   canSendInvoiceReminder,
 } from "@/lib/roles";
+import { TAX_TREATMENT_LABELS, type TaxTreatment, taxTreatmentNote } from "@/lib/tax-treatment";
 import { formatCurrency } from "@/lib/utils";
 
 type ActivityEntry = {
@@ -62,14 +63,12 @@ type InvoiceDetailProps = {
   business: {
     address: string | null;
     brandColor: string | null;
-    city: string | null;
-    country: string | null;
     logoUrl: string | null;
     name: string;
-    region: string | null;
   };
   invoice: {
     balance: string;
+    buyerReference: string | null;
     client: {
       address?: string | null;
       company?: string | null;
@@ -88,6 +87,7 @@ type InvoiceDetailProps = {
     dueAt: string;
     id: string;
     issuedAt: string;
+    issueProblems: Array<string>;
     kind: "credit_note" | "invoice";
     lineItems: Array<{
       amount: string;
@@ -99,12 +99,14 @@ type InvoiceDetailProps = {
     notes: string | null;
     number: string;
     paidAmount: string;
-    reverseCharge: string | null;
+    servicePeriodEnd: string | null;
+    servicePeriodStart: string | null;
     settlementStatus: "paid" | "partially_paid" | "unpaid";
     status: string | null;
     subtotal: string | null;
     taxAmount: string | null;
     taxRate: string | null;
+    taxTreatment: TaxTreatment;
     total: string | null;
     viewCount: number;
   };
@@ -128,6 +130,13 @@ function formatDate(value: string) {
     timeZone: "UTC",
     year: "numeric",
   }).format(new Date(value));
+}
+
+function formatServicePeriod(start: string | null, end: string | null) {
+  if (!start || !end) {
+    return null;
+  }
+  return start === end ? formatDate(start) : `${formatDate(start)} – ${formatDate(end)}`;
 }
 
 function daysUntil(value: string) {
@@ -290,6 +299,8 @@ export function InvoiceDetailView({ activities, business, invoice, role }: Invoi
     setPending(null);
   }
 
+  const servicePeriod = formatServicePeriod(invoice.servicePeriodStart, invoice.servicePeriodEnd);
+  const taxNote = taxTreatmentNote(invoice.taxTreatment);
   const stamp =
     invoice.kind === "credit_note"
       ? status === "cancelled"
@@ -406,6 +417,20 @@ export function InvoiceDetailView({ activities, business, invoice, role }: Invoi
             {message.text}
           </p>
         ) : null}
+        {status === "draft" && invoice.issueProblems.length ? (
+          <div
+            className="rounded-md border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-950"
+            data-testid="invoice-issue-problems"
+            role="status"
+          >
+            <p className="font-medium">Before this can be sent, fix:</p>
+            <ul className="mt-1.5 list-disc space-y-1 pl-5">
+              {invoice.issueProblems.map((problem) => (
+                <li key={problem}>{problem}</li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
       </header>
 
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1.45fr)_minmax(280px,0.55fr)]">
@@ -435,9 +460,7 @@ export function InvoiceDetailView({ activities, business, invoice, role }: Invoi
                 <div>
                   <p className="font-semibold">{business.name}</p>
                   <p className="mt-1 max-w-52 text-xs leading-relaxed whitespace-pre-line text-zinc-500">
-                    {[business.address, business.city, business.region, business.country]
-                      .filter(Boolean)
-                      .join(", ")}
+                    {business.address}
                   </p>
                 </div>
               </div>
@@ -467,6 +490,24 @@ export function InvoiceDetailView({ activities, business, invoice, role }: Invoi
                 <dt className="nota-label text-zinc-500">Due</dt>
                 <dd className="mt-2 font-mono text-xs">{formatDate(invoice.dueAt)}</dd>
               </div>
+              {servicePeriod ? (
+                <div>
+                  <dt className="nota-label text-zinc-500">
+                    {invoice.servicePeriodStart === invoice.servicePeriodEnd
+                      ? "Service date"
+                      : "Service period"}
+                  </dt>
+                  <dd className="mt-2 font-mono text-xs" data-testid="invoice-service-period">
+                    {servicePeriod}
+                  </dd>
+                </div>
+              ) : null}
+              {invoice.buyerReference ? (
+                <div>
+                  <dt className="nota-label text-zinc-500">Buyer reference</dt>
+                  <dd className="mt-2 font-mono text-xs">{invoice.buyerReference}</dd>
+                </div>
+              ) : null}
             </dl>
 
             <div className="py-7">
@@ -511,6 +552,11 @@ export function InvoiceDetailView({ activities, business, invoice, role }: Invoi
                   <dd>{formatCurrency(total, currency)}</dd>
                 </div>
               </dl>
+              {taxNote ? (
+                <p className="mt-4 pb-4 text-xs text-zinc-500" data-testid="invoice-tax-note">
+                  {taxNote}
+                </p>
+              ) : null}
             </div>
 
             {stamp ? (
@@ -600,7 +646,9 @@ export function InvoiceDetailView({ activities, business, invoice, role }: Invoi
               <div>
                 <dt className="text-xs text-muted-foreground">Tax rule</dt>
                 <dd className="mt-1">
-                  {invoice.reverseCharge === "true" ? "Reverse charge" : `VAT ${invoice.taxRate}%`}
+                  {invoice.taxTreatment === "standard"
+                    ? `VAT ${invoice.taxRate}%`
+                    : TAX_TREATMENT_LABELS[invoice.taxTreatment]}
                 </dd>
               </div>
             </dl>

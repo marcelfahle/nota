@@ -13,10 +13,12 @@ export default async function NewInvoicePage() {
 
   const clientList = await db
     .select({
+      defaultBuyerReference: clients.defaultBuyerReference,
       defaultCurrency: clients.defaultCurrency,
       email: clients.email,
       id: clients.id,
       name: clients.name,
+      publicSector: clients.publicSector,
     })
     .from(clients)
     .where(eq(clients.orgId, org.id))
@@ -35,7 +37,11 @@ export default async function NewInvoicePage() {
       <h1 className="mb-6 text-lg font-semibold">New Invoice</h1>
 
       <div className="max-w-3xl">
-        <InvoiceForm action={createInvoice} clients={clientList} />
+        <InvoiceForm
+          action={createInvoice}
+          clients={clientList}
+          org={{ countryCode: org.countryCode, defaultTaxTreatment: org.defaultTaxTreatment }}
+        />
       </div>
     </div>
   );

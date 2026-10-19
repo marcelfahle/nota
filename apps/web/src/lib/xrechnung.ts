@@ -1,24 +1,37 @@
 import { absoluteDecimal, formatStoredMoney, formatVariableDecimal } from "@/lib/money";
 import type { TaxIdentifier } from "@/lib/tax-identifier";
+import { taxCategory, type TaxTreatment } from "@/lib/tax-treatment";
 
-type XRechnungData = {
-  business: {
-    address?: string | null;
+export type XRechnungAddress = {
+  city?: string | null;
+  /** ISO 3166-1 alpha-2. Required: XRechnung has no default country. */
+  countryCode?: string | null;
+  postalCode?: string | null;
+  street?: string | null;
+};
+
+export type XRechnungData = {
+  business: XRechnungAddress & {
     bankDetails?: string | null;
     bic?: string | null;
+    /** BR-DE-2: seller contact with name, phone and email (BR-DE-5 to 7). */
+    contact?: { email?: string | null; name?: string | null; phone?: string | null } | null;
     email: string;
     iban?: string | null;
     name?: string | null;
     taxIdentifier?: TaxIdentifier | null;
   };
-  client: {
-    address?: string | null;
+  client: XRechnungAddress & {
     company?: string | null;
     email: string;
     name: string;
+    /** A public-sector buyer must carry its Leitweg-ID as the buyer reference. */
+    publicSector?: boolean | null;
     taxIdentifier?: TaxIdentifier | null;
   };
   invoice: {
+    /** BT-10. Falls back to the invoice number for non-public-sector buyers. */
+    buyerReference?: string | null;
     currency: string;
     dueAt: string;
     issuedAt: string;
@@ -33,23 +46,29 @@ type XRechnungData = {
     number: string;
     originalNumber?: string | null;
     paymentLinkUrl?: string | null;
-    reverseCharge?: string | null;
+    servicePeriodEnd?: string | null;
+    servicePeriodStart?: string | null;
     subtotal: string;
     taxAmount: string;
     taxRate: string;
+    taxTreatment: TaxTreatment;
     total: string;
   };
 };
 
 export class XRechnungValidationError extends Error {
-  constructor(message: string) {
-    super(message);
+  readonly problems: Array<string>;
+
+  constructor(problems: Array<string> | string) {
+    const list = Array.isArray(problems) ? problems : [problems];
+    super(list.join(" "));
     this.name = "XRechnungValidationError";
+    this.problems = list;
   }
 }
 
 // ---------------------------------------------------------------------------
-// Country name → ISO 3166-1 alpha-2
+// Country name → ISO 3166-1 alpha-2 (legacy free-text addresses only)
 // ---------------------------------------------------------------------------
 const COUNTRY_CODES: Record<string, string> = {
   austria: "AT",
@@ -75,24 +94,27 @@ const COUNTRY_CODES: Record<string, string> = {
   malta: "MT",
   netherlands: "NL",
   norway: "NO",
+  österreich: "AT",
   poland: "PL",
   portugal: "PT",
   romania: "RO",
+  schweiz: "CH",
   slovakia: "SK",
   slovenia: "SI",
   spain: "ES",
   sweden: "SE",
   switzerland: "CH",
   "united kingdom": "GB",
+  "united states": "US",
 };
 
-export function toCountryCode(country: string): string {
+/** Best effort for legacy free text. Returns null when the name is unknown. */
+export function toCountryCode(country: string): string | null {
   const trimmed = country.trim();
-  // Already an ISO alpha-2 code
-  if (/^[A-Z]{2}$/.test(trimmed)) {
-    return trimmed;
+  if (/^[A-Za-z]{2}$/.test(trimmed)) {
+    return trimmed.toUpperCase();
   }
-  return COUNTRY_CODES[trimmed.toLowerCase()] ?? trimmed.toUpperCase().slice(0, 2);
+  return COUNTRY_CODES[trimmed.toLowerCase()] ?? null;
 }
 
 // ---------------------------------------------------------------------------
@@ -111,45 +133,42 @@ function fmt(value: string): string {
   return formatVariableDecimal(value, 6, 2);
 }
 
-export function parseAddress(address?: string | null): {
-  city: string;
-  country: string;
-  postal: string;
-  street: string;
-} {
+/** Splits a legacy free-text address. Structured columns should be preferred. */
+export function parseAddress(address?: string | null): XRechnungAddress {
+  const empty = { city: null, countryCode: null, postalCode: null, street: null };
   if (!address) {
-    return { city: "", country: "", postal: "", street: "" };
+    return empty;
   }
 
   const lines = address
-    .split("\n")
+    .split(/\n|,\s*/)
     .map((l) => l.trim())
     .filter(Boolean);
 
   if (lines.length === 0) {
-    return { city: "", country: "", postal: "", street: "" };
+    return empty;
   }
 
   if (lines.length === 1) {
-    return { city: "", country: "", postal: "", street: lines[0] };
+    return { ...empty, street: lines[0] };
   }
 
   const street = lines[0];
   const rawCountry = lines.length >= 3 ? (lines.at(-1) ?? "") : "";
-  const country = rawCountry ? toCountryCode(rawCountry) : "";
+  const countryCode = rawCountry ? toCountryCode(rawCountry) : null;
   const cityLine = lines.length >= 3 ? (lines.at(-2) ?? "") : lines[1];
 
   const postalMatch = cityLine.match(/^(\d{4,6})\s+(.+)$/);
   if (postalMatch) {
-    return { city: postalMatch[2], country, postal: postalMatch[1], street };
+    return { city: postalMatch[2], countryCode, postalCode: postalMatch[1], street };
   }
 
   const postalMatch2 = cityLine.match(/^(.+?)\s+(\d{4,6})$/);
   if (postalMatch2) {
-    return { city: postalMatch2[1], country, postal: postalMatch2[2], street };
+    return { city: postalMatch2[1], countryCode, postalCode: postalMatch2[2], street };
   }
 
-  return { city: cityLine, country, postal: "", street };
+  return { city: cityLine, countryCode, postalCode: null, street };
 }
 
 // ---------------------------------------------------------------------------
@@ -166,52 +185,85 @@ export function extractIban(bankDetails?: string | null): string | null {
   return match[1].replaceAll(/\s/g, "").toUpperCase();
 }
 
-function buildPartyAddress(address?: string | null): string {
-  const { city, country, postal, street } = parseAddress(address);
+function buildPartyAddress(address: XRechnungAddress, countryCode: string): string {
   return `<cac:PostalAddress>
-${street ? `<cbc:StreetName>${escapeXml(street)}</cbc:StreetName>` : ""}
-${city ? `<cbc:CityName>${escapeXml(city)}</cbc:CityName>` : ""}
-${postal ? `<cbc:PostalZone>${escapeXml(postal)}</cbc:PostalZone>` : ""}
+${address.street ? `<cbc:StreetName>${escapeXml(address.street)}</cbc:StreetName>` : ""}
+${address.city ? `<cbc:CityName>${escapeXml(address.city)}</cbc:CityName>` : ""}
+${address.postalCode ? `<cbc:PostalZone>${escapeXml(address.postalCode)}</cbc:PostalZone>` : ""}
 <cac:Country>
-<cbc:IdentificationCode>${country || "DE"}</cbc:IdentificationCode>
+<cbc:IdentificationCode>${escapeXml(countryCode)}</cbc:IdentificationCode>
 </cac:Country>
 </cac:PostalAddress>`;
 }
 
-function buildTaxCategory(
-  reverseCharge: string | null | undefined,
-  taxRate: string,
-): { code: string; exemption: string; rate: string } {
-  if (reverseCharge === "true") {
-    return {
-      code: "AE",
-      exemption: `<cbc:TaxExemptionReasonCode>vatex-eu-ae</cbc:TaxExemptionReasonCode>
-<cbc:TaxExemptionReason>Reverse charge</cbc:TaxExemptionReason>`,
-      rate: "0",
-    };
+/**
+ * BT-31 (VAT ID, scheme VAT) or BT-32 (tax registration such as a German
+ * Steuernummer, scheme FC). BR-CO-26 needs at least one for the seller.
+ */
+function buildPartyTaxScheme(identifier: TaxIdentifier | null | undefined): string {
+  if (!identifier || identifier.type === "us_ein") {
+    return "";
   }
-  if (taxRate === "0" || taxRate === "0.00") {
-    return { code: "Z", exemption: "", rate: "0" };
+  const scheme = identifier.type === "eu_vat" ? "VAT" : "FC";
+  return `<cac:PartyTaxScheme>
+<cbc:CompanyID>${escapeXml(identifier.type === "eu_vat" ? identifier.canonicalValue : identifier.value)}</cbc:CompanyID>
+<cac:TaxScheme>
+<cbc:ID>${scheme}</cbc:ID>
+</cac:TaxScheme>
+</cac:PartyTaxScheme>`;
+}
+
+function buildTaxCategoryXml(tax: ReturnType<typeof taxCategory>): string {
+  return `<cac:TaxCategory>
+<cbc:ID>${tax.code}</cbc:ID>
+<cbc:Percent>${fmt(tax.rate)}</cbc:Percent>
+${tax.exemptionReasonCode ? `<cbc:TaxExemptionReasonCode>${tax.exemptionReasonCode}</cbc:TaxExemptionReasonCode>` : ""}
+${tax.exemptionReason ? `<cbc:TaxExemptionReason>${escapeXml(tax.exemptionReason)}</cbc:TaxExemptionReason>` : ""}
+<cac:TaxScheme>
+<cbc:ID>VAT</cbc:ID>
+</cac:TaxScheme>
+</cac:TaxCategory>`;
+}
+
+function requireData(data: XRechnungData) {
+  const { business, client, invoice } = data;
+  const problems: Array<string> = [];
+  if (business.taxIdentifier?.type === "us_ein") {
+    problems.push(
+      "XRechnung requires supported EU legal tax data; an EIN or generic tax ID cannot be exported as VAT.",
+    );
   }
-  return { code: "S", exemption: "", rate: taxRate };
+  if (!business.countryCode?.trim()) {
+    problems.push("The seller address needs a country code.");
+  }
+  if (!client.countryCode?.trim()) {
+    problems.push("The buyer address needs a country code.");
+  }
+  if (!business.contact?.name?.trim() || !business.contact.email?.trim()) {
+    problems.push("The seller contact needs a name and an email address (BR-DE-2).");
+  }
+  if (client.publicSector && !invoice.buyerReference?.trim()) {
+    problems.push("Public-sector buyers need their Leitweg-ID as the buyer reference (BT-10).");
+  }
+  if (
+    (invoice.servicePeriodStart && !invoice.servicePeriodEnd) ||
+    (!invoice.servicePeriodStart && invoice.servicePeriodEnd)
+  ) {
+    problems.push("The service period needs both a start and an end date.");
+  }
+  if (problems.length) {
+    throw new XRechnungValidationError(problems);
+  }
 }
 
 // ---------------------------------------------------------------------------
 // Generate XRechnung UBL XML
 // ---------------------------------------------------------------------------
 export function generateXRechnung(data: XRechnungData): string {
+  requireData(data);
   const { business, client, invoice } = data;
-  if (business.taxIdentifier && business.taxIdentifier.type !== "eu_vat") {
-    throw new XRechnungValidationError(
-      "XRechnung requires supported EU legal tax data; an EIN or generic tax ID cannot be exported as VAT.",
-    );
-  }
-  const businessVatNumber =
-    business.taxIdentifier?.type === "eu_vat" ? business.taxIdentifier.canonicalValue : null;
-  const clientVatNumber =
-    client.taxIdentifier?.type === "eu_vat" ? client.taxIdentifier.canonicalValue : null;
   const cur = escapeXml(invoice.currency);
-  const tax = buildTaxCategory(invoice.reverseCharge, invoice.taxRate);
+  const tax = taxCategory(invoice.taxTreatment, invoice.taxRate);
   const buyerName = escapeXml(client.company || client.name);
   const iban = business.iban || extractIban(business.bankDetails);
   const bic = business.bic || null;
@@ -224,6 +276,10 @@ export function generateXRechnung(data: XRechnungData): string {
   const quantity = (value: string) => formatVariableDecimal(value, 6, 2);
   const unitPrice = (value: string) =>
     formatVariableDecimal(isCreditNote ? absoluteDecimal(value, 6) : value, 6, 2);
+  // BT-10 is mandatory (BR-DE-15). Without an agreed reference the invoice
+  // number is the only honest value for a private buyer.
+  const buyerReference = invoice.buyerReference?.trim() || invoice.number;
+  const contact = business.contact!;
 
   const lines = invoice.lineItems
     .map(
@@ -268,6 +324,14 @@ export function generateXRechnung(data: XRechnungData): string {
   paymentMeans += `
 </cac:PaymentMeans>`;
 
+  const invoicePeriod =
+    invoice.servicePeriodStart && invoice.servicePeriodEnd
+      ? `<cac:InvoicePeriod>
+<cbc:StartDate>${escapeXml(invoice.servicePeriodStart)}</cbc:StartDate>
+<cbc:EndDate>${escapeXml(invoice.servicePeriodEnd)}</cbc:EndDate>
+</cac:InvoicePeriod>`
+      : "";
+
   return `<?xml version="1.0" encoding="UTF-8"?>
 <${documentName} xmlns="urn:oasis:names:specification:ubl:schema:xsd:${documentName}-2" xmlns:cac="urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2" xmlns:cbc="urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2">
 <cbc:CustomizationID>urn:cen.eu:en16931:2017#compliant#urn:xeinkauf.de:kosit:xrechnung_3.0</cbc:CustomizationID>
@@ -278,19 +342,22 @@ ${isCreditNote ? "" : `<cbc:DueDate>${escapeXml(invoice.dueAt)}</cbc:DueDate>`}
 <cbc:${isCreditNote ? "CreditNoteTypeCode" : "InvoiceTypeCode"}>${isCreditNote ? "381" : "380"}</cbc:${isCreditNote ? "CreditNoteTypeCode" : "InvoiceTypeCode"}>
 ${invoice.notes ? `<cbc:Note>${escapeXml(invoice.notes)}</cbc:Note>` : ""}
 <cbc:DocumentCurrencyCode>${cur}</cbc:DocumentCurrencyCode>
-<cbc:BuyerReference>${escapeXml(invoice.number)}</cbc:BuyerReference>
+<cbc:BuyerReference>${escapeXml(buyerReference)}</cbc:BuyerReference>
+${invoicePeriod}
 ${isCreditNote && invoice.originalNumber ? `<cac:BillingReference>\n<cac:InvoiceDocumentReference>\n<cbc:ID>${escapeXml(invoice.originalNumber)}</cbc:ID>\n</cac:InvoiceDocumentReference>\n</cac:BillingReference>` : ""}
 <cac:AccountingSupplierParty>
 <cac:Party>
 <cbc:EndpointID schemeID="EM">${escapeXml(business.email)}</cbc:EndpointID>
 ${business.name ? `<cac:PartyName>\n<cbc:Name>${escapeXml(business.name)}</cbc:Name>\n</cac:PartyName>` : ""}
-${buildPartyAddress(business.address)}
-${businessVatNumber ? `<cac:PartyTaxScheme>\n<cbc:CompanyID>${escapeXml(businessVatNumber)}</cbc:CompanyID>\n<cac:TaxScheme>\n<cbc:ID>VAT</cbc:ID>\n</cac:TaxScheme>\n</cac:PartyTaxScheme>` : ""}
+${buildPartyAddress(business, business.countryCode!)}
+${buildPartyTaxScheme(business.taxIdentifier)}
 <cac:PartyLegalEntity>
 <cbc:RegistrationName>${escapeXml(business.name || business.email)}</cbc:RegistrationName>
 </cac:PartyLegalEntity>
 <cac:Contact>
-<cbc:ElectronicMail>${escapeXml(business.email)}</cbc:ElectronicMail>
+<cbc:Name>${escapeXml(contact.name!)}</cbc:Name>
+${contact.phone ? `<cbc:Telephone>${escapeXml(contact.phone)}</cbc:Telephone>` : ""}
+<cbc:ElectronicMail>${escapeXml(contact.email!)}</cbc:ElectronicMail>
 </cac:Contact>
 </cac:Party>
 </cac:AccountingSupplierParty>
@@ -300,8 +367,8 @@ ${businessVatNumber ? `<cac:PartyTaxScheme>\n<cbc:CompanyID>${escapeXml(business
 <cac:PartyName>
 <cbc:Name>${buyerName}</cbc:Name>
 </cac:PartyName>
-${buildPartyAddress(client.address)}
-${clientVatNumber ? `<cac:PartyTaxScheme>\n<cbc:CompanyID>${escapeXml(clientVatNumber)}</cbc:CompanyID>\n<cac:TaxScheme>\n<cbc:ID>VAT</cbc:ID>\n</cac:TaxScheme>\n</cac:PartyTaxScheme>` : ""}
+${buildPartyAddress(client, client.countryCode!)}
+${client.taxIdentifier?.type === "eu_vat" ? buildPartyTaxScheme(client.taxIdentifier) : ""}
 <cac:PartyLegalEntity>
 <cbc:RegistrationName>${buyerName}</cbc:RegistrationName>
 </cac:PartyLegalEntity>
@@ -316,14 +383,7 @@ ${paymentMeans}
 <cac:TaxSubtotal>
 <cbc:TaxableAmount currencyID="${cur}">${amount(invoice.subtotal)}</cbc:TaxableAmount>
 <cbc:TaxAmount currencyID="${cur}">${amount(invoice.taxAmount)}</cbc:TaxAmount>
-<cac:TaxCategory>
-<cbc:ID>${tax.code}</cbc:ID>
-<cbc:Percent>${fmt(tax.rate)}</cbc:Percent>
-${tax.exemption}
-<cac:TaxScheme>
-<cbc:ID>VAT</cbc:ID>
-</cac:TaxScheme>
-</cac:TaxCategory>
+${buildTaxCategoryXml(tax)}
 </cac:TaxSubtotal>
 </cac:TaxTotal>
 <cac:LegalMonetaryTotal>

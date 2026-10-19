@@ -17,6 +17,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { formatClientAddress } from "@/lib/postal-address";
 import { formatTaxIdentifier, taxIdentifierFromColumns } from "@/lib/tax-identifier";
 import { formatCurrency } from "@/lib/utils";
 
@@ -29,13 +30,19 @@ type BankAccountOption = {
 type Client = {
   address: string | null;
   bankAccountId: string | null;
+  city: string | null;
   company: string | null;
+  countryCode: string | null;
   createdAt: Date | null;
+  defaultBuyerReference: string | null;
   defaultCurrency: string | null;
   email: string;
   id: string;
   name: string;
   notes: string | null;
+  postalCode: string | null;
+  publicSector: boolean;
+  street: string | null;
   taxIdentifierCanonicalValue: string | null;
   taxIdentifierCountryCode: string | null;
   taxIdentifierType: "eu_vat" | "tax_id" | "us_ein" | null;
@@ -135,7 +142,15 @@ export function ClientDetailView({
         </div>
       ) : (
         <div className="mb-8 grid max-w-2xl gap-4 sm:grid-cols-2">
-          <DetailItem label="Address" value={client.address} />
+          <DetailItem label="Address" value={formatClientAddress(client)} />
+          <DetailItem
+            label={client.publicSector ? "Leitweg-ID" : "Buyer reference"}
+            value={
+              client.publicSector
+                ? (client.defaultBuyerReference ?? "Missing. Needed on every invoice.")
+                : client.defaultBuyerReference
+            }
+          />
           <DetailItem
             label="Tax identifier"
             value={formatTaxIdentifier(taxIdentifierFromColumns(client))}

@@ -16,6 +16,14 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { addDecimals, currencyExponent, multiplyAndRound, percentageAndRound } from "@/lib/money";
+import { defaultServicePeriod } from "@/lib/service-period";
+import {
+  requiresZeroRate,
+  TAX_TREATMENT_HINTS,
+  TAX_TREATMENT_LABELS,
+  TAX_TREATMENTS,
+  type TaxTreatment,
+} from "@/lib/tax-treatment";
 import { formatCurrency } from "@/lib/utils";
 
 type LineItem = {
@@ -31,16 +39,19 @@ type ActionState = {
 } | null;
 
 type Client = {
+  defaultBuyerReference?: string | null;
   defaultCurrency: string | null;
   email: string;
   id: string;
   name: string;
+  publicSector?: boolean;
 };
 
 type InvoiceFormProps = {
   action: (state: ActionState, formData: FormData) => Promise<ActionState>;
   clients: Array<Client>;
   defaultValues?: {
+    buyerReference?: string | null;
     clientId?: string;
     currency?: string;
     dueAt?: string;
@@ -48,9 +59,12 @@ type InvoiceFormProps = {
     issuedAt?: string;
     lineItems?: Array<{ description: string; quantity: string; unitPrice: string }>;
     notes?: string | null;
-    reverseCharge?: string;
+    servicePeriodEnd?: string | null;
+    servicePeriodStart?: string | null;
     taxRate?: string;
+    taxTreatment?: TaxTreatment;
   };
+  org: { countryCode: string | null; defaultTaxTreatment: TaxTreatment };
   redirectTo?: string;
   submitLabel?: string;
 };
@@ -77,6 +91,7 @@ export function InvoiceForm({
   action,
   clients,
   defaultValues,
+  org,
   redirectTo = "/invoices",
   submitLabel = "Save Draft",
 }: InvoiceFormProps) {
@@ -86,10 +101,35 @@ export function InvoiceForm({
   const [items, setItems] = useState<Array<LineItem>>(
     defaultValues?.lineItems?.length ? defaultValues.lineItems : [emptyLineItem()],
   );
-
+  const [clientId, setClientId] = useState(defaultValues?.clientId ?? "");
   const [currency, setCurrency] = useState(defaultValues?.currency ?? "EUR");
-
+  const [issuedAt, setIssuedAt] = useState(defaultValues?.issuedAt ?? todayISO());
+  const [taxTreatment, setTaxTreatment] = useState<TaxTreatment>(
+    defaultValues?.taxTreatment ?? org.defaultTaxTreatment,
+  );
   const [taxRate, setTaxRate] = useState(defaultValues?.taxRate ?? "0");
+  // Until someone edits the period it follows the line items and the issue date,
+  // shown as a visible default so nobody has to guess what gets saved.
+  const [editedPeriod, setEditedPeriod] = useState<{ end: string; start: string } | null>(
+    defaultValues?.servicePeriodStart
+      ? {
+          end: defaultValues.servicePeriodEnd ?? defaultValues.servicePeriodStart,
+          start: defaultValues.servicePeriodStart,
+        }
+      : null,
+  );
+  // A public-sector client brings its Leitweg-ID along until the reference is edited.
+  const [editedReference, setEditedReference] = useState<string | null>(
+    defaultValues?.buyerReference ?? null,
+  );
+
+  const selectedClient = clients.find((client) => client.id === clientId);
+  const zeroRated = requiresZeroRate(taxTreatment);
+  const german = org.countryCode === "DE";
+  const period = editedPeriod ?? defaultServicePeriod(items, issuedAt) ?? { end: "", start: "" };
+  const servicePeriodStart = period.start;
+  const servicePeriodEnd = period.end;
+  const buyerReference = editedReference ?? selectedClient?.defaultBuyerReference ?? "";
 
   useEffect(() => {
     if (state?.success && state.invoiceId) {
@@ -108,6 +148,13 @@ export function InvoiceForm({
   const removeItem = useCallback((index: number) => {
     setItems((prev) => (prev.length <= 1 ? prev : prev.filter((_, i) => i !== index)));
   }, []);
+
+  function changeTreatment(value: TaxTreatment) {
+    setTaxTreatment(value);
+    if (requiresZeroRate(value)) {
+      setTaxRate("0");
+    }
+  }
 
   // Computed totals
   const exponent = currencyExponent(currency);
@@ -137,11 +184,13 @@ export function InvoiceForm({
           ),
         );
         formData.set("taxRate", taxRate);
+        formData.set("taxTreatment", taxTreatment);
         formData.set("currency", currency);
         posthog.capture("invoice_submitted", {
           currency,
           invoice_mode: defaultValues ? "edit" : "create",
           line_item_count: items.length,
+          tax_treatment: taxTreatment,
           total,
         });
         formAction(formData);
@@ -153,7 +202,7 @@ export function InvoiceForm({
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="space-y-2">
           <Label htmlFor="clientId">Client *</Label>
-          <Select defaultValue={defaultValues?.clientId} name="clientId" required>
+          <Select name="clientId" onValueChange={setClientId} required value={clientId}>
             <SelectTrigger className="w-full" data-testid="invoice-client-select">
               <SelectValue placeholder="Select a client" />
             </SelectTrigger>
@@ -186,11 +235,12 @@ export function InvoiceForm({
         <div className="space-y-2">
           <Label htmlFor="issuedAt">Issue Date *</Label>
           <Input
-            defaultValue={defaultValues?.issuedAt ?? todayISO()}
             id="issuedAt"
             name="issuedAt"
+            onChange={(e) => setIssuedAt(e.target.value)}
             required
             type="date"
+            value={issuedAt}
           />
         </div>
         <div className="space-y-2">
@@ -202,6 +252,57 @@ export function InvoiceForm({
             required
             type="date"
           />
+        </div>
+      </div>
+
+      {/* Service period and buyer reference */}
+      <div className="grid gap-4 sm:grid-cols-2">
+        <div className="space-y-2">
+          <Label htmlFor="servicePeriodStart">Service period{german ? " *" : ""}</Label>
+          <div className="flex items-center gap-2">
+            <Input
+              data-testid="invoice-service-period-start"
+              id="servicePeriodStart"
+              name="servicePeriodStart"
+              onChange={(e) => setEditedPeriod({ end: servicePeriodEnd, start: e.target.value })}
+              required={german}
+              type="date"
+              value={servicePeriodStart}
+            />
+            <span className="text-sm text-zinc-500">to</span>
+            <Input
+              aria-label="Service period end"
+              data-testid="invoice-service-period-end"
+              name="servicePeriodEnd"
+              onChange={(e) => setEditedPeriod({ end: e.target.value, start: servicePeriodStart })}
+              required={german}
+              type="date"
+              value={servicePeriodEnd}
+            />
+          </div>
+          <p className="text-xs text-zinc-500">
+            When the work was done. Use the same date twice for a single day. German invoices need
+            this (§ 14 UStG).
+          </p>
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="buyerReference">
+            Buyer reference{selectedClient?.publicSector ? " *" : ""}
+          </Label>
+          <Input
+            data-testid="invoice-buyer-reference"
+            id="buyerReference"
+            name="buyerReference"
+            onChange={(e) => setEditedReference(e.target.value)}
+            placeholder={selectedClient?.publicSector ? "Leitweg-ID" : "Optional"}
+            required={Boolean(selectedClient?.publicSector)}
+            value={buyerReference}
+          />
+          <p className="text-xs text-zinc-500">
+            {selectedClient?.publicSector
+              ? "Public-sector clients need their Leitweg-ID here."
+              : "A PO number or reference the client asked for. Leave empty to use the invoice number."}
+          </p>
         </div>
       </div>
 
@@ -285,17 +386,42 @@ export function InvoiceForm({
         </div>
       </div>
 
-      {/* Totals */}
-      <div className="flex justify-end">
-        <div className="w-64 space-y-2">
+      {/* Tax treatment and totals */}
+      <div className="grid gap-6 sm:grid-cols-[minmax(0,1fr)_16rem]">
+        <div className="space-y-2">
+          <Label htmlFor="taxTreatment">VAT treatment</Label>
+          <Select
+            onValueChange={(value) => changeTreatment(value as TaxTreatment)}
+            value={taxTreatment}
+          >
+            <SelectTrigger className="w-full" data-testid="invoice-tax-treatment" id="taxTreatment">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {TAX_TREATMENTS.map((treatment) => (
+                <SelectItem key={treatment} value={treatment}>
+                  {TAX_TREATMENT_LABELS[treatment]}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <p className="text-xs text-zinc-500">{TAX_TREATMENT_HINTS[taxTreatment]}</p>
+          <p className="text-xs text-zinc-500">
+            One VAT rate per invoice. Mixed rates need separate invoices.
+          </p>
+        </div>
+        <div className="space-y-2">
           <div className="flex items-center justify-between text-sm">
             <span className="text-zinc-500">Subtotal</span>
             <span className="font-medium">{formatCurrency(subtotal, currency)}</span>
           </div>
           <div className="flex items-center gap-2 text-sm">
-            <span className="text-zinc-500">Tax</span>
+            <span className="text-zinc-500">VAT</span>
             <Input
+              aria-label="Tax rate"
               className="h-7 w-20 text-center text-xs"
+              data-testid="invoice-tax-rate"
+              disabled={zeroRated}
               max="100"
               min="0"
               onChange={(e) => setTaxRate(e.target.value)}
@@ -339,22 +465,11 @@ export function InvoiceForm({
         </div>
       </div>
 
-      {/* Reverse Charge */}
-      <div className="flex items-center gap-2">
-        <input
-          className="size-4 rounded border-zinc-300"
-          defaultChecked={defaultValues?.reverseCharge === "true"}
-          id="reverseCharge"
-          name="reverseCharge"
-          type="checkbox"
-          value="true"
-        />
-        <Label className="text-sm font-normal" htmlFor="reverseCharge">
-          Reverse charge (VAT not applicable)
-        </Label>
-      </div>
-
-      {state?.error && <p className="text-sm text-red-500">{state.error}</p>}
+      {state?.error && (
+        <p className="text-sm text-red-500" role="alert">
+          {state.error}
+        </p>
+      )}
 
       {/* Actions */}
       <div className="flex justify-end gap-2">

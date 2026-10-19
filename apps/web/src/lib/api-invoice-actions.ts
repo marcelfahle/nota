@@ -20,6 +20,7 @@ import { getInsufficientPermissionsError } from "@/lib/roles";
 
 type InvoiceActionError = {
   error: string;
+  problems?: Array<string>;
   status: number;
 };
 
@@ -32,8 +33,8 @@ type InvoiceActionResult = InvoiceActionError | InvoiceActionSuccess;
 
 type InvoiceDeleteResult = InvoiceActionError | { success: true };
 
-function buildError(error: string, status: number): InvoiceActionError {
-  return { error, status };
+function buildError(error: string, status: number, problems?: Array<string>): InvoiceActionError {
+  return problems ? { error, problems, status } : { error, status };
 }
 
 function buildServiceContext(auth: ApiRequestAuthContext): InvoiceServiceContext {
@@ -59,6 +60,10 @@ function getErrorStatus(error: string) {
     return 500;
   }
 
+  if (error.startsWith("Fix before issuing:")) {
+    return 422;
+  }
+
   return 409;
 }
 
@@ -76,7 +81,7 @@ async function toInvoiceActionResult(
   result: InvoiceMutationResult,
 ): Promise<InvoiceActionResult> {
   if ("error" in result) {
-    return buildError(result.error, getErrorStatus(result.error));
+    return buildError(result.error, getErrorStatus(result.error), result.problems);
   }
 
   return {

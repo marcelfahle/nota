@@ -18,6 +18,7 @@ import {
   type InvoiceServiceContext,
   updateInvoice as updateInvoiceService,
 } from "@/lib/invoice-service";
+import { TAX_TREATMENTS } from "@/lib/tax-treatment";
 
 const lineItemSchema = z.object({
   description: z.string().min(1, "Description is required"),
@@ -26,6 +27,7 @@ const lineItemSchema = z.object({
 });
 
 const invoiceSchema = z.object({
+  buyerReference: z.string().trim().max(200).optional(),
   clientId: z.string().uuid("Invalid client"),
   currency: z.string().default("EUR"),
   dueAt: z.string().min(1, "Due date is required"),
@@ -33,8 +35,10 @@ const invoiceSchema = z.object({
   issuedAt: z.string().min(1, "Issue date is required"),
   lineItems: z.array(lineItemSchema).min(1, "At least one line item is required"),
   notes: z.string().optional(),
-  reverseCharge: z.string().default("false"),
+  servicePeriodEnd: z.string().trim().optional(),
+  servicePeriodStart: z.string().trim().optional(),
   taxRate: z.string().trim().default("0"),
+  taxTreatment: z.enum(TAX_TREATMENTS),
 });
 
 const paymentSchema = z.object({
@@ -46,6 +50,8 @@ const paymentSchema = z.object({
 
 function parseInvoiceFormData(formData: FormData) {
   return {
+    // The form always sends the field, so an empty value clears the reference.
+    buyerReference: (formData.get("buyerReference") as string) ?? "",
     clientId: formData.get("clientId") as string,
     currency: (formData.get("currency") as string) || "EUR",
     dueAt: formData.get("dueAt") as string,
@@ -53,8 +59,10 @@ function parseInvoiceFormData(formData: FormData) {
     issuedAt: formData.get("issuedAt") as string,
     lineItems: JSON.parse((formData.get("lineItems") as string) || "[]"),
     notes: (formData.get("notes") as string) || undefined,
-    reverseCharge: formData.get("reverseCharge") === "true" ? "true" : "false",
+    servicePeriodEnd: (formData.get("servicePeriodEnd") as string) || undefined,
+    servicePeriodStart: (formData.get("servicePeriodStart") as string) || undefined,
     taxRate: formData.get("taxRate") as string,
+    taxTreatment: formData.get("taxTreatment") as string,
   };
 }
 

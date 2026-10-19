@@ -14,6 +14,7 @@ import {
   TAX_IDENTIFIER_TYPES,
   TaxIdentifierValidationError,
 } from "@/lib/tax-identifier";
+import { TAX_TREATMENTS } from "@/lib/tax-treatment";
 import { clientTaxIdentifierFields } from "@/lib/vat";
 
 const settingsSchema = z.object({
@@ -30,7 +31,11 @@ const brandFieldSchema = z.enum([
   "businessName",
   "city",
   "contactEmail",
+  "contactName",
+  "contactPhone",
   "country",
+  "countryCode",
+  "defaultTaxTreatment",
   "invoiceLayout",
   "legalName",
   "name",
@@ -53,7 +58,18 @@ const brandSettingsSchema = z.object({
   businessName: z.string().trim().max(250),
   city: z.string().trim().max(250),
   contactEmail: z.union([z.literal(""), z.email("Enter a valid email address")]),
+  contactName: z.string().trim().max(250),
+  contactPhone: z.string().trim().max(60),
   country: z.string().trim().max(250),
+  countryCode: z.union([
+    z.literal(""),
+    z
+      .string()
+      .trim()
+      .toUpperCase()
+      .regex(/^[A-Z]{2}$/, "Country code must be two letters, for example DE"),
+  ]),
+  defaultTaxTreatment: z.enum(TAX_TREATMENTS),
   dirtyFields: z
     .string()
     .transform((value) => value.split(",").filter(Boolean))
@@ -78,7 +94,11 @@ export async function updateBrandSettings(
     businessName: formData.get("businessName"),
     city: formData.get("city"),
     contactEmail: formData.get("contactEmail"),
+    contactName: formData.get("contactName"),
+    contactPhone: formData.get("contactPhone"),
     country: formData.get("country"),
+    countryCode: formData.get("countryCode"),
+    defaultTaxTreatment: formData.get("defaultTaxTreatment"),
     dirtyFields: formData.get("dirtyFields"),
     invoiceLayout: formData.get("invoiceLayout"),
     legalName: formData.get("legalName"),
@@ -132,6 +152,9 @@ export async function updateBrandSettings(
   ) as Partial<typeof values>;
   if (dirtyFields.includes("name")) {
     update.name = values.name;
+  }
+  if (dirtyFields.includes("defaultTaxTreatment")) {
+    update.defaultTaxTreatment = values.defaultTaxTreatment;
   }
   if (dirtyFields.includes("taxIdentifierType") || dirtyFields.includes("taxIdentifierValue")) {
     try {

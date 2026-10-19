@@ -10,6 +10,12 @@ import {
   taxIdentifierLabel,
   type TaxIdentifierType,
 } from "@/lib/tax-identifier";
+import {
+  TAX_TREATMENT_HINTS,
+  TAX_TREATMENT_LABELS,
+  TAX_TREATMENTS,
+  type TaxTreatment,
+} from "@/lib/tax-treatment";
 import { cn } from "@/lib/utils";
 
 type Source = {
@@ -23,7 +29,11 @@ export type BrandSettingsData = {
   businessName: string | null;
   city: string | null;
   contactEmail: string | null;
+  contactName: string | null;
+  contactPhone: string | null;
   country: string | null;
+  countryCode: string | null;
+  defaultTaxTreatment: TaxTreatment;
   faviconUrl: string | null;
   invoiceLayout: string;
   legalName: string | null;
@@ -117,7 +127,11 @@ export function BrandSettings({
       businessName: settings.businessName ?? "",
       city: settings.city ?? "",
       contactEmail: settings.contactEmail ?? "",
+      contactName: settings.contactName ?? "",
+      contactPhone: settings.contactPhone ?? "",
       country: settings.country ?? "",
+      countryCode: settings.countryCode ?? "",
+      defaultTaxTreatment: settings.defaultTaxTreatment,
       invoiceLayout: "classic",
       legalName: settings.legalName ?? "",
       name: settings.name,
@@ -163,7 +177,9 @@ export function BrandSettings({
   }> = [
     { field: "businessName", label: "Name", placeholder: "Your business name" },
     { field: "name", label: "Shown as", placeholder: "Short display name" },
+    { field: "contactName", label: "Contact", placeholder: "Who to reach about invoices" },
     { field: "contactEmail", label: "Email", placeholder: "billing@example.com", type: "email" },
+    { field: "contactPhone", label: "Phone", placeholder: "+49 30 1234567" },
     {
       field: "taxIdentifierValue",
       label: taxIdentifierLabel({ type: values.taxIdentifierType as TaxIdentifierType }),
@@ -275,8 +291,9 @@ export function BrandSettings({
                     !values.city && "text-muted-foreground italic",
                   )}
                 >
-                  {[values.city, values.region, values.country].filter(Boolean).join(", ") ||
-                    "City, region and country"}
+                  {[values.city, values.region, values.country, values.countryCode]
+                    .filter(Boolean)
+                    .join(", ") || "City, region and country"}
                 </span>
                 <span className="font-mono text-[11px] text-muted-foreground">
                   {sourceLabel(settings.profileSources?.city)}
@@ -304,6 +321,7 @@ export function BrandSettings({
                       ["city", "City"],
                       ["region", "Region"],
                       ["country", "Country"],
+                      ["countryCode", "Country code (DE, AT…)"],
                     ] as const
                   ).map(([field, label]) => (
                     <label className="space-y-1 text-xs text-muted-foreground" key={field}>
@@ -317,8 +335,39 @@ export function BrandSettings({
                 </div>
               ) : null}
             </div>
+            <div className="border-b py-3" data-testid="brand-field-defaultTaxTreatment">
+              <div className="grid items-center gap-2 sm:grid-cols-[92px_minmax(0,1fr)_auto_auto]">
+                <label className="text-sm text-muted-foreground" htmlFor="brand-tax-treatment">
+                  VAT
+                </label>
+                <select
+                  className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+                  disabled={!canManage}
+                  id="brand-tax-treatment"
+                  onChange={(event) => change("defaultTaxTreatment", event.target.value)}
+                  value={values.defaultTaxTreatment}
+                >
+                  {TAX_TREATMENTS.map((treatment) => (
+                    <option key={treatment} value={treatment}>
+                      {TAX_TREATMENT_LABELS[treatment]}
+                    </option>
+                  ))}
+                </select>
+                <span className="font-mono text-[11px] text-muted-foreground">
+                  {sourceLabel(settings.profileSources?.defaultTaxTreatment)}
+                </span>
+              </div>
+              <p className="mt-2 text-xs text-muted-foreground">
+                New invoices start with this.{" "}
+                {TAX_TREATMENT_HINTS[values.defaultTaxTreatment as TaxTreatment]}
+              </p>
+            </div>
             <p className="mt-3 text-xs text-muted-foreground">
               You can also tell Nota: “we moved”, “new tax ID”, or “make the pay button black”.
+            </p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              German invoices need the contact, phone, country code and a Steuernummer or VAT ID
+              before they can be sent.
             </p>
           </section>
 

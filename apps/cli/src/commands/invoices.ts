@@ -41,8 +41,12 @@ type CreateOptions = {
   note?: string;
   reverseCharge?: boolean;
   taxRate?: string;
+  taxTreatment?: string;
+  servicePeriod?: string;
+  buyerReference?: string;
   dryRun?: boolean;
 };
+const TAX_TREATMENTS = ["standard", "zero_rated", "exempt_small_business", "reverse_charge"] as const;
 type Filters = ListOptions & { client?: string; status?: InvoiceStatus };
 function filterOptions(command: Command) {
   return paginationOptions(command)
@@ -100,7 +104,16 @@ async function buildInvoiceInput(
   const taxRate = opts.taxRate === undefined ? 0 : Number(opts.taxRate);
   if (!Number.isFinite(taxRate) || taxRate < 0 || taxRate > 100)
     throw new Error("Tax rate must be between 0 and 100.");
+  const taxTreatment = opts.reverseCharge ? "reverse_charge" : opts.taxTreatment;
+  if (taxTreatment && !TAX_TREATMENTS.includes(taxTreatment as (typeof TAX_TREATMENTS)[number]))
+    throw new Error(`Tax treatment must be one of ${TAX_TREATMENTS.join(", ")}.`);
+  const [servicePeriodStart, servicePeriodEnd = servicePeriodStart] =
+    opts.servicePeriod?.split("..") ?? [];
+  for (const date of [servicePeriodStart, servicePeriodEnd])
+    if (date !== undefined && !/^\d{4}-\d{2}-\d{2}$/.test(date))
+      throw new Error("Use --service-period YYYY-MM-DD or YYYY-MM-DD..YYYY-MM-DD.");
   return {
+    buyerReference: opts.buyerReference,
     clientId: record.id,
     currency: opts.currency?.trim().toUpperCase() || record.defaultCurrency || "EUR",
     dueAt,
@@ -108,8 +121,10 @@ async function buildInvoiceInput(
     internalNotes: opts.internalNote,
     lineItems,
     notes: opts.note,
-    reverseCharge: Boolean(opts.reverseCharge),
+    servicePeriodEnd,
+    servicePeriodStart,
     taxRate,
+    taxTreatment: taxTreatment as InvoiceCreateInput["taxTreatment"],
   };
 }
 async function listInvoices(opts: Filters) {
@@ -168,7 +183,13 @@ export function registerInvoiceCommands(program: Command) {
     .option("--note <text>")
     .option("--internal-note <text>")
     .option("--tax-rate <rate>")
-    .option("--reverse-charge")
+    .option(
+      "--tax-treatment <treatment>",
+      "standard, zero_rated, exempt_small_business or reverse_charge",
+    )
+    .option("--reverse-charge", "Same as --tax-treatment reverse_charge")
+    .option("--service-period <dates>", "YYYY-MM-DD or YYYY-MM-DD..YYYY-MM-DD")
+    .option("--buyer-reference <ref>", "Leitweg-ID or PO number")
     .option("--dry-run", "Review inputs without saving")
     .option(
       "--item <item>",
@@ -190,8 +211,11 @@ export function registerInvoiceCommands(program: Command) {
         u.field("Dates", `${payload.issuedAt} → ${payload.dueAt}`);
         u.field(
           "Currency / tax",
-          `${payload.currency} · ${payload.taxRate}%${payload.reverseCharge ? " · reverse charge" : ""}`,
+          `${payload.currency} · ${payload.taxRate}%${payload.taxTreatment && payload.taxTreatment !== "standard" ? ` · ${payload.taxTreatment.replaceAll("_", " ")}` : ""}`,
         );
+        if (payload.servicePeriodStart)
+          u.field("Service period", `${payload.servicePeriodStart} → ${payload.servicePeriodEnd}`);
+        if (payload.buyerReference) u.field("Buyer reference", payload.buyerReference);
         for (const item of payload.lineItems)
           u.text(
             `${item.description} · ${item.quantity} × ${formatCurrency(String(item.unitPrice), payload.currency)}`,

@@ -321,11 +321,29 @@ function buildServer(client: NotaClient, options: NotaMcpServerOptions = {}) {
           .optional(),
         lineItemsText: z.string().trim().optional(),
         notes: z.string().trim().optional(),
-        reverseCharge: z.boolean().optional(),
+        buyerReference: z
+          .string()
+          .trim()
+          .describe("Leitweg-ID or PO number the client asked for. Defaults to the client's.")
+          .optional(),
+        reverseCharge: z.boolean().describe("Deprecated. Use taxTreatment.").optional(),
+        servicePeriodEnd: z.string().trim().describe("YYYY-MM-DD").optional(),
+        servicePeriodStart: z
+          .string()
+          .trim()
+          .describe("YYYY-MM-DD. Same as the end for a single service day.")
+          .optional(),
         taxRate: z.number().min(0).max(100).optional(),
+        taxTreatment: z
+          .enum(["standard", "zero_rated", "exempt_small_business", "reverse_charge"])
+          .describe(
+            "standard (VAT at taxRate), zero_rated (genuine 0%), exempt_small_business (§ 19 UStG), reverse_charge (business customer abroad). Defaults to the workspace setting.",
+          )
+          .optional(),
       },
     },
     async ({
+      buyerReference,
       clientId,
       clientName,
       currency,
@@ -336,13 +354,17 @@ function buildServer(client: NotaClient, options: NotaMcpServerOptions = {}) {
       lineItemsText,
       notes,
       reverseCharge,
+      servicePeriodEnd,
+      servicePeriodStart,
       taxRate,
+      taxTreatment,
     }) => {
       return handleTool(async () => {
         const resolvedClientId = clientId ?? (await resolveClientId(client, clientName));
         const dates = getDefaultInvoiceDates();
         const resolvedItems = resolveLineItems({ lineItems, lineItemsText });
         const result = await client.createInvoice({
+          buyerReference,
           clientId: resolvedClientId,
           currency,
           dueAt: dueAt ?? dates.dueAt,
@@ -351,7 +373,10 @@ function buildServer(client: NotaClient, options: NotaMcpServerOptions = {}) {
           lineItems: resolvedItems,
           notes,
           reverseCharge,
+          servicePeriodEnd,
+          servicePeriodStart,
           taxRate,
+          taxTreatment,
         });
 
         return invoiceMutationResult("Created invoice", result);
@@ -684,12 +709,19 @@ function formatClientList(clients: Array<ClientRecord>) {
 
 function formatInvoice(invoice: InvoiceDetail) {
   const clientName = invoice.client?.name ?? "Unknown client";
-  return [
+  const lines = [
     `${invoice.number} | ${invoice.status.toUpperCase()} | ${invoice.total ?? "0.00"} ${invoice.currency ?? "EUR"}`,
     `Client: ${clientName}`,
     `Issued: ${invoice.issuedAt} | Due: ${invoice.dueAt}`,
     `ID: ${invoice.id}`,
-  ].join("\n");
+  ];
+  if (invoice.taxTreatment && invoice.taxTreatment !== "standard") {
+    lines.push(`VAT treatment: ${invoice.taxTreatment.replaceAll("_", " ")}`);
+  }
+  if (invoice.issueProblems?.length) {
+    lines.push(`Before it can be sent: ${invoice.issueProblems.join(" ")}`);
+  }
+  return lines.join("\n");
 }
 
 function formatInvoiceList(

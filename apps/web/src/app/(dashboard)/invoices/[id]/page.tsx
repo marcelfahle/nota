@@ -6,9 +6,11 @@ import { cache } from "react";
 import { InvoiceDetailView } from "@/components/invoice-detail";
 import { APP_NAME } from "@/lib/app-brand";
 import { getCurrentUser } from "@/lib/auth";
+import { formatOrgAddress } from "@/lib/branding";
 import { db } from "@/lib/db";
 import { clients, invoices } from "@/lib/db/schema";
 import { getInvoiceDetail } from "@/lib/invoice-service";
+import { formatClientAddress } from "@/lib/postal-address";
 
 const loadInvoiceWithClient = cache(async (orgId: string, invoiceId: string) => {
   const [record] = await db
@@ -67,17 +69,16 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
         sourceClient: a.sourceClient,
       }))}
       business={{
-        address: org.businessAddress,
+        address: formatOrgAddress(org),
         brandColor: org.brandColor,
-        city: org.city,
-        country: org.country,
         logoUrl: org.logoUrl,
         name: org.businessName || org.name,
-        region: org.region,
       }}
       invoice={{
         ...invoice,
-        client: invoice.client ?? { email: "", name: "Unknown" },
+        client: invoice.client
+          ? { ...invoice.client, address: formatClientAddress(invoice.client) }
+          : { email: "", name: "Unknown" },
       }}
       role={role}
     />

@@ -64,8 +64,17 @@ export function printInvoiceDetail(invoice: InvoiceDetail) {
     "Tax",
     `${formatCurrency(invoice.taxAmount, invoice.currency)} · ${invoice.taxRate ?? "0"}%`,
   );
-  if (invoice.reverseCharge === true || invoice.reverseCharge === "true")
-    u.field("VAT treatment", "Reverse charge");
+  if (invoice.taxTreatment && invoice.taxTreatment !== "standard")
+    u.field("VAT treatment", invoice.taxTreatment.replaceAll("_", " "));
+  if (invoice.servicePeriodStart)
+    u.field(
+      "Service period",
+      invoice.servicePeriodStart === invoice.servicePeriodEnd
+        ? invoice.servicePeriodStart
+        : `${invoice.servicePeriodStart} → ${invoice.servicePeriodEnd}`,
+    );
+  if (invoice.buyerReference) u.field("Buyer reference", invoice.buyerReference);
+  if (invoice.issueProblems?.length) u.hint(`Before it can be sent: ${invoice.issueProblems.join(" ")}`);
   u.field("Total", formatCurrency(invoice.total, invoice.currency));
   if (invoice.status !== "draft")
     u.field("Balance due", formatCurrency(invoice.balance, invoice.currency));

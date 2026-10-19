@@ -33,11 +33,17 @@ type ClientFormProps = {
   defaultValues?: {
     address?: string | null;
     bankAccountId?: string | null;
+    city?: string | null;
     company?: string | null;
+    countryCode?: string | null;
+    defaultBuyerReference?: string | null;
     defaultCurrency?: string | null;
     email?: string;
     name?: string;
     notes?: string | null;
+    postalCode?: string | null;
+    publicSector?: boolean;
+    street?: string | null;
     taxIdentifierCountryCode?: string | null;
     taxIdentifierType?: TaxIdentifierType | null;
     taxIdentifierValue?: string | null;
@@ -63,6 +69,10 @@ export function ClientForm({
   const identifier = taxIdentifierFromColumns(defaultValues ?? {});
   const [identifierType, setIdentifierType] = useState<TaxIdentifierType>(
     identifier?.type ?? "tax_id",
+  );
+  const [publicSector, setPublicSector] = useState(Boolean(defaultValues?.publicSector));
+  const hasStructuredAddress = Boolean(
+    defaultValues?.street || defaultValues?.postalCode || defaultValues?.city,
   );
 
   useEffect(() => {
@@ -138,16 +148,100 @@ export function ClientForm({
         </div>
       </div>
 
-      <div className="space-y-2">
-        <Label htmlFor="address">Address</Label>
-        <textarea
-          className="w-full min-w-0 rounded-md border border-input bg-transparent px-3 py-2 text-base shadow-xs transition-[color,box-shadow] outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50 md:text-sm"
-          defaultValue={defaultValues?.address ?? ""}
-          id="address"
-          name="address"
-          placeholder={"Street\nPostal City\nCountry"}
-          rows={3}
-        />
+      {/* Address: structured so invoices and XRechnung can name street, city and country. */}
+      <fieldset className="space-y-3">
+        <legend className="text-sm font-medium">Address</legend>
+        <div className="space-y-2">
+          <Label className="text-xs text-muted-foreground" htmlFor="street">
+            Street and number
+          </Label>
+          <Input
+            data-testid="client-street"
+            defaultValue={defaultValues?.street ?? ""}
+            id="street"
+            name="street"
+          />
+        </div>
+        <div className="grid gap-3 sm:grid-cols-[8rem_minmax(0,1fr)_6rem]">
+          <div className="space-y-2">
+            <Label className="text-xs text-muted-foreground" htmlFor="postalCode">
+              Postal code
+            </Label>
+            <Input
+              data-testid="client-postal-code"
+              defaultValue={defaultValues?.postalCode ?? ""}
+              id="postalCode"
+              name="postalCode"
+            />
+          </div>
+          <div className="space-y-2">
+            <Label className="text-xs text-muted-foreground" htmlFor="city">
+              City
+            </Label>
+            <Input
+              data-testid="client-city"
+              defaultValue={defaultValues?.city ?? ""}
+              id="city"
+              name="city"
+            />
+          </div>
+          <div className="space-y-2">
+            <Label className="text-xs text-muted-foreground" htmlFor="countryCode">
+              Country
+            </Label>
+            <Input
+              className="uppercase"
+              data-testid="client-country-code"
+              defaultValue={defaultValues?.countryCode ?? ""}
+              id="countryCode"
+              maxLength={2}
+              name="countryCode"
+              placeholder="DE"
+            />
+          </div>
+        </div>
+        <input name="address" type="hidden" value={defaultValues?.address ?? ""} />
+        {!hasStructuredAddress && defaultValues?.address ? (
+          <p className="text-xs text-muted-foreground">
+            On file as free text:{" "}
+            <span className="whitespace-pre-line">{defaultValues.address}</span>. Fill in the fields
+            above so German invoices can be issued.
+          </p>
+        ) : (
+          <p className="text-xs text-muted-foreground">
+            Two-letter country code, for example DE or AT. Needed on German invoices.
+          </p>
+        )}
+      </fieldset>
+
+      <div className="space-y-3">
+        <label className="flex items-center gap-2 text-sm">
+          <input
+            checked={publicSector}
+            className="size-4 rounded border-zinc-300"
+            data-testid="client-public-sector"
+            name="publicSector"
+            onChange={(event) => setPublicSector(event.target.checked)}
+            type="checkbox"
+            value="true"
+          />
+          Public-sector client (Behörde). Invoices need a Leitweg-ID.
+        </label>
+        <div className="space-y-2">
+          <Label htmlFor="defaultBuyerReference">
+            {publicSector ? "Leitweg-ID" : "Buyer reference"}
+          </Label>
+          <Input
+            data-testid="client-buyer-reference"
+            defaultValue={defaultValues?.defaultBuyerReference ?? ""}
+            id="defaultBuyerReference"
+            name="defaultBuyerReference"
+            placeholder={publicSector ? "04011000-1234512345-35" : "Optional PO or reference"}
+          />
+          <p className="text-xs text-muted-foreground">
+            Goes on every new invoice for this client as the buyer reference.
+          </p>
+        </div>
       </div>
 
       <div className="space-y-2">

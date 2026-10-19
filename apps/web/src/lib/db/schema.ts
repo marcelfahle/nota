@@ -43,6 +43,12 @@ export const proposalStatusEnum = pgEnum("proposal_status", [
   "executed",
 ]);
 export const vatStatusEnum = pgEnum("vat_status", ["valid", "invalid", "unavailable"]);
+export const taxTreatmentEnum = pgEnum("tax_treatment", [
+  "standard",
+  "zero_rated",
+  "exempt_small_business",
+  "reverse_charge",
+]);
 
 export const users = pgTable(
   "users",
@@ -88,12 +94,17 @@ export const orgs = pgTable("orgs", {
   businessName: text("business_name"),
   city: text(),
   contactEmail: text("contact_email"),
+  contactName: text("contact_name"),
+  contactPhone: text("contact_phone"),
   country: text(),
+  // ISO 3166-1 alpha-2. `country` stays the free-text label people typed.
+  countryCode: text("country_code"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   creditNotePrefix: text("credit_note_prefix").notNull().default("CN"),
   // Set by an operator to lock the workspace without deleting anything.
   deactivatedAt: timestamp("deactivated_at"),
   defaultCurrency: text("default_currency").notNull().default("EUR"),
+  defaultTaxTreatment: taxTreatmentEnum("default_tax_treatment").notNull().default("standard"),
   faviconUrl: text("favicon_url"),
   firstRunCompletedAt: timestamp("first_run_completed_at").defaultNow(),
   id: uuid().defaultRandom().primaryKey(),
@@ -236,18 +247,27 @@ export const bankAccounts = pgTable("bank_accounts", {
 });
 
 export const clients = pgTable("clients", {
+  // Legacy free-text address. Structured fields below win when present.
   address: text(),
   bankAccountId: uuid("bank_account_id").references(() => bankAccounts.id, {
     onDelete: "set null",
   }),
+  city: text(),
   company: text(),
+  countryCode: text("country_code"),
   createdAt: timestamp("created_at").defaultNow(),
+  // Leitweg-ID for public-sector buyers, or a reference the buyer asked for.
+  defaultBuyerReference: text("default_buyer_reference"),
   defaultCurrency: text("default_currency").default("EUR"),
   email: text().notNull(),
   id: uuid().defaultRandom().primaryKey(),
   name: text().notNull(),
   notes: text(),
   orgId: uuid("org_id").references(() => orgs.id),
+  postalCode: text("postal_code"),
+  // German public-sector buyers must receive an XRechnung with their Leitweg-ID.
+  publicSector: boolean("public_sector").notNull().default(false),
+  street: text(),
   taxIdentifierCanonicalValue: text("tax_identifier_canonical_value"),
   taxIdentifierCountryCode: text("tax_identifier_country_code"),
   taxIdentifierType: text("tax_identifier_type", { enum: ["eu_vat", "us_ein", "tax_id"] }),
@@ -282,6 +302,8 @@ export const jobTypeEnum = pgEnum("job_type", [
 export const invoices = pgTable(
   "invoices",
   {
+    // BT-10. Leitweg-ID for public-sector buyers; falls back to the invoice number otherwise.
+    buyerReference: text("buyer_reference"),
     clientId: uuid("client_id")
       .notNull()
       .references(() => clients.id),
@@ -299,10 +321,14 @@ export const invoices = pgTable(
     orgId: uuid("org_id").references(() => orgs.id),
     paidAt: date("paid_at"),
     publicToken: text("public_token").unique(),
+    // Legacy flag, kept in sync with taxTreatment for older API clients.
     reverseCharge: text("reverse_charge").default("false"),
     revision: integer().notNull().default(1),
     sellerTaxIdentifier: jsonb("seller_tax_identifier").$type<TaxIdentifier>(),
     sentAt: timestamp("sent_at"),
+    // Leistungsdatum or Leistungszeitraum (§ 14 UStG). A single date has start = end.
+    servicePeriodEnd: date("service_period_end"),
+    servicePeriodStart: date("service_period_start"),
     source: invoiceSourceEnum().notNull().default("web"),
     sourceClient: text("source_client"),
     status: invoiceStatusEnum().default("draft"),
@@ -313,6 +339,7 @@ export const invoices = pgTable(
     subtotal: numeric({ precision: 19, scale: 4 }),
     taxAmount: numeric("tax_amount", { precision: 19, scale: 4 }),
     taxRate: numeric("tax_rate", { precision: 9, scale: 6 }),
+    taxTreatment: taxTreatmentEnum("tax_treatment").notNull().default("standard"),
     total: numeric({ precision: 19, scale: 4 }),
     updatedAt: timestamp("updated_at").defaultNow(),
     userId: uuid("user_id")

@@ -1,11 +1,9 @@
-import { renderToBuffer } from "@react-pdf/renderer";
 import { and, asc, eq, isNull, lt, lte, or } from "drizzle-orm";
 
-import { InvoicePdf } from "@/components/invoice-pdf";
 import { InvoiceSentEmail } from "@/emails/invoice-sent";
 import { PaymentReceivedEmail } from "@/emails/payment-received";
 import { APP_NAME } from "@/lib/app-brand";
-import { formatOrgAddress, getPdfLogoSrc } from "@/lib/branding";
+import { getPdfLogoSrc } from "@/lib/branding";
 import { db } from "@/lib/db";
 import {
   activityLog,
@@ -13,16 +11,14 @@ import {
   clients,
   invoices,
   jobs,
-  lineItems,
   orgs,
   proposals,
   users,
 } from "@/lib/db/schema";
 import { sendEmail } from "@/lib/email";
 import { getAppEnv } from "@/lib/env";
-import { buildInvoiceFilename } from "@/lib/invoice-filename";
+import { renderInvoicePdfForOrg } from "@/lib/invoice-pdf-service";
 import { reminderPayloadSchema } from "@/lib/proposal-service";
-import { invoiceTaxIdentifier } from "@/lib/tax-identifier";
 
 const JOB_LOCK_TIMEOUT_MS = 1000 * 60 * 10;
 
@@ -91,12 +87,6 @@ async function getInvoiceEmailContext(invoiceId: string) {
     throw new Error("Organization not found");
   }
 
-  const items = await db
-    .select()
-    .from(lineItems)
-    .where(eq(lineItems.invoiceId, invoiceId))
-    .orderBy(asc(lineItems.sortOrder));
-
   let bankDetails: string | null = null;
   if (client.bankAccountId) {
     const [assignedBankAccount] = await db
@@ -122,70 +112,24 @@ async function getInvoiceEmailContext(invoiceId: string) {
     bankDetails,
     client,
     invoice,
-    items,
     logoSrc: await getPdfLogoSrc(organization.logoUrl),
     org: organization,
   };
 }
 
 async function sendInvoiceEmail(invoiceId: string, recipient?: string, idempotencyKey?: string) {
-  const { bankDetails, client, invoice, items, logoSrc, org } =
-    await getInvoiceEmailContext(invoiceId);
+  const { bankDetails, client, invoice, logoSrc, org } = await getInvoiceEmailContext(invoiceId);
 
-  const pdfBuffer = await renderToBuffer(
-    InvoicePdf({
-      business: {
-        address: formatOrgAddress(org),
-        bankDetails,
-        logoSrc,
-        name: org.legalName ?? org.businessName ?? org.name,
-        taxIdentifier: invoiceTaxIdentifier(invoice.status, invoice.sellerTaxIdentifier, org),
-      },
-      client: {
-        address: client.address,
-        company: client.company,
-        email: client.email,
-        name: client.name,
-        taxIdentifier: invoiceTaxIdentifier(invoice.status, invoice.clientTaxIdentifier, client),
-      },
-      invoice: {
-        currency: invoice.currency ?? "EUR",
-        dueAt: invoice.dueAt,
-        issuedAt: invoice.issuedAt,
-        lineItems: items.map((item) => ({
-          amount: item.amount,
-          description: item.description,
-          quantity: item.quantity,
-          unitPrice: item.unitPrice,
-        })),
-        notes: invoice.notes,
-        number: invoice.number,
-        paymentLinkUrl: invoice.stripePaymentLinkUrl,
-        reverseCharge: invoice.reverseCharge,
-        subtotal: invoice.subtotal ?? "0.00",
-        taxAmount: invoice.taxAmount ?? "0.00",
-        taxRate: invoice.taxRate ?? "0.00",
-        total: invoice.total ?? "0.00",
-      },
-    }),
-  );
+  const pdf = await renderInvoicePdfForOrg(org, invoiceId, { logoSrc });
 
   const businessName = org.legalName ?? org.businessName ?? org.name ?? APP_NAME;
 
   await sendEmail({
     attachments: [
       {
-        content: pdfBuffer,
+        content: Buffer.from(pdf.buffer),
         contentType: "application/pdf",
-        filename: buildInvoiceFilename(
-          {
-            clientName: client.name,
-            issuedAt: invoice.issuedAt,
-            lineItems: items,
-            number: invoice.number,
-          },
-          "pdf",
-        ),
+        filename: pdf.filename,
       },
     ],
     idempotencyKey,
