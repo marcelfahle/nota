@@ -25,6 +25,7 @@ import {
   taxTreatmentConflict,
   validateForIssuance,
 } from "@/lib/invoice-compliance";
+import { loadInvoiceBankAccount } from "@/lib/invoice-document";
 import { resolveDueDateChange } from "@/lib/invoice-due-date";
 import {
   canCancelInvoice as canCancelInvoiceStatus,
@@ -441,6 +442,7 @@ export async function getInvoiceDetail(orgId: string, invoiceId: string) {
     db
       .select({
         address: clients.address,
+        bankAccountId: clients.bankAccountId,
         city: clients.city,
         company: clients.company,
         countryCode: clients.countryCode,
@@ -518,6 +520,19 @@ export async function getInvoiceDetail(orgId: string, invoiceId: string) {
           compareDecimals(settlement.creditedAmount, 0, 4) > 0
         ? "partially_paid"
         : "unpaid";
+  // Drafts list what still blocks issuance; issued documents already passed.
+  const issueProblems =
+    invoice.status === "draft" && client && org
+      ? validateForIssuance(
+          complianceInput(
+            org,
+            client,
+            invoice,
+            items.length,
+            await loadInvoiceBankAccount(db, orgId, client.bankAccountId),
+          ),
+        )
+      : [];
 
   return {
     ...invoice,
@@ -530,11 +545,7 @@ export async function getInvoiceDetail(orgId: string, invoiceId: string) {
         }
       : null,
     creditedAmount: settlement.creditedAmount,
-    // Drafts list what still blocks issuance; issued documents already passed.
-    issueProblems:
-      invoice.status === "draft" && client && org
-        ? validateForIssuance(complianceInput(org, client, invoice, items.length))
-        : [],
+    issueProblems,
     lastViewedAt: viewRow?.lastViewedAt ?? null,
     lineItems: items.map((item) => ({
       ...item,
@@ -915,7 +926,10 @@ export async function sendInvoice(
         .select({ lineItemCount: count() })
         .from(lineItems)
         .where(eq(lineItems.invoiceId, invoiceId));
-      const problems = validateForIssuance(complianceInput(org, client, invoice, lineItemCount));
+      const bankAccount = await loadInvoiceBankAccount(tx, context.orgId, client.bankAccountId);
+      const problems = validateForIssuance(
+        complianceInput(org, client, invoice, lineItemCount, bankAccount),
+      );
       if (problems.length) {
         return issuanceError(problems);
       }
@@ -1580,8 +1594,9 @@ export async function markInvoiceSent(
       .select({ lineItemCount: count() })
       .from(lineItems)
       .where(eq(lineItems.invoiceId, invoiceId));
+    const bankAccount = await loadInvoiceBankAccount(tx, context.orgId, client.bankAccountId);
     const problems = validateForIssuance(
-      complianceInput(organization, client, invoice, lineItemCount),
+      complianceInput(organization, client, invoice, lineItemCount, bankAccount),
     );
     if (problems.length) {
       return issuanceError(problems);

@@ -31,6 +31,33 @@ export type InvoiceDocumentOrg = Pick<
   | "vatNumber"
 >;
 
+type Database = Pick<typeof db, "select">;
+
+/** The account an invoice is paid to: the client's assigned one, else the workspace default. */
+export async function loadInvoiceBankAccount(
+  database: Database,
+  orgId: string,
+  assignedId: string | null,
+) {
+  const columns = { bic: bankAccounts.bic, details: bankAccounts.details, iban: bankAccounts.iban };
+  if (assignedId) {
+    const [assigned] = await database
+      .select(columns)
+      .from(bankAccounts)
+      .where(and(eq(bankAccounts.id, assignedId), eq(bankAccounts.orgId, orgId)))
+      .limit(1);
+    if (assigned) {
+      return assigned;
+    }
+  }
+  const [fallback] = await database
+    .select(columns)
+    .from(bankAccounts)
+    .where(and(eq(bankAccounts.orgId, orgId), eq(bankAccounts.isDefault, true)))
+    .limit(1);
+  return fallback ?? null;
+}
+
 export class InvoiceDocumentError extends Error {
   readonly status = 404;
 
@@ -76,28 +103,7 @@ export async function loadInvoiceDocument(org: InvoiceDocumentOrg, invoiceId: st
         .limit(1)
     : [];
 
-  const bankColumns = {
-    bic: bankAccounts.bic,
-    details: bankAccounts.details,
-    iban: bankAccounts.iban,
-  };
-  let bankAccount: { bic: string | null; details: string; iban: string | null } | null = null;
-  if (client.bankAccountId) {
-    const [assigned] = await db
-      .select(bankColumns)
-      .from(bankAccounts)
-      .where(and(eq(bankAccounts.id, client.bankAccountId), eq(bankAccounts.orgId, org.id)))
-      .limit(1);
-    bankAccount = assigned ?? null;
-  }
-  if (!bankAccount) {
-    const [fallback] = await db
-      .select(bankColumns)
-      .from(bankAccounts)
-      .where(and(eq(bankAccounts.orgId, org.id), eq(bankAccounts.isDefault, true)))
-      .limit(1);
-    bankAccount = fallback ?? null;
-  }
+  const bankAccount = await loadInvoiceBankAccount(db, org.id, client.bankAccountId);
 
   const sellerTaxIdentifier = invoiceTaxIdentifier(
     invoice.status,
@@ -113,7 +119,7 @@ export async function loadInvoiceDocument(org: InvoiceDocumentOrg, invoiceId: st
     bankAccount,
     client,
     clientTaxIdentifier,
-    compliance: complianceInput(org, client, invoice, items.length),
+    compliance: complianceInput(org, client, invoice, items.length, bankAccount),
     filename: (extension: "pdf" | "xml") =>
       buildInvoiceFilename(
         {

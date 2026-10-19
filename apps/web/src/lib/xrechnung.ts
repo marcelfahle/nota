@@ -213,6 +213,20 @@ function buildPartyTaxScheme(identifier: TaxIdentifier | null | undefined): stri
 </cac:PartyTaxScheme>`;
 }
 
+/**
+ * BR-CO-26: the seller needs BT-29, BT-30 or BT-31 so the buyer can identify
+ * it. A VAT ID is BT-31; a Steuernummer only fills BT-32, so it is repeated as
+ * the seller identifier (BT-29), the one official identifier such a seller has.
+ */
+function buildSellerIdentification(identifier: TaxIdentifier | null | undefined): string {
+  if (identifier?.type !== "tax_id") {
+    return "";
+  }
+  return `<cac:PartyIdentification>
+<cbc:ID>${escapeXml(identifier.value)}</cbc:ID>
+</cac:PartyIdentification>`;
+}
+
 function buildTaxCategoryXml(tax: ReturnType<typeof taxCategory>): string {
   return `<cac:TaxCategory>
 <cbc:ID>${tax.code}</cbc:ID>
@@ -348,6 +362,7 @@ ${isCreditNote && invoice.originalNumber ? `<cac:BillingReference>\n<cac:Invoice
 <cac:AccountingSupplierParty>
 <cac:Party>
 <cbc:EndpointID schemeID="EM">${escapeXml(business.email)}</cbc:EndpointID>
+${buildSellerIdentification(business.taxIdentifier)}
 ${business.name ? `<cac:PartyName>\n<cbc:Name>${escapeXml(business.name)}</cbc:Name>\n</cac:PartyName>` : ""}
 ${buildPartyAddress(business, business.countryCode!)}
 ${buildPartyTaxScheme(business.taxIdentifier)}

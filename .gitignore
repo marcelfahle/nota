@@ -12,6 +12,7 @@ apps/*/out
 apps/*/dist
 apps/*/build
 apps/*/coverage
+apps/*/.cache
 apps/*/playwright-report
 .playwright-mcp/
 apps/*/test-results

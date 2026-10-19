@@ -448,7 +448,9 @@ curl "$NOTA_API_BASE_URL/invoices/invoice_uuid/xrechnung" \
   -o invoice.xml
 ```
 
-Returns `422` with `{ "error": "...", "problems": ["..."] }` when the invoice, the workspace or the client is missing something the XRechnung needs (country codes, seller contact with phone, Leitweg-ID for public-sector buyers, a service period). No file is produced in that case.
+Returns `422` with `{ "error": "...", "problems": ["..."] }` when the invoice, the workspace or the client is missing something the XRechnung needs (country codes, seller contact with phone, Leitweg-ID for public-sector buyers, a service period, a bank account with a valid IBAN). No file is produced in that case.
+
+The generator is checked against the official KoSIT validator (XRechnung 3.0.2) for a fixed set of scenarios; see `docs/german-invoices.md`, section "Validation", for what that covers and what it does not. It is format conformance, not legal or tax advice.
 
 ## Common Status Codes
 

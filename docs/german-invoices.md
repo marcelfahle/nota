@@ -52,6 +52,7 @@ At issuance, for every workspace:
 
 At issuance, for German workspaces (`countryCode` DE), following § 14 Abs. 4 UStG:
 
+- A bank account whose IBAN fails the ISO 13616 check (mod 97). A missing IBAN is allowed here.
 - Reverse charge to a client in the seller's own country, or to an EU client without a VAT ID.
 - Missing seller name, structured address, country, or tax identifier (Nr. 1 and 2).
 - Missing seller contact name or email (needed for the XRechnung the same invoice may become).
@@ -62,6 +63,10 @@ At issuance, for German workspaces (`countryCode` DE), following § 14 Abs. 4 US
 At XRechnung export, for every workspace, in addition:
 
 - Missing seller phone (BR-DE-6).
+- No bank account with an IBAN, or an IBAN that fails the check. The XML announces a SEPA credit
+  transfer (payment means 58), so the validator demands an account (BR-61, BR-DE-23) and warns on
+  a wrong IBAN (BR-DE-19). The IBAN is read as the export reads it: the structured field first,
+  else the first IBAN in the free-text bank details.
 - Any of the German issuance rules above, because XRechnung 3.0 is a German standard.
 
 Mixed VAT rates on one invoice are not supported. One rate per document; split the work into
@@ -101,9 +106,56 @@ Issued invoices are never renumbered, recalculated or rewritten.
   invoice must state "Steuerschuldnerschaft des Leistungsempfängers" (§ 14a Abs. 5 UStG).
 - XRechnung 3.0 (KoSIT) business rules: BR-DE-2 (seller contact), BR-DE-5/6/7 (contact name,
   phone, email), BR-DE-9 (seller postal code), BR-DE-15 (buyer reference BT-10 mandatory),
-  BR-DE-16 (seller VAT ID or tax number), plus EN 16931 categories S, Z, E, AE and their
-  exemption reasons.
+  BR-DE-16 (seller VAT ID or tax number), BR-DE-19/23 and BR-61 (SEPA transfer needs an account
+  with a correct IBAN), plus EN 16931 categories S, Z, E, AE and their exemption reasons.
+- EN 16931 BR-CO-26: the seller needs an identifier (BT-29), a legal registration ID (BT-30) or a
+  VAT ID (BT-31). A Steuernummer is BT-32 and does not count, so a seller without a VAT ID gets
+  its Steuernummer repeated as BT-29.
 
-Running the official KoSIT validator against the export is the next task (NOTA-55). The XML
-is built by one function, `generateXRechnung` in `apps/web/src/lib/xrechnung.ts`, so it can be
-validated there without touching the rest.
+## Validation
+
+Every XRechnung Nota can produce is checked against the official KoSIT validator, in CI on every
+pull request and on demand locally. The XML is built by one function, `generateXRechnung` in
+`apps/web/src/lib/xrechnung.ts`, and the check runs that function on fixed inputs, so what passes
+is exactly what the app exports.
+
+What runs:
+
+- KoSIT validator 1.6.3 (`itplr-kosit/validator`, `validator-1.6.3-standalone.jar`).
+- XRechnung 3.0.2 validator configuration, release 2026-08-31
+  (`itplr-kosit/validator-configuration-xrechnung`), which carries the UBL 2.1 schemas, the
+  EN 16931 Schematron rules 1.3.16 and the XRechnung 3.0.2 Schematron rules 2.6.0.
+- Both downloads are pinned by version and SHA-256 in `apps/web/scripts/validate-xrechnung.ts`
+  and cached in `apps/web/.cache/kosit/` (ignored by git).
+
+The fixtures live in `apps/web/src/lib/xrechnung.fixtures.ts` and are the same ones the unit
+tests use:
+
+| Fixture                    | Scenario                                                       |
+| -------------------------- | -------------------------------------------------------------- |
+| `german-b2b-19`            | Ordinary German B2B invoice at 19%, service period, VAT IDs    |
+| `kleinunternehmer`         | § 19 UStG, 0%, Steuernummer only, no client VAT ID             |
+| `reverse-charge-eu`        | Reverse charge to a French business, category AE               |
+| `credit-note`              | UBL CreditNote (381) referring to the original invoice          |
+| `public-sector-leitweg-id` | Behörde as buyer with its Leitweg-ID as BT-10                  |
+| `multi-month-period-7`     | Two lines at 7%, fractional quantity, period July to September |
+
+The run fails on any rejected document, any document that matches no scenario, or a missing
+report. Warnings are printed but do not fail the run; the fixtures produce none. BR-DE-19 is the
+warning to expect with a made-up IBAN, which is why the fixtures use a valid one.
+
+Run it locally (Java 17 and `unzip` needed; the first run downloads about 12 MB):
+
+```sh
+bun run validate:xrechnung
+```
+
+Reports land in `apps/web/.cache/kosit/out/<fixture>-report.xml`.
+
+What this does and does not say: the validator checks that the XML conforms to the XRechnung 3.0.2
+format and its business rules for these scenarios. It does not check that the invoice is correct
+for a given business, that a workspace really qualifies as Kleinunternehmer, that a supply really
+falls under § 13b, or anything about bookkeeping and retention. Nota makes no "GoBD-konform" or
+"rechtssicher" claim, and this document is not legal or tax advice. Invoices with data outside the
+fixture scenarios (other currencies, mixed rates, unusual tax identifiers) are not covered by the
+run and may still be rejected by a recipient's validator.

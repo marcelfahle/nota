@@ -17,6 +17,7 @@
     "check:web": "bun run --cwd apps/web check",
     "test:web": "bun run --cwd apps/web test",
     "test:e2e:web": "bun run --cwd apps/web test:e2e",
+    "validate:xrechnung": "bun run --cwd apps/web validate:xrechnung",
     "build:sdk": "bun run --cwd packages/sdk build",
     "check:sdk": "bun run --cwd packages/sdk check",
     "dev:cli": "bun run --cwd apps/cli dev",

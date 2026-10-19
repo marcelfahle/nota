@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 
 import {
   type ComplianceInput,
+  isValidIban,
   taxTreatmentConflict,
   validateForIssuance,
   validateForXRechnung,
@@ -9,6 +10,7 @@ import {
 
 function germanB2B(): ComplianceInput {
   return {
+    bankAccount: { details: "IBAN: DE89370400440532013000\nBIC: COBADEFFXXX", iban: null },
     client: {
       city: "München",
       company: "Kunde GmbH",
@@ -69,9 +71,49 @@ describe("taxTreatmentConflict", () => {
   });
 });
 
+describe("isValidIban", () => {
+  test("accepts well-formed IBANs, with or without spaces", () => {
+    expect(isValidIban("DE89370400440532013000")).toBe(true);
+    expect(isValidIban("DE89 3704 0044 0532 0130 00")).toBe(true);
+    expect(isValidIban("gb82west12345698765432")).toBe(true);
+    expect(isValidIban("FR1420041010050500013M02606")).toBe(true);
+  });
+
+  test("rejects a wrong check digit, a typo and anything that is not an IBAN", () => {
+    expect(isValidIban("DE89370400440532013001")).toBe(false);
+    expect(isValidIban("DE88370400440532013000")).toBe(false);
+    expect(isValidIban("DE8937040044053201300")).toBe(false);
+    expect(isValidIban("DE00 1234")).toBe(false);
+    expect(isValidIban("Bank: Sparkasse")).toBe(false);
+    expect(isValidIban("")).toBe(false);
+  });
+});
+
 describe("validateForIssuance", () => {
   test("a complete German B2B invoice has no problems", () => {
     expect(validateForIssuance(germanB2B())).toEqual([]);
+  });
+
+  test("a German org may issue without an IBAN but not with a wrong one", () => {
+    const input = germanB2B();
+    input.bankAccount = null;
+    expect(validateForIssuance(input)).toEqual([]);
+
+    input.bankAccount = { details: "Sparkasse Berlin, Konto 12345", iban: null };
+    expect(validateForIssuance(input)).toEqual([]);
+
+    input.bankAccount = { details: "IBAN: DE89370400440532013001", iban: null };
+    expect(validateForIssuance(input)).toEqual([
+      "The IBAN on your bank account is not valid. Fix it in Settings.",
+    ]);
+
+    // The structured column wins over the free text, as in the export.
+    input.bankAccount = { details: "IBAN: DE89370400440532013001", iban: "DE89370400440532013000" };
+    expect(validateForIssuance(input)).toEqual([]);
+
+    input.org.countryCode = "ES";
+    input.bankAccount = { details: null, iban: "ES00 0000" };
+    expect(validateForIssuance(input)).toEqual([]);
   });
 
   test("standard VAT at 0% must be made explicit", () => {
@@ -226,6 +268,24 @@ describe("validateForXRechnung", () => {
     input.invoice.servicePeriodStart = null;
     input.invoice.servicePeriodEnd = null;
     expect(validateForXRechnung(input)).toEqual([]);
+  });
+
+  test("needs a valid IBAN from any org, because the XML announces a SEPA transfer", () => {
+    const input = germanB2B();
+    input.org.countryCode = "ES";
+    input.bankAccount = null;
+    expect(validateForXRechnung(input)).toEqual(["Add a bank account with an IBAN in Settings."]);
+
+    input.bankAccount = { details: "Konto 12345", iban: null };
+    expect(validateForXRechnung(input)).toEqual(["Add a bank account with an IBAN in Settings."]);
+
+    input.bankAccount = { details: null, iban: "ES9121000418450200051332" };
+    expect(validateForXRechnung(input)).toEqual([]);
+
+    input.bankAccount = { details: null, iban: "ES9121000418450200051333" };
+    expect(validateForXRechnung(input)).toEqual([
+      "The IBAN on your bank account is not valid. Fix it in Settings.",
+    ]);
   });
 
   test("adds the seller phone and party requirements for any org", () => {
