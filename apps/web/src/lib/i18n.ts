@@ -67,7 +67,7 @@ export function documentLocaleOf(
   return isAppLocale(org.documentLocale) ? org.documentLocale : "en";
 }
 
-function mergeMessages(base: MessageTree, overrides: MessageTree): MessageTree {
+export function mergeMessages(base: MessageTree, overrides: MessageTree): MessageTree {
   const merged: MessageTree = { ...base };
   for (const [key, value] of Object.entries(overrides)) {
     const current = merged[key];

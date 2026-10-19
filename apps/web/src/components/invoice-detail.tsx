@@ -78,6 +78,8 @@ type InvoiceDetailProps = {
     logoUrl: string | null;
     name: string;
   };
+  /** The language the document is written in: statutory notes follow it, not the UI. */
+  documentLocale: AppLocale;
   invoice: {
     balance: string;
     buyerReference: string | null;
@@ -212,6 +214,7 @@ function activityText(activity: ActivityEntry, currency: string, locale: Locale,
 export function InvoiceDetailView({
   activities,
   business,
+  documentLocale,
   invoice,
   locale: language,
   role,
@@ -344,7 +347,7 @@ export function InvoiceDetailView({
     invoice.servicePeriodEnd,
     locale,
   );
-  const taxNote = taxTreatmentNote(invoice.taxTreatment, language);
+  const taxNote = taxTreatmentNote(invoice.taxTreatment, documentLocale);
   const showVat = invoice.taxTreatment !== "exempt_small_business";
   const stamp =
     invoice.kind === "credit_note"

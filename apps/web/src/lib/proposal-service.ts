@@ -14,8 +14,9 @@ export const reminderPayloadSchema = z.object({
   currency: z.string(),
   dueAt: z.string(),
   invoiceNumber: z.string(),
-  // The document language. Optional so proposals stored before it existed still send.
-  locale: z.enum(APP_LOCALES).optional(),
+  // The document language. Optional so proposals stored before it existed still
+  // send; the Intl tags are what the first version stored.
+  locale: z.enum([...APP_LOCALES, "de-DE", "en-US"]).optional(),
   paymentLinkUrl: z.string().nullable(),
   subject: z.string(),
   to: z.string().email(),

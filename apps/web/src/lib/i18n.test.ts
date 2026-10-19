@@ -6,6 +6,7 @@ import {
   documentLocaleOf,
   getTranslator,
   localeFromAcceptLanguage,
+  mergeMessages,
   messagesFor,
 } from "@/lib/i18n";
 
@@ -42,6 +43,12 @@ describe("messages", () => {
     const messages = messagesFor("de") as unknown as Record<string, Record<string, string>>;
     expect(messages.pdf.invoice).toBe("Rechnung");
     expect(Object.keys(messages).sort()).toEqual(Object.keys(en).sort());
+    const merged = mergeMessages(
+      { pdf: { invoice: "Invoice", notes: "Notes" }, shell: { search: "Search" } },
+      { pdf: { invoice: "Rechnung" } },
+    ) as Record<string, Record<string, string>>;
+    expect(merged.pdf).toEqual({ invoice: "Rechnung", notes: "Notes" });
+    expect(merged.shell.search).toBe("Search");
   });
 
   test("translators format values in the document language", () => {

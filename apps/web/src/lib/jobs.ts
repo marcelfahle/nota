@@ -18,7 +18,7 @@ import {
 import { type InvoiceAttachment, parseInvoiceAttachments } from "@/lib/e-invoice-delivery";
 import { sendEmail } from "@/lib/email";
 import { getAppEnv } from "@/lib/env";
-import { documentLocaleOf, isAppLocale } from "@/lib/i18n";
+import { documentLocaleOf, getTranslator, isAppLocale, type AppLocale } from "@/lib/i18n";
 import { renderInvoicePdfForOrg } from "@/lib/invoice-pdf-service";
 import { reminderPayloadSchema } from "@/lib/proposal-service";
 import { renderXRechnungForOrg } from "@/lib/xrechnung-service";
@@ -67,6 +67,14 @@ function parseEmailJobPayload(payload: Record<string, unknown>): EmailJobPayload
         : undefined,
     sourceClient: typeof payload.sourceClient === "string" ? payload.sourceClient : null,
   };
+}
+
+/** Reminder payloads first stored Intl tags; both forms map to a document language. */
+function storedLocale(value: string | undefined): AppLocale {
+  if (isAppLocale(value)) {
+    return value;
+  }
+  return value?.startsWith("de") ? "de" : "en";
 }
 
 function getPublicInvoiceUrl(token: string | null) {
@@ -227,7 +235,7 @@ async function sendInvoiceReminderEmail(
         dueAt: stored.dueAt,
         invoiceNumber: stored.invoiceNumber,
         invoiceUrl: getPublicInvoiceUrl(invoice.publicToken),
-        locale: isAppLocale(stored.locale) ? stored.locale : "en",
+        locale: storedLocale(stored.locale),
         paymentLinkUrl: stored.paymentLinkUrl,
         reminder: true,
         total: stored.total,
@@ -312,7 +320,8 @@ async function sendPaymentReceivedEmail(invoiceId: string, idempotencyKey?: stri
 
   // This one goes to the workspace member, so it speaks their UI language.
   const email = {
-    clientName: client?.name ?? "Client",
+    clientName:
+      client?.name ?? getTranslator(user.locale, "emails.paymentReceived")("unknownClient"),
     currency: invoice.currency ?? "EUR",
     invoiceNumber: invoice.number,
     locale: user.locale,

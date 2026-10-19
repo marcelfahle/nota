@@ -98,7 +98,8 @@
       "amountPaid": "Amount paid",
       "invoice": "Invoice {number}",
       "paidOn": "Paid on {date}",
-      "footer": "This is an automated notification from {app}."
+      "footer": "This is an automated notification from {app}.",
+      "unknownClient": "Client"
     }
   },
   "common": {
@@ -411,7 +412,8 @@
       "recording": "Recording…"
     },
     "pageTitle": "{number} · {client} — {app}",
-    "pageTitleFallback": "Invoice — {app}"
+    "pageTitleFallback": "Invoice — {app}",
+    "unknownClient": "Unknown client"
   },
   "invoiceForm": {
     "newInvoice": "New invoice",

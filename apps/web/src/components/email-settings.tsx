@@ -43,7 +43,7 @@ export function EmailSettings({
               setLanguage(value);
               const result = await updateDocumentLocale(value);
               if (result?.error) {
-                setError(result.error);
+                setError(t("documentLanguage.error"));
               }
             });
           }}

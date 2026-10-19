@@ -63,7 +63,10 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
     notFound();
   }
 
-  const invoice = await getInvoiceDetail(org.id, id);
+  const [invoice, t] = await Promise.all([
+    getInvoiceDetail(org.id, id),
+    getTranslations("invoiceDetail"),
+  ]);
   if (!invoice) {
     notFound();
   }
@@ -91,11 +94,12 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
         logoUrl: org.logoUrl,
         name: org.businessName || org.name,
       }}
+      documentLocale={address.locale}
       invoice={{
         ...invoice,
         client: invoice.client
           ? { ...invoice.client, address: formatClientAddress(invoice.client, address) }
-          : { email: "", name: "Unknown" },
+          : { email: "", name: t("unknownClient") },
       }}
       locale={user.locale}
       role={role}

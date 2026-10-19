@@ -174,8 +174,31 @@ function getToolLabel(type: string, t: Translate) {
   return raw.replaceAll("_", " ").replaceAll(/\b\w/g, (char) => char.toUpperCase());
 }
 
-function formatActivity(activity: ChatActivity, t: Translate) {
-  const action = activity.action.replaceAll("_", " ");
+const ACTIVITY_ACTIONS = [
+  "cancelled",
+  "created",
+  "marked_overdue",
+  "paid",
+  "proposal_approved",
+  "reminder_sent",
+  "sent",
+  "viewed",
+] as const;
+
+type ActivityAction = (typeof ACTIVITY_ACTIONS)[number];
+
+function isActivityAction(action: string): action is ActivityAction {
+  return (ACTIVITY_ACTIONS as ReadonlyArray<string>).includes(action);
+}
+
+function formatActivity(
+  activity: ChatActivity,
+  t: Translate,
+  tActivity: ReturnType<typeof useTranslations<"invoiceDetail.activity">>,
+) {
+  const action = isActivityAction(activity.action)
+    ? tActivity(activity.action)
+    : activity.action.replaceAll("_", " ");
   const source = activity.sourceClient ?? (activity.source === "cli" ? t("cli") : t("agent"));
   return t("activity", { action, number: activity.invoiceNumber, source });
 }
@@ -572,6 +595,7 @@ export function ChatPanel({
   starterPrompts?: ReadonlyArray<string>;
 }) {
   const t = useTranslations("chat");
+  const tActivity = useTranslations("invoiceDetail.activity");
   const router = useRouter();
   const pathname = usePathname();
   const prompts = starterPrompts ?? [
@@ -1006,7 +1030,7 @@ export function ChatPanel({
           <ol aria-label={t("recentActivity")} className="space-y-2">
             {activity.map((item) => (
               <li className="nota-label text-muted-foreground" key={item.id}>
-                {formatActivity(item, t)}
+                {formatActivity(item, t, tActivity)}
               </li>
             ))}
           </ol>

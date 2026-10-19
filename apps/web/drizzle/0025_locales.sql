@@ -13,4 +13,12 @@ WHERE upper(btrim(coalesce("country_code", ''))) IN ('DE', 'AT')
 -- Documents issued before this migration were rendered in English. The snapshot
 -- records that, so a workspace switching to German does not change what an
 -- already issued invoice says. Drafts stay unset and follow the workspace.
-UPDATE "invoices" SET "document_locale" = 'en' WHERE "status" <> 'draft' AND "document_locale" IS NULL;
+UPDATE "invoices" SET "document_locale" = 'en' WHERE "status" <> 'draft' AND "document_locale" IS NULL;--> statement-breakpoint
+
+-- Members of those workspaces most likely read German too. New accounts take the
+-- browser language at sign-up; existing ones can switch in Settings.
+UPDATE "users" SET "locale" = 'de'
+WHERE "id" IN (
+  SELECT m."user_id" FROM "org_members" m JOIN "orgs" o ON o."id" = m."org_id"
+  WHERE o."document_locale" = 'de'
+);

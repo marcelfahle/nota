@@ -98,7 +98,8 @@
       "amountPaid": "Bezahlter Betrag",
       "invoice": "Rechnung Nr. {number}",
       "paidOn": "Bezahlt am {date}",
-      "footer": "Diese Nachricht kommt automatisch von {app}."
+      "footer": "Diese Nachricht kommt automatisch von {app}.",
+      "unknownClient": "Kunde"
     }
   },
   "common": {
@@ -411,7 +412,8 @@
       "recording": "Wird erfasst…"
     },
     "pageTitle": "{number} · {client} — {app}",
-    "pageTitleFallback": "Rechnung — {app}"
+    "pageTitleFallback": "Rechnung — {app}",
+    "unknownClient": "Unbekannter Kunde"
   },
   "invoiceForm": {
     "newInvoice": "Neue Rechnung",
