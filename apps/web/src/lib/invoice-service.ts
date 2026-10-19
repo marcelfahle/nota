@@ -1092,7 +1092,9 @@ export async function sendInvoice(
     if ("error" in result) {
       return result;
     }
-  } catch {
+  } catch (error) {
+    // eslint-disable-next-line no-console -- The UI only says "try again"; the cause must reach the server logs.
+    console.error("[invoices] issuance failed", { error, invoiceId });
     // A link created before a database failure has never been sent to the client,
     // and a file stored before it belongs to no issued document.
     const orphan = createdLink as { accountId: string | null; id: string } | null;
