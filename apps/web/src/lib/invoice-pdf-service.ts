@@ -2,10 +2,11 @@ import { renderToBuffer } from "@react-pdf/renderer";
 
 import { InvoicePdf } from "@/components/invoice-pdf";
 import { formatOrgAddress, getPdfLogoSrc } from "@/lib/branding";
+import { documentLocaleOf } from "@/lib/i18n";
+import { orgCountryCode } from "@/lib/invoice-compliance";
 import { type InvoiceDocumentOrg, loadInvoiceDocument } from "@/lib/invoice-document";
 import { formatVariableDecimal } from "@/lib/money";
-import { formatClientAddress } from "@/lib/postal-address";
-import { orgLocale } from "@/lib/utils";
+import { formatClientAddress, isDomestic } from "@/lib/postal-address";
 
 export type InvoicePdfOrg = InvoiceDocumentOrg;
 
@@ -18,24 +19,25 @@ export async function renderInvoicePdfForOrg(
 ) {
   const document = await loadInvoiceDocument(org, invoiceId);
   const { bankAccount, client, invoice, items } = document;
+  const locale = documentLocaleOf(invoice, org);
+  const address = { locale, omitCountry: isDomestic({ countryCode: orgCountryCode(org) }, client) };
 
   const logoSrc =
     options.logoSrc === undefined ? await getPdfLogoSrc(org.logoUrl) : options.logoSrc;
   const buffer = await renderToBuffer(
     InvoicePdf({
       business: {
-        address: formatOrgAddress(org),
+        address: formatOrgAddress(org, address),
         bankDetails: bankAccount?.details ?? null,
         bic: bankAccount?.bic ?? null,
         brandColor: org.brandColor,
         iban: bankAccount?.iban ?? null,
-        locale: orgLocale(org),
         logoSrc,
         name: org.legalName ?? org.businessName ?? org.name,
         taxIdentifier: document.sellerTaxIdentifier,
       },
       client: {
-        address: formatClientAddress(client),
+        address: formatClientAddress(client, address),
         company: client.company,
         email: client.email,
         name: client.name,
@@ -50,7 +52,7 @@ export async function renderInvoicePdfForOrg(
         lineItems: items.map((item) => ({
           amount: item.amount,
           description: item.description,
-          quantity: formatVariableDecimal(item.quantity, 6, 2),
+          quantity: item.quantity,
           unitPrice: item.unitPrice,
         })),
         notes: invoice.notes,
@@ -65,6 +67,7 @@ export async function renderInvoicePdfForOrg(
         taxTreatment: invoice.taxTreatment,
         total: invoice.total ?? "0.00",
       },
+      locale,
     }),
   );
 

@@ -176,6 +176,13 @@
       "when": 1792436441178,
       "tag": "0024_einvoice-delivery",
       "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1792439581777,
+      "tag": "0025_locales",
+      "breakpoints": true
     }
   ]
 }

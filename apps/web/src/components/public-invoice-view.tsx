@@ -2,28 +2,27 @@ import { ArrowRight, Download, FileCode } from "lucide-react";
 
 import { RubberStamp } from "@/components/nota-marks";
 import { formatOrgAddress } from "@/lib/branding";
-import { formatClientAddress } from "@/lib/postal-address";
+import { documentLocaleOf, getTranslator, toIntlLocale } from "@/lib/i18n";
+import { orgCountryCode } from "@/lib/invoice-compliance";
+import { formatClientAddress, isDomestic } from "@/lib/postal-address";
 import type { PublicInvoice } from "@/lib/public-invoice";
 import { formatTaxIdentifier, invoiceTaxIdentifier } from "@/lib/tax-identifier";
 import { taxTreatmentNote } from "@/lib/tax-treatment";
-import { formatCurrency, formatDate, formatNumber, orgLocale } from "@/lib/utils";
-
-function paymentMethodLabel(method: string) {
-  if (method === "bank_transfer") {
-    return "Bank transfer";
-  }
-  if (method === "stripe") {
-    return "Card payment";
-  }
-  return "Payment";
-}
+import { formatCurrency, formatDate, formatNumber, formatQuantity } from "@/lib/utils";
 
 export function PublicInvoiceView({ invoice, token }: { invoice: PublicInvoice; token: string }) {
   const currency = invoice.currency ?? "EUR";
-  const locale = orgLocale(invoice.organization);
+  // The page speaks the language the document was issued in, not the viewer's.
+  const language = documentLocaleOf(invoice, invoice.organization);
+  const locale = toIntlLocale(language);
+  const t = getTranslator(language, "public");
+  const address = {
+    locale: language,
+    omitCountry: isDomestic({ countryCode: orgCountryCode(invoice.organization) }, invoice.client),
+  };
   const businessName = invoice.organization.businessName ?? invoice.organization.name;
-  const businessAddress = formatOrgAddress(invoice.organization);
-  const clientAddress = [invoice.client.company, formatClientAddress(invoice.client)]
+  const businessAddress = formatOrgAddress(invoice.organization, address);
+  const clientAddress = [invoice.client.company, formatClientAddress(invoice.client, address)]
     .filter(Boolean)
     .join("\n");
   const servicePeriod =
@@ -32,7 +31,8 @@ export function PublicInvoiceView({ invoice, token }: { invoice: PublicInvoice; 
         ? formatDate(invoice.servicePeriodStart, locale)
         : `${formatDate(invoice.servicePeriodStart, locale)} – ${formatDate(invoice.servicePeriodEnd, locale)}`
       : null;
-  const taxNote = taxTreatmentNote(invoice.taxTreatment);
+  const taxNote = taxTreatmentNote(invoice.taxTreatment, language);
+  const showVat = invoice.taxTreatment !== "exempt_small_business";
   const isCreditNote = invoice.kind === "credit_note";
   const isPaid = !isCreditNote && invoice.settlementStatus === "paid";
   const paymentLinkUrl = !isCreditNote && !isPaid ? invoice.stripePaymentLinkUrl : null;
@@ -56,7 +56,7 @@ export function PublicInvoiceView({ invoice, token }: { invoice: PublicInvoice; 
             <div className="flex min-w-0 items-start gap-3">
               {invoice.organization.logoUrl ? (
                 <img
-                  alt={`${businessName} logo`}
+                  alt={t("logoAlt", { business: businessName })}
                   className="size-10 shrink-0 rounded-md object-contain sm:size-12"
                   src={invoice.organization.logoUrl}
                 />
@@ -72,20 +72,27 @@ export function PublicInvoiceView({ invoice, token }: { invoice: PublicInvoice; 
               <div className="min-w-0 text-xs leading-5 text-[#6b655c]">
                 <p className="truncate text-sm font-bold text-[#1f1b16]">{businessName}</p>
                 {businessAddress ? <p className="whitespace-pre-line">{businessAddress}</p> : null}
-                {sellerTaxIdentifier ? <p>{formatTaxIdentifier(sellerTaxIdentifier)}</p> : null}
+                {sellerTaxIdentifier ? (
+                  <p>{formatTaxIdentifier(sellerTaxIdentifier, language)}</p>
+                ) : null}
               </div>
             </div>
             <div className="shrink-0 text-right">
               <h1 className="text-3xl font-bold tracking-[-0.04em] sm:text-5xl">
-                {isCreditNote ? "Credit note" : "Invoice"}
+                {isCreditNote ? t("creditNote") : t("invoice")}
               </h1>
               <p className="mt-1 font-mono text-xs text-[#6b655c] sm:text-sm">{invoice.number}</p>
+              {isCreditNote && invoice.originalNumber ? (
+                <p className="mt-1 text-xs text-[#6b655c]">
+                  {t("creditNoteFor", { number: invoice.originalNumber })}
+                </p>
+              ) : null}
             </div>
           </header>
 
           <section className="grid grid-cols-2 gap-x-5 gap-y-5 border-b border-black/10 py-7 sm:grid-cols-3 sm:py-9">
             <div className="col-span-2 sm:col-span-1">
-              <h2 className="nota-label text-[#6b655c]">Billed to</h2>
+              <h2 className="nota-label text-[#6b655c]">{t("billedTo")}</h2>
               <p className="mt-2 text-sm font-bold">{invoice.client.name}</p>
               {clientAddress ? (
                 <p className="mt-0.5 text-xs leading-5 whitespace-pre-line text-[#6b655c]">
@@ -94,18 +101,18 @@ export function PublicInvoiceView({ invoice, token }: { invoice: PublicInvoice; 
               ) : null}
               {clientTaxIdentifier ? (
                 <p className="mt-0.5 text-xs text-[#6b655c]">
-                  {formatTaxIdentifier(clientTaxIdentifier)}
+                  {formatTaxIdentifier(clientTaxIdentifier, language)}
                 </p>
               ) : null}
             </div>
             <div>
-              <h2 className="nota-label text-[#6b655c]">Issued</h2>
+              <h2 className="nota-label text-[#6b655c]">{t("issued")}</h2>
               <p className="mt-2 font-mono text-xs sm:text-sm">
                 {formatDate(invoice.issuedAt, locale)}
               </p>
             </div>
             <div>
-              <h2 className="nota-label text-[#6b655c]">Due</h2>
+              <h2 className="nota-label text-[#6b655c]">{t("due")}</h2>
               <p className="mt-2 font-mono text-xs sm:text-sm">
                 {formatDate(invoice.dueAt, locale)}
               </p>
@@ -114,15 +121,15 @@ export function PublicInvoiceView({ invoice, token }: { invoice: PublicInvoice; 
               <div>
                 <h2 className="nota-label text-[#6b655c]">
                   {invoice.servicePeriodStart === invoice.servicePeriodEnd
-                    ? "Service date"
-                    : "Service period"}
+                    ? t("serviceDate")
+                    : t("servicePeriod")}
                 </h2>
                 <p className="mt-2 font-mono text-xs sm:text-sm">{servicePeriod}</p>
               </div>
             ) : null}
             {invoice.buyerReference ? (
               <div>
-                <h2 className="nota-label text-[#6b655c]">Buyer reference</h2>
+                <h2 className="nota-label text-[#6b655c]">{t("buyerReference")}</h2>
                 <p className="mt-2 font-mono text-xs sm:text-sm">{invoice.buyerReference}</p>
               </div>
             ) : null}
@@ -130,20 +137,20 @@ export function PublicInvoiceView({ invoice, token }: { invoice: PublicInvoice; 
 
           <section aria-labelledby="line-items-heading" className="py-7 sm:py-9">
             <h2 className="sr-only" id="line-items-heading">
-              Line items
+              {t("lineItems")}
             </h2>
             <div>
               <table className="w-full border-collapse text-left text-sm">
                 <thead>
                   <tr className="border-b border-black/10 text-[#6b655c]">
                     <th className="nota-label pb-3 font-medium" scope="col">
-                      Description
+                      {t("description")}
                     </th>
                     <th className="nota-label w-16 pb-3 text-right font-medium" scope="col">
-                      Qty
+                      {t("quantity")}
                     </th>
                     <th className="nota-label w-28 pb-3 text-right font-medium" scope="col">
-                      Amount
+                      {t("amount")}
                     </th>
                   </tr>
                 </thead>
@@ -153,11 +160,13 @@ export function PublicInvoiceView({ invoice, token }: { invoice: PublicInvoice; 
                       <th className="min-w-0 py-4 pr-3 font-medium" scope="row">
                         {item.description}
                         <span className="mt-1 block font-mono text-[11px] font-normal text-[#6b655c]">
-                          {formatCurrency(Number(item.unitPrice), currency, locale)} each
+                          {t("each", {
+                            price: formatCurrency(Number(item.unitPrice), currency, locale),
+                          })}
                         </span>
                       </th>
                       <td className="py-4 text-right font-mono text-xs">
-                        {formatNumber(Number(item.quantity), locale)}
+                        {formatQuantity(item.quantity, locale)}
                       </td>
                       <td className="py-4 text-right font-mono text-xs font-medium">
                         {formatCurrency(Number(item.amount), currency, locale)}
@@ -170,27 +179,29 @@ export function PublicInvoiceView({ invoice, token }: { invoice: PublicInvoice; 
           </section>
 
           <section
-            aria-label="Totals"
+            aria-label={t("totals")}
             className="ml-auto max-w-sm border-b border-black/10 pb-7 sm:pb-9"
           >
             <dl className="space-y-3 text-sm">
               <div className="flex justify-between gap-6">
-                <dt className="text-[#6b655c]">Subtotal</dt>
+                <dt className="text-[#6b655c]">{t("subtotal")}</dt>
                 <dd className="font-mono">
                   {formatCurrency(Number(invoice.subtotal ?? 0), currency, locale)}
                 </dd>
               </div>
-              <div className="flex justify-between gap-6">
-                <dt className="text-[#6b655c]">
-                  VAT {formatNumber(Number(invoice.taxRate ?? 0), locale)}%
-                </dt>
-                <dd className="font-mono">
-                  {formatCurrency(Number(invoice.taxAmount ?? 0), currency, locale)}
-                </dd>
-              </div>
+              {showVat ? (
+                <div className="flex justify-between gap-6">
+                  <dt className="text-[#6b655c]">
+                    {t("vat", { rate: formatNumber(Number(invoice.taxRate ?? 0), locale) })}
+                  </dt>
+                  <dd className="font-mono">
+                    {formatCurrency(Number(invoice.taxAmount ?? 0), currency, locale)}
+                  </dd>
+                </div>
+              ) : null}
               {invoice.settlementStatus === "partially_paid" ? (
                 <div className="flex justify-between gap-6">
-                  <dt className="text-[#6b655c]">Paid</dt>
+                  <dt className="text-[#6b655c]">{t("paid")}</dt>
                   <dd className="font-mono">
                     −{formatCurrency(Number(invoice.paidAmount), currency, locale)}
                   </dd>
@@ -198,15 +209,20 @@ export function PublicInvoiceView({ invoice, token }: { invoice: PublicInvoice; 
               ) : null}
             </dl>
             <div className="mt-6 flex items-end justify-between gap-5">
-              <p className="nota-label pb-1">{isPaid ? "Total paid" : "Total due"}</p>
+              <p className="nota-label pb-1">{isPaid ? t("totalPaid") : t("totalDue")}</p>
               <p className="font-mono text-2xl font-bold tracking-[-0.04em] sm:text-4xl">
                 {formatCurrency(Number(isPaid ? invoice.total : invoice.balance), currency, locale)}
               </p>
             </div>
             {taxNote ? <p className="mt-4 text-xs text-[#6b655c]">{taxNote}</p> : null}
+            {!isPaid && !isCreditNote ? (
+              <p className="mt-4 text-xs text-[#6b655c]">
+                {t("payableBy", { date: formatDate(invoice.dueAt, locale) })}
+              </p>
+            ) : null}
             {isPaid ? (
               <div className="mt-8 flex justify-end pr-3">
-                <RubberStamp>Paid</RubberStamp>
+                <RubberStamp>{t("paidStamp")}</RubberStamp>
               </div>
             ) : null}
           </section>
@@ -218,9 +234,11 @@ export function PublicInvoiceView({ invoice, token }: { invoice: PublicInvoice; 
               rel="noreferrer"
               style={{ backgroundColor: brandColor }}
             >
-              <span>Pay {formatCurrency(Number(invoice.balance), currency, locale)}</span>
+              <span>
+                {t("pay", { amount: formatCurrency(Number(invoice.balance), currency, locale) })}
+              </span>
               <span className="flex items-center gap-2 font-mono text-xs">
-                Secure payment <ArrowRight className="size-4" />
+                {t("securePayment")} <ArrowRight className="size-4" />
               </span>
             </a>
           ) : null}
@@ -231,20 +249,20 @@ export function PublicInvoiceView({ invoice, token }: { invoice: PublicInvoice; 
               className="mt-7 border border-black/10 p-4 sm:mt-9 sm:p-5"
             >
               <h2 className="nota-label" id="bank-heading">
-                Bank transfer
+                {t("bankTransfer")}
               </h2>
-              <dl className="mt-3 grid gap-2 text-xs sm:grid-cols-[7rem_1fr]">
-                <dt className="text-[#6b655c]">Reference</dt>
+              <dl className="mt-3 grid gap-2 text-xs sm:grid-cols-[9rem_1fr]">
+                <dt className="text-[#6b655c]">{t("reference")}</dt>
                 <dd className="font-mono">{invoice.number}</dd>
                 {invoice.bankAccount.iban ? (
                   <>
-                    <dt className="text-[#6b655c]">IBAN</dt>
+                    <dt className="text-[#6b655c]">{t("iban")}</dt>
                     <dd className="font-mono break-all">{invoice.bankAccount.iban}</dd>
                   </>
                 ) : null}
                 {invoice.bankAccount.bic ? (
                   <>
-                    <dt className="text-[#6b655c]">BIC</dt>
+                    <dt className="text-[#6b655c]">{t("bic")}</dt>
                     <dd className="font-mono">{invoice.bankAccount.bic}</dd>
                   </>
                 ) : null}
@@ -258,7 +276,7 @@ export function PublicInvoiceView({ invoice, token }: { invoice: PublicInvoice; 
           {invoice.payments.length ? (
             <section aria-labelledby="payments-heading" className="mt-7 sm:mt-9">
               <h2 className="nota-label" id="payments-heading">
-                Payments
+                {t("payments")}
               </h2>
               <ul className="mt-3 divide-y divide-black/10 border-y border-black/10">
                 {invoice.payments.map((payment) => (
@@ -267,8 +285,10 @@ export function PublicInvoiceView({ invoice, token }: { invoice: PublicInvoice; 
                     key={payment.id}
                   >
                     <span>
-                      {paymentMethodLabel(payment.method)} ·{" "}
-                      {formatDate(payment.receivedAt, locale)}
+                      {t(
+                        `paymentMethod.${payment.method === "bank_transfer" || payment.method === "stripe" ? payment.method : "other"}`,
+                      )}{" "}
+                      · {formatDate(payment.receivedAt, locale)}
                     </span>
                     <span className="font-mono font-medium">
                       {formatCurrency(Number(payment.amount), payment.currency, locale)}
@@ -282,13 +302,15 @@ export function PublicInvoiceView({ invoice, token }: { invoice: PublicInvoice; 
           {invoice.notes ? (
             <section aria-labelledby="notes-heading" className="mt-7 sm:mt-9">
               <h2 className="nota-label" id="notes-heading">
-                Notes
+                {t("notes")}
               </h2>
               <p className="mt-2 text-sm leading-6 whitespace-pre-line text-[#6b655c]">
                 {invoice.notes}
               </p>
             </section>
           ) : null}
+
+          {!isCreditNote ? <p className="mt-7 text-sm sm:mt-9">{t("thanks")}</p> : null}
 
           <footer className="mt-9 flex flex-wrap items-center justify-between gap-4 border-t border-black/10 pt-5 text-xs text-[#6b655c]">
             <span className="flex flex-wrap items-center gap-4">
@@ -297,7 +319,7 @@ export function PublicInvoiceView({ invoice, token }: { invoice: PublicInvoice; 
                 href={`/api/public/invoices/${token}/pdf`}
               >
                 <Download className="size-4" />
-                Download PDF
+                {t("downloadPdf")}
               </a>
               {invoice.xrechnungAvailable ? (
                 <a
@@ -306,7 +328,7 @@ export function PublicInvoiceView({ invoice, token }: { invoice: PublicInvoice; 
                   href={`/api/public/invoices/${token}/xrechnung`}
                 >
                   <FileCode className="size-4" />
-                  Download XRechnung XML
+                  {t("downloadXml")}
                 </a>
               ) : null}
             </span>
@@ -319,7 +341,7 @@ export function PublicInvoiceView({ invoice, token }: { invoice: PublicInvoice; 
         </div>
       </article>
       <p className="mt-5 text-center text-xs text-[#6b655c]">
-        Sent with <span className="font-bold text-[#1f1b16]">Nota.</span>
+        {t("sentWith")} <span className="font-bold text-[#1f1b16]">Nota.</span>
       </p>
     </main>
   );

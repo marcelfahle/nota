@@ -1,11 +1,12 @@
 import { and, eq } from "drizzle-orm";
 import { z } from "zod";
 
+import { invoiceSentSubject } from "@/emails/invoice-sent";
 import { db } from "@/lib/db";
 import { activityLog, clients, invoices, jobs, orgs, proposals } from "@/lib/db/schema";
+import { APP_LOCALES, documentLocaleOf } from "@/lib/i18n";
 import type { InvoiceServiceContext } from "@/lib/invoice-service";
 import { canSendInvoiceReminder, getInsufficientPermissionsError } from "@/lib/roles";
-import { orgLocale } from "@/lib/utils";
 
 export const reminderPayloadSchema = z.object({
   businessName: z.string(),
@@ -13,8 +14,8 @@ export const reminderPayloadSchema = z.object({
   currency: z.string(),
   dueAt: z.string(),
   invoiceNumber: z.string(),
-  // Optional so reminder proposals stored before locale support still send.
-  locale: z.enum(["de-DE", "en-US"]).optional(),
+  // The document language. Optional so proposals stored before it existed still send.
+  locale: z.enum(APP_LOCALES).optional(),
   paymentLinkUrl: z.string().nullable(),
   subject: z.string(),
   to: z.string().email(),
@@ -43,17 +44,21 @@ export async function createReminderProposal(
     return { error: "Only outstanding invoices can receive reminder proposals" } as const;
   }
   const businessName = row.org.businessName ?? row.org.name;
-  const payload = {
+  const reminder = {
     businessName,
-    clientName: row.client.name,
     currency: row.invoice.currency ?? "EUR",
-    dueAt: row.invoice.dueAt,
     invoiceNumber: row.invoice.number,
-    locale: orgLocale(row.org),
-    paymentLinkUrl: row.invoice.stripePaymentLinkUrl,
-    subject: `Reminder: Invoice ${row.invoice.number} — ${businessName}`,
-    to: row.client.email,
+    locale: documentLocaleOf(row.invoice, row.org),
+    reminder: true,
     total: row.invoice.total ?? "0.00",
+  };
+  const payload = {
+    ...reminder,
+    clientName: row.client.name,
+    dueAt: row.invoice.dueAt,
+    paymentLinkUrl: row.invoice.stripePaymentLinkUrl,
+    subject: invoiceSentSubject(reminder),
+    to: row.client.email,
   };
   const [proposal] = await db
     .insert(proposals)

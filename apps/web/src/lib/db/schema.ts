@@ -66,6 +66,10 @@ export const users = pgTable(
     invoicePrefix: text("invoice_prefix").default("INV"),
     invoiceSeparator: text("invoice_separator").notNull().default("-"),
     isSuperAdmin: boolean("is_super_admin").notNull().default(false),
+    // UI language. Defaults from the browser's Accept-Language at sign-up.
+    locale: text("locale", { enum: ["en", "de"] })
+      .notNull()
+      .default("en"),
     logoUrl: text("logo_url"),
     mustChangePassword: boolean("must_change_password").notNull().default(false),
     name: text().notNull(),
@@ -106,6 +110,11 @@ export const orgs = pgTable("orgs", {
   deactivatedAt: timestamp("deactivated_at"),
   defaultCurrency: text("default_currency").notNull().default("EUR"),
   defaultTaxTreatment: taxTreatmentEnum("default_tax_treatment").notNull().default("standard"),
+  // Language of invoices, the public invoice page and customer emails. Separate
+  // from the UI language of each member; German and Austrian workspaces start with "de".
+  documentLocale: text("document_locale", { enum: ["en", "de"] })
+    .notNull()
+    .default("en"),
   // What the invoice email carries. German workspaces start with the XML attached.
   eInvoiceDelivery: text("e_invoice_delivery")
     .$type<EInvoiceDelivery>()
@@ -317,6 +326,8 @@ export const invoices = pgTable(
     createdAt: timestamp("created_at").defaultNow(),
     creditsInvoiceId: uuid("credits_invoice_id").references((): AnyPgColumn => invoices.id),
     currency: text().default("EUR"),
+    // Snapshot of the workspace document language at issuance. Drafts follow the workspace.
+    documentLocale: text("document_locale", { enum: ["en", "de"] }),
     dueAt: date("due_at").notNull(),
     id: uuid().defaultRandom().primaryKey(),
     internalNotes: text("internal_notes"),

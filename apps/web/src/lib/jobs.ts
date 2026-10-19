@@ -1,7 +1,7 @@
 import { and, asc, eq, isNull, lt, lte, or } from "drizzle-orm";
 
-import { InvoiceSentEmail } from "@/emails/invoice-sent";
-import { PaymentReceivedEmail } from "@/emails/payment-received";
+import { InvoiceSentEmail, invoiceSentSubject } from "@/emails/invoice-sent";
+import { PaymentReceivedEmail, paymentReceivedSubject } from "@/emails/payment-received";
 import { APP_NAME } from "@/lib/app-brand";
 import { getPdfLogoSrc } from "@/lib/branding";
 import { db } from "@/lib/db";
@@ -18,9 +18,9 @@ import {
 import { type InvoiceAttachment, parseInvoiceAttachments } from "@/lib/e-invoice-delivery";
 import { sendEmail } from "@/lib/email";
 import { getAppEnv } from "@/lib/env";
+import { documentLocaleOf, isAppLocale } from "@/lib/i18n";
 import { renderInvoicePdfForOrg } from "@/lib/invoice-pdf-service";
 import { reminderPayloadSchema } from "@/lib/proposal-service";
-import { orgLocale } from "@/lib/utils";
 import { renderXRechnungForOrg } from "@/lib/xrechnung-service";
 
 const JOB_LOCK_TIMEOUT_MS = 1000 * 60 * 10;
@@ -154,28 +154,27 @@ async function sendInvoiceEmail(
   const { bankDetails, client, invoice, logoSrc, org } = await getInvoiceEmailContext(invoiceId);
 
   const businessName = org.legalName ?? org.businessName ?? org.name ?? APP_NAME;
+  const email = {
+    bankDetails,
+    businessName,
+    clientName: client.name,
+    currency: invoice.currency ?? "EUR",
+    dueAt: invoice.dueAt,
+    invoiceNumber: invoice.number,
+    invoiceUrl: getPublicInvoiceUrl(invoice.publicToken),
+    locale: documentLocaleOf(invoice, org),
+    paymentLinkUrl: invoice.stripePaymentLinkUrl,
+    // A copy sent to the sender is labelled as one in the subject and the body.
+    testCopy: Boolean(recipient),
+    total: invoice.total ?? "0",
+    xmlAttached: attachments.includes("xml"),
+  };
 
   await sendEmail({
     attachments: await renderInvoiceAttachments(org, invoiceId, attachments, { logoSrc }),
     idempotencyKey,
-    react: InvoiceSentEmail({
-      bankDetails,
-      businessName,
-      clientName: client.name,
-      currency: invoice.currency ?? "EUR",
-      dueAt: invoice.dueAt,
-      invoiceNumber: invoice.number,
-      invoiceUrl: getPublicInvoiceUrl(invoice.publicToken),
-      locale: orgLocale(org),
-      paymentLinkUrl: invoice.stripePaymentLinkUrl,
-      testCopy: Boolean(recipient),
-      total: invoice.total ?? "0",
-      xmlAttached: attachments.includes("xml"),
-    }),
-    // A copy sent to the sender is labelled as one in the subject and the body.
-    subject: recipient
-      ? `Test copy: Invoice ${invoice.number} from ${businessName}`
-      : `Invoice ${invoice.number} from ${businessName}`,
+    react: InvoiceSentEmail(email),
+    subject: invoiceSentSubject(email),
     to: [recipient ?? client.email],
   });
 }
@@ -228,7 +227,7 @@ async function sendInvoiceReminderEmail(
         dueAt: stored.dueAt,
         invoiceNumber: stored.invoiceNumber,
         invoiceUrl: getPublicInvoiceUrl(invoice.publicToken),
-        locale: stored.locale,
+        locale: isAppLocale(stored.locale) ? stored.locale : "en",
         paymentLinkUrl: stored.paymentLinkUrl,
         reminder: true,
         total: stored.total,
@@ -247,23 +246,24 @@ async function sendInvoiceReminderEmail(
   const { bankDetails, client, invoice, org } = await getInvoiceEmailContext(invoiceId);
 
   const businessName = org.legalName ?? org.businessName ?? org.name ?? APP_NAME;
+  const email = {
+    bankDetails,
+    businessName,
+    clientName: client.name,
+    currency: invoice.currency ?? "EUR",
+    dueAt: invoice.dueAt,
+    invoiceNumber: invoice.number,
+    invoiceUrl: getPublicInvoiceUrl(invoice.publicToken),
+    locale: documentLocaleOf(invoice, org),
+    paymentLinkUrl: invoice.stripePaymentLinkUrl,
+    reminder: true,
+    total: invoice.total ?? "0",
+  };
 
   await sendEmail({
     idempotencyKey,
-    react: InvoiceSentEmail({
-      bankDetails,
-      businessName,
-      clientName: client.name,
-      currency: invoice.currency ?? "EUR",
-      dueAt: invoice.dueAt,
-      invoiceNumber: invoice.number,
-      invoiceUrl: getPublicInvoiceUrl(invoice.publicToken),
-      locale: orgLocale(org),
-      paymentLinkUrl: invoice.stripePaymentLinkUrl,
-      reminder: true,
-      total: invoice.total ?? "0",
-    }),
-    subject: `Reminder: Invoice ${invoice.number} — ${businessName}`,
+    react: InvoiceSentEmail(email),
+    subject: invoiceSentSubject(email),
     to: [client.email],
   });
 
@@ -294,14 +294,6 @@ async function sendPaymentReceivedEmail(invoiceId: string, idempotencyKey?: stri
     throw new Error("Invoice not found");
   }
 
-  const [org] = invoice.orgId
-    ? await db
-        .select({ country: orgs.country })
-        .from(orgs)
-        .where(eq(orgs.id, invoice.orgId))
-        .limit(1)
-    : [];
-
   const [client] = await db
     .select({ name: clients.name })
     .from(clients)
@@ -309,7 +301,7 @@ async function sendPaymentReceivedEmail(invoiceId: string, idempotencyKey?: stri
     .limit(1);
 
   const [user] = await db
-    .select({ businessName: users.businessName, email: users.email })
+    .select({ businessName: users.businessName, email: users.email, locale: users.locale })
     .from(users)
     .where(eq(users.id, invoice.userId))
     .limit(1);
@@ -318,17 +310,19 @@ async function sendPaymentReceivedEmail(invoiceId: string, idempotencyKey?: stri
     throw new Error("User not found");
   }
 
+  // This one goes to the workspace member, so it speaks their UI language.
+  const email = {
+    clientName: client?.name ?? "Client",
+    currency: invoice.currency ?? "EUR",
+    invoiceNumber: invoice.number,
+    locale: user.locale,
+    paidAt: invoice.paidAt ?? new Date().toISOString().split("T")[0],
+    total: invoice.total ?? "0",
+  };
   await sendEmail({
     idempotencyKey,
-    react: PaymentReceivedEmail({
-      clientName: client?.name ?? "Client",
-      currency: invoice.currency ?? "EUR",
-      invoiceNumber: invoice.number,
-      locale: orgLocale(org),
-      paidAt: invoice.paidAt ?? new Date().toISOString().split("T")[0],
-      total: invoice.total ?? "0",
-    }),
-    subject: `Payment received: ${invoice.number}`,
+    react: PaymentReceivedEmail(email),
+    subject: paymentReceivedSubject(email),
     to: [user.email],
   });
 }

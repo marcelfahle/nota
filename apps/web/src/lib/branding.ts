@@ -1,18 +1,33 @@
+import { documentCountryLine, type AddressDocumentOptions } from "@/lib/postal-address";
+
 const MAX_LOGO_BYTES = 2 * 1024 * 1024;
 
-export function formatOrgAddress(org: {
-  businessAddress?: string | null;
-  city?: string | null;
-  country?: string | null;
-  postalCode?: string | null;
-  region?: string | null;
-  street?: string | null;
-}) {
+export function formatOrgAddress(
+  org: {
+    businessAddress?: string | null;
+    city?: string | null;
+    country?: string | null;
+    countryCode?: string | null;
+    postalCode?: string | null;
+    region?: string | null;
+    street?: string | null;
+  },
+  options?: AddressDocumentOptions,
+) {
+  // On a document the country is named in its language and dropped at home;
+  // without a stored code the free text people typed is printed as is.
+  const country = !options
+    ? org.country
+    : org.countryCode
+      ? documentCountryLine(org.countryCode, options)
+      : options.omitCountry
+        ? null
+        : org.country;
   const structured = [
     org.street,
     [org.postalCode, org.city].filter(Boolean).join(" "),
     org.region,
-    org.country,
+    country,
   ].filter(Boolean) as Array<string>;
   return structured.length ? structured.join("\n") : (org.businessAddress ?? null);
 }

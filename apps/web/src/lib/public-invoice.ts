@@ -83,11 +83,20 @@ export async function getPublicInvoice(token: string, recordView = false) {
       .limit(1);
   }
 
+  const [original] = invoice.creditsInvoiceId
+    ? await db
+        .select({ number: invoices.number })
+        .from(invoices)
+        .where(and(eq(invoices.id, invoice.creditsInvoiceId), eq(invoices.orgId, identity.orgId)))
+        .limit(1)
+    : [];
+
   return {
     ...invoice,
     bankAccount: bankAccount ?? null,
     client: context.client,
     organization: context.organization,
+    originalNumber: original?.number ?? null,
     // Offered only where the email carried it and the export is complete.
     xrechnungAvailable:
       attachesXRechnung(context.organization.eInvoiceDelivery) &&

@@ -17,6 +17,7 @@ export type InvoiceDocumentOrg = Pick<
   | "contactPhone"
   | "country"
   | "countryCode"
+  | "documentLocale"
   | "id"
   | "legalName"
   | "logoUrl"

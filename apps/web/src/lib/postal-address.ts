@@ -1,4 +1,33 @@
+import { countryName, type AppLocale } from "@/lib/i18n";
 import { parseAddress, toCountryCode, type XRechnungAddress } from "@/lib/xrechnung";
+
+/**
+ * How a document prints the country line: named in the document language,
+ * and left out on a domestic invoice, where both parties are in one country.
+ */
+export type AddressDocumentOptions = {
+  locale: AppLocale;
+  omitCountry?: boolean;
+};
+
+export function documentCountryLine(
+  code: string | null | undefined,
+  options: AddressDocumentOptions | undefined,
+) {
+  if (!options) {
+    return code ?? null;
+  }
+  return options.omitCountry ? null : countryName(code, options.locale);
+}
+
+/** Both parties in one country: the country line says nothing and is left out. */
+export function isDomestic(
+  seller: { countryCode?: string | null },
+  client: { countryCode?: string | null },
+) {
+  const home = seller.countryCode?.trim().toUpperCase();
+  return Boolean(home) && home === client.countryCode?.trim().toUpperCase();
+}
 
 type StructuredColumns = {
   city?: string | null;
@@ -45,6 +74,7 @@ export function clientPostalAddress(
 /** Lines for the PDF and the public page: structured fields win over free text. */
 export function formatClientAddress(
   client: StructuredColumns & { address?: string | null },
+  options?: AddressDocumentOptions,
 ): string | null {
   if (!hasStructured(client)) {
     return client.address ?? null;
@@ -52,7 +82,7 @@ export function formatClientAddress(
   const lines = [
     client.street,
     [client.postalCode, client.city].filter(Boolean).join(" "),
-    client.countryCode,
+    documentCountryLine(client.countryCode, options),
   ].filter(Boolean) as Array<string>;
   return lines.length ? lines.join("\n") : null;
 }

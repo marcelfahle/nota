@@ -968,6 +968,8 @@ export async function sendInvoice(
             invoice.clientTaxIdentifier,
             client,
           ),
+          // The document keeps the language it was issued in, whatever the workspace picks later.
+          documentLocale: invoice.documentLocale ?? org.documentLocale,
           publicToken: invoice.publicToken ?? randomBytes(24).toString("base64url"),
           revision: sql`${invoices.revision} + 1`,
           sellerTaxIdentifier: invoiceTaxIdentifier(
@@ -1620,6 +1622,7 @@ export async function markInvoiceSent(
           invoice.clientTaxIdentifier,
           client,
         ),
+        documentLocale: invoice.documentLocale ?? organization.documentLocale,
         revision: sql`${invoices.revision} + 1`,
         sellerTaxIdentifier: invoiceTaxIdentifier(
           invoice.status,

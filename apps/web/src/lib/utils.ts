@@ -34,6 +34,11 @@ export function formatNumber(amount: number, locale: Locale = "en-US"): string {
   return new Intl.NumberFormat(locale, { maximumFractionDigits: 2 }).format(amount);
 }
 
+/** A line-item quantity: up to six decimals as stored, trailing zeros dropped, per locale. */
+export function formatQuantity(quantity: number | string, locale: Locale = "en-US"): string {
+  return new Intl.NumberFormat(locale, { maximumFractionDigits: 6 }).format(Number(quantity));
+}
+
 /**
  * Formats a calendar date (YYYY-MM-DD) or timestamp for display. Calendar dates have no
  * time zone, so they are always read and shown in UTC to avoid drifting a day.
