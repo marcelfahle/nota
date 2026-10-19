@@ -20,8 +20,8 @@ import { sendEmail } from "@/lib/email";
 import { getAppEnv } from "@/lib/env";
 import { renderInvoicePdfForOrg } from "@/lib/invoice-pdf-service";
 import { reminderPayloadSchema } from "@/lib/proposal-service";
-import { renderXRechnungForOrg } from "@/lib/xrechnung-service";
 import { orgLocale } from "@/lib/utils";
+import { renderXRechnungForOrg } from "@/lib/xrechnung-service";
 
 const JOB_LOCK_TIMEOUT_MS = 1000 * 60 * 10;
 

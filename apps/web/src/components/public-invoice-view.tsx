@@ -181,7 +181,9 @@ export function PublicInvoiceView({ invoice, token }: { invoice: PublicInvoice; 
                 </dd>
               </div>
               <div className="flex justify-between gap-6">
-                <dt className="text-[#6b655c]">VAT {formatNumber(Number(invoice.taxRate ?? 0), locale)}%</dt>
+                <dt className="text-[#6b655c]">
+                  VAT {formatNumber(Number(invoice.taxRate ?? 0), locale)}%
+                </dt>
                 <dd className="font-mono">
                   {formatCurrency(Number(invoice.taxAmount ?? 0), currency, locale)}
                 </dd>
