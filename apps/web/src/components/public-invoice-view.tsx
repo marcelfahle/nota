@@ -4,25 +4,7 @@ import { RubberStamp } from "@/components/nota-marks";
 import { formatOrgAddress } from "@/lib/branding";
 import type { PublicInvoice } from "@/lib/public-invoice";
 import { formatTaxIdentifier, invoiceTaxIdentifier } from "@/lib/tax-identifier";
-import { formatCurrency } from "@/lib/utils";
-
-function formatDate(value: string | Date) {
-  const date = typeof value === "string" ? new Date(`${value}T00:00:00Z`) : value;
-  return date.toLocaleDateString("en-GB", {
-    day: "numeric",
-    month: "short",
-    timeZone: "UTC",
-    year: "numeric",
-  });
-}
-
-function formatQuantity(value: string) {
-  return Number(value).toLocaleString("en-US", { maximumFractionDigits: 2 });
-}
-
-function formatPercentage(value: string | null) {
-  return Number(value ?? 0).toLocaleString("en-US", { maximumFractionDigits: 2 });
-}
+import { formatCurrency, formatDate, formatNumber, orgLocale } from "@/lib/utils";
 
 function paymentMethodLabel(method: string) {
   if (method === "bank_transfer") {
@@ -36,6 +18,7 @@ function paymentMethodLabel(method: string) {
 
 export function PublicInvoiceView({ invoice, token }: { invoice: PublicInvoice; token: string }) {
   const currency = invoice.currency ?? "EUR";
+  const locale = orgLocale(invoice.organization);
   const businessName = invoice.organization.businessName ?? invoice.organization.name;
   const businessAddress = formatOrgAddress(invoice.organization);
   const clientAddress = [invoice.client.company, invoice.client.address].filter(Boolean).join("\n");
@@ -106,11 +89,15 @@ export function PublicInvoiceView({ invoice, token }: { invoice: PublicInvoice; 
             </div>
             <div>
               <h2 className="nota-label text-[#6b655c]">Issued</h2>
-              <p className="mt-2 font-mono text-xs sm:text-sm">{formatDate(invoice.issuedAt)}</p>
+              <p className="mt-2 font-mono text-xs sm:text-sm">
+                {formatDate(invoice.issuedAt, locale)}
+              </p>
             </div>
             <div>
               <h2 className="nota-label text-[#6b655c]">Due</h2>
-              <p className="mt-2 font-mono text-xs sm:text-sm">{formatDate(invoice.dueAt)}</p>
+              <p className="mt-2 font-mono text-xs sm:text-sm">
+                {formatDate(invoice.dueAt, locale)}
+              </p>
             </div>
           </section>
 
@@ -139,14 +126,14 @@ export function PublicInvoiceView({ invoice, token }: { invoice: PublicInvoice; 
                       <th className="min-w-0 py-4 pr-3 font-medium" scope="row">
                         {item.description}
                         <span className="mt-1 block font-mono text-[11px] font-normal text-[#6b655c]">
-                          {formatCurrency(Number(item.unitPrice), currency)} each
+                          {formatCurrency(Number(item.unitPrice), currency, locale)} each
                         </span>
                       </th>
                       <td className="py-4 text-right font-mono text-xs">
-                        {formatQuantity(item.quantity)}
+                        {formatNumber(Number(item.quantity), locale)}
                       </td>
                       <td className="py-4 text-right font-mono text-xs font-medium">
-                        {formatCurrency(Number(item.amount), currency)}
+                        {formatCurrency(Number(item.amount), currency, locale)}
                       </td>
                     </tr>
                   ))}
@@ -163,23 +150,23 @@ export function PublicInvoiceView({ invoice, token }: { invoice: PublicInvoice; 
               <div className="flex justify-between gap-6">
                 <dt className="text-[#6b655c]">Subtotal</dt>
                 <dd className="font-mono">
-                  {formatCurrency(Number(invoice.subtotal ?? 0), currency)}
+                  {formatCurrency(Number(invoice.subtotal ?? 0), currency, locale)}
                 </dd>
               </div>
               <div className="flex justify-between gap-6">
                 <dt className="text-[#6b655c]">
-                  VAT {formatPercentage(invoice.taxRate)}%
+                  VAT {formatNumber(Number(invoice.taxRate ?? 0), locale)}%
                   {invoice.reverseCharge === "true" ? " · reverse charge" : ""}
                 </dt>
                 <dd className="font-mono">
-                  {formatCurrency(Number(invoice.taxAmount ?? 0), currency)}
+                  {formatCurrency(Number(invoice.taxAmount ?? 0), currency, locale)}
                 </dd>
               </div>
               {invoice.settlementStatus === "partially_paid" ? (
                 <div className="flex justify-between gap-6">
                   <dt className="text-[#6b655c]">Paid</dt>
                   <dd className="font-mono">
-                    −{formatCurrency(Number(invoice.paidAmount), currency)}
+                    −{formatCurrency(Number(invoice.paidAmount), currency, locale)}
                   </dd>
                 </div>
               ) : null}
@@ -187,7 +174,7 @@ export function PublicInvoiceView({ invoice, token }: { invoice: PublicInvoice; 
             <div className="mt-6 flex items-end justify-between gap-5">
               <p className="nota-label pb-1">{isPaid ? "Total paid" : "Total due"}</p>
               <p className="font-mono text-2xl font-bold tracking-[-0.04em] sm:text-4xl">
-                {formatCurrency(Number(isPaid ? invoice.total : invoice.balance), currency)}
+                {formatCurrency(Number(isPaid ? invoice.total : invoice.balance), currency, locale)}
               </p>
             </div>
             {isPaid ? (
@@ -204,7 +191,7 @@ export function PublicInvoiceView({ invoice, token }: { invoice: PublicInvoice; 
               rel="noreferrer"
               style={{ backgroundColor: brandColor }}
             >
-              <span>Pay {formatCurrency(Number(invoice.balance), currency)}</span>
+              <span>Pay {formatCurrency(Number(invoice.balance), currency, locale)}</span>
               <span className="flex items-center gap-2 font-mono text-xs">
                 Secure payment <ArrowRight className="size-4" />
               </span>
@@ -253,10 +240,11 @@ export function PublicInvoiceView({ invoice, token }: { invoice: PublicInvoice; 
                     key={payment.id}
                   >
                     <span>
-                      {paymentMethodLabel(payment.method)} · {formatDate(payment.receivedAt)}
+                      {paymentMethodLabel(payment.method)} ·{" "}
+                      {formatDate(payment.receivedAt, locale)}
                     </span>
                     <span className="font-mono font-medium">
-                      {formatCurrency(Number(payment.amount), payment.currency)}
+                      {formatCurrency(Number(payment.amount), payment.currency, locale)}
                     </span>
                   </li>
                 ))}

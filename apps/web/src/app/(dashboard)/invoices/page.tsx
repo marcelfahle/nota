@@ -14,7 +14,7 @@ import {
   getInvoiceListStatus,
   matchesInvoiceSearch,
 } from "@/lib/invoice-list";
-import { formatCurrency } from "@/lib/utils";
+import { formatCurrency, formatDate, orgLocale } from "@/lib/utils";
 
 const FILTERS = [
   { key: "all", label: "All" },
@@ -35,6 +35,7 @@ export default async function InvoicesPage({
   const filterStatus = first(params.status);
   const query = first(params.q)?.trim() ?? "";
   const { org, role } = await getCurrentUser();
+  const locale = orgLocale(org);
 
   const invoiceList = await db
     .select({
@@ -92,7 +93,7 @@ export default async function InvoicesPage({
     const matchesStatus =
       activeFilter === "all" ||
       (activeFilter === "open" ? invoice.status === "sent" : invoice.status === activeFilter);
-    return matchesStatus && matchesInvoiceSearch(invoice, query);
+    return matchesStatus && matchesInvoiceSearch(invoice, query, locale);
   });
   const filteredOwed = filtered.reduce(
     (sum, invoice) =>
@@ -110,7 +111,8 @@ export default async function InvoicesPage({
         <div>
           <p className="nota-label mb-2.5">
             {invoiceList.length} {invoiceList.length === 1 ? "invoice" : "invoices"}{" "}
-            <span className="opacity-40">/</span> {formatCurrency(totalOwed, defaultCurrency)} owed
+            <span className="opacity-40">/</span>{" "}
+            {formatCurrency(totalOwed, defaultCurrency, locale)} owed
           </p>
           <h1>Invoices</h1>
         </div>
@@ -247,6 +249,7 @@ export default async function InvoicesPage({
                               {formatCurrency(
                                 Number(invoice.paidAmount),
                                 invoice.currency ?? defaultCurrency,
+                                locale,
                               )}{" "}
                               received
                             </span>
@@ -255,7 +258,12 @@ export default async function InvoicesPage({
                       </td>
                       <td className="px-3 py-2.5 font-mono text-xs text-muted-foreground">
                         <Link href={href}>
-                          {invoice.status === "draft" ? "—" : formatDate(invoice.issuedAt)}
+                          {invoice.status === "draft"
+                            ? "—"
+                            : formatDate(invoice.issuedAt, locale, {
+                                day: "numeric",
+                                month: "short",
+                              })}
                         </Link>
                       </td>
                       <td
@@ -268,7 +276,12 @@ export default async function InvoicesPage({
                         <Link href={href}>
                           {invoice.status === "draft"
                             ? "—"
-                            : formatInvoiceDueDate(invoice.dueAt, invoice.status)}
+                            : formatInvoiceDueDate(
+                                invoice.dueAt,
+                                invoice.status,
+                                new Date(),
+                                locale,
+                              )}
                         </Link>
                       </td>
                       <td className="px-3 py-2.5">
@@ -285,6 +298,7 @@ export default async function InvoicesPage({
                             {formatCurrency(
                               Number(invoice.total ?? 0),
                               invoice.currency ?? defaultCurrency,
+                              locale,
                             )}
                           </Link>
                           <InvoiceRowActions
@@ -309,7 +323,7 @@ export default async function InvoicesPage({
                     <span className="opacity-40">/</span> owed on this page
                   </td>
                   <td className="px-3 py-3 text-right font-mono text-lg font-semibold">
-                    {formatCurrency(filteredOwed, defaultCurrency)}
+                    {formatCurrency(filteredOwed, defaultCurrency, locale)}
                   </td>
                 </tr>
               </tfoot>
@@ -335,14 +349,6 @@ function filterHref(status: FilterKey, query: string) {
   }
   const search = params.toString();
   return search ? `/invoices?${search}` : "/invoices";
-}
-
-function formatDate(date: string) {
-  return new Date(`${date}T00:00:00Z`).toLocaleDateString("en-US", {
-    day: "numeric",
-    month: "short",
-    timeZone: "UTC",
-  });
 }
 
 function sourceLabel(source: string, sourceClient: string | null) {

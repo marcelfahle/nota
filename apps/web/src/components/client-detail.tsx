@@ -18,7 +18,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { formatTaxIdentifier, taxIdentifierFromColumns } from "@/lib/tax-identifier";
-import { formatCurrency } from "@/lib/utils";
+import { formatCurrency, formatDate, type Locale } from "@/lib/utils";
 
 type BankAccountOption = {
   id: string;
@@ -57,10 +57,12 @@ export function ClientDetailView({
   bankAccounts,
   client,
   invoices,
+  locale = "en-US",
 }: {
   bankAccounts: Array<BankAccountOption>;
   client: Client;
   invoices: Array<Invoice>;
+  locale?: Locale;
 }) {
   const [editing, setEditing] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
@@ -173,9 +175,9 @@ export function ClientDetailView({
                 </div>
                 <div className="text-right">
                   <span className="text-sm font-medium">
-                    {formatCurrency(Number(inv.total ?? 0), inv.currency ?? "EUR")}
+                    {formatCurrency(Number(inv.total ?? 0), inv.currency ?? "EUR", locale)}
                   </span>
-                  <p className="text-xs text-zinc-500">Due {inv.dueAt}</p>
+                  <p className="text-xs text-zinc-500">Due {formatDate(inv.dueAt, locale)}</p>
                 </div>
               </Link>
             ))}

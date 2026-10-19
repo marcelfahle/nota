@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { getCurrentUser } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { clients, invoices } from "@/lib/db/schema";
-import { formatCurrency } from "@/lib/utils";
+import { formatCurrency, orgLocale } from "@/lib/utils";
 
 function getInitials(name: string): string {
   return name
@@ -80,7 +80,7 @@ export default async function ClientsPage() {
               </div>
               <div className="max-w-[38%] shrink-0 text-right">
                 <p className="truncate text-sm font-medium text-zinc-900">
-                  {formatCurrency(Number(client.totalInvoiced))}
+                  {formatCurrency(Number(client.totalInvoiced), "EUR", orgLocale(org))}
                 </p>
                 <p className="text-sm text-zinc-500">
                   {client.invoiceCount} {client.invoiceCount === 1 ? "invoice" : "invoices"}

@@ -12,6 +12,7 @@ import {
 } from "@react-email/components";
 
 import { APP_NAME } from "@/lib/app-brand";
+import { formatCurrency, formatDate, type Locale } from "@/lib/utils";
 
 type InvoiceSentEmailProps = {
   bankDetails?: string | null;
@@ -21,6 +22,7 @@ type InvoiceSentEmailProps = {
   dueAt: string;
   invoiceNumber: string;
   invoiceUrl: string | null;
+  locale?: Locale;
   paymentLinkUrl: string | null;
   reminder?: boolean;
   /** A copy the sender mailed to themselves. It must never pass for a real invoice. */
@@ -28,19 +30,12 @@ type InvoiceSentEmailProps = {
   total: string;
 };
 
-function formatCurrencyEmail(amount: string, currency: string): string {
-  return new Intl.NumberFormat("en-US", {
-    currency,
-    style: "currency",
-  }).format(Number.parseFloat(amount));
+function formatCurrencyEmail(amount: string, currency: string, locale: Locale): string {
+  return formatCurrency(Number.parseFloat(amount), currency, locale);
 }
 
-function formatDateEmail(dateStr: string): string {
-  return new Date(dateStr).toLocaleDateString("en-US", {
-    day: "numeric",
-    month: "long",
-    year: "numeric",
-  });
+function formatDateEmail(dateStr: string, locale: Locale): string {
+  return formatDate(dateStr, locale, { day: "numeric", month: "long", year: "numeric" });
 }
 
 export function InvoiceSentEmail({
@@ -51,6 +46,7 @@ export function InvoiceSentEmail({
   dueAt,
   invoiceNumber,
   invoiceUrl,
+  locale = "en-US",
   paymentLinkUrl,
   reminder = false,
   testCopy = false,
@@ -58,7 +54,7 @@ export function InvoiceSentEmail({
 }: InvoiceSentEmailProps) {
   const actionUrl = invoiceUrl ?? paymentLinkUrl;
   const subject = reminder
-    ? `Reminder: Invoice ${invoiceNumber} — ${formatCurrencyEmail(total, currency)} due`
+    ? `Reminder: Invoice ${invoiceNumber} — ${formatCurrencyEmail(total, currency, locale)} due`
     : `Invoice ${invoiceNumber} from ${businessName}`;
 
   return (
@@ -91,8 +87,8 @@ export function InvoiceSentEmail({
           <Section style={styles.invoiceBox}>
             <Text style={styles.invoiceLabel}>Invoice</Text>
             <Text style={styles.invoiceNumber}>{invoiceNumber}</Text>
-            <Text style={styles.invoiceAmount}>{formatCurrencyEmail(total, currency)}</Text>
-            <Text style={styles.invoiceDue}>Due {formatDateEmail(dueAt)}</Text>
+            <Text style={styles.invoiceAmount}>{formatCurrencyEmail(total, currency, locale)}</Text>
+            <Text style={styles.invoiceDue}>Due {formatDateEmail(dueAt, locale)}</Text>
           </Section>
 
           {actionUrl ? (

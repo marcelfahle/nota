@@ -5,6 +5,7 @@ import { ClientDetailView } from "@/components/client-detail";
 import { getCurrentUser } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { bankAccounts, clients, invoices } from "@/lib/db/schema";
+import { orgLocale } from "@/lib/utils";
 
 export default async function ClientDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -50,6 +51,7 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
       bankAccounts={organizationBankAccounts}
       client={client}
       invoices={clientInvoices}
+      locale={orgLocale(org)}
     />
   );
 }

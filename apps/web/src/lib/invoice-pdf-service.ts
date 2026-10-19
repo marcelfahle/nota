@@ -7,6 +7,7 @@ import { db } from "@/lib/db";
 import { bankAccounts, clients, invoices, lineItems } from "@/lib/db/schema";
 import { buildInvoiceFilename } from "@/lib/invoice-filename";
 import { invoiceTaxIdentifier, type TaxIdentifierType } from "@/lib/tax-identifier";
+import { orgLocale } from "@/lib/utils";
 
 export type InvoicePdfOrg = {
   brandColor: string | null;
@@ -116,6 +117,7 @@ export async function renderInvoicePdfForOrg(
         bic: bankAccount?.bic ?? null,
         brandColor: org.brandColor,
         iban: bankAccount?.iban ?? null,
+        locale: orgLocale(org),
         logoSrc,
         name: org.legalName ?? org.businessName ?? org.name,
         taxIdentifier: invoiceTaxIdentifier(invoice.status, invoice.sellerTaxIdentifier, org),

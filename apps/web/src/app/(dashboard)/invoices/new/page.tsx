@@ -7,6 +7,7 @@ import { InvoiceForm } from "@/components/invoice-form";
 import { getCurrentUser } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { clients } from "@/lib/db/schema";
+import { orgLocale } from "@/lib/utils";
 
 export default async function NewInvoicePage() {
   const { org } = await getCurrentUser();
@@ -35,7 +36,7 @@ export default async function NewInvoicePage() {
       <h1 className="mb-6 text-lg font-semibold">New Invoice</h1>
 
       <div className="max-w-3xl">
-        <InvoiceForm action={createInvoice} clients={clientList} />
+        <InvoiceForm action={createInvoice} clients={clientList} locale={orgLocale(org)} />
       </div>
     </div>
   );

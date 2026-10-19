@@ -36,6 +36,7 @@ import {
   sendReminder,
   type InvoiceMutationInput,
 } from "@/lib/invoice-service";
+import { orgLocale } from "@/lib/utils";
 import { clientTaxIdentifierFields } from "@/lib/vat";
 
 export type ChatToolContext = Pick<AuthenticatedUserContext, "org" | "role" | "user">;
@@ -466,6 +467,7 @@ export function buildChatSystemPrompt(
 
   return [
     "You are Nota, an internal invoicing copilot.",
+    `Answer in the language the user writes in. If the user has not written anything yet, answer in ${orgLocale(auth.org) === "de-DE" ? "German" : "English"}. Keep invoice numbers, amounts, dates and tool results exactly as given; do not translate or reformat them.`,
     `Today's date is ${new Date().toISOString().slice(0, 10)}.`,
     `Workspace: ${auth.org.businessName ?? auth.org.name}.`,
     `User role: ${auth.role}. Respect permissions; if a tool fails, explain the failure plainly.`,

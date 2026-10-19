@@ -46,7 +46,7 @@ import {
   canSendInvoice,
   canSendInvoiceReminder,
 } from "@/lib/roles";
-import { formatCurrency } from "@/lib/utils";
+import { formatCurrency, formatDate, type Locale, orgLocale } from "@/lib/utils";
 
 type ActivityEntry = {
   action: string;
@@ -121,15 +121,6 @@ const ACTIVITY_LABELS: Record<string, string> = {
   viewed: "Invoice opened",
 };
 
-function formatDate(value: string) {
-  return new Intl.DateTimeFormat("en-GB", {
-    day: "numeric",
-    month: "short",
-    timeZone: "UTC",
-    year: "numeric",
-  }).format(new Date(value));
-}
-
 function daysUntil(value: string) {
   const due = new Date(`${value}T00:00:00`);
   const today = new Date();
@@ -162,13 +153,13 @@ function sourceLabel(activity: ActivityEntry) {
   return "Nota";
 }
 
-function activityText(activity: ActivityEntry, currency: string) {
+function activityText(activity: ActivityEntry, currency: string, locale: Locale) {
   const metadata =
     activity.metadata && typeof activity.metadata === "object"
       ? (activity.metadata as Record<string, unknown>)
       : null;
   if (activity.action === "paid" && typeof metadata?.amount === "string") {
-    return `${formatCurrency(Number(metadata.amount), currency)} payment recorded`;
+    return `${formatCurrency(Number(metadata.amount), currency, locale)} payment recorded`;
   }
   return ACTIVITY_LABELS[activity.action] ?? activity.action.replaceAll("_", " ");
 }
@@ -176,6 +167,7 @@ function activityText(activity: ActivityEntry, currency: string) {
 export function InvoiceDetailView({ activities, business, invoice, role }: InvoiceDetailProps) {
   const router = useRouter();
   const currency = invoice.currency ?? "EUR";
+  const locale = orgLocale(business);
   const status = normalizeInvoiceStatus(invoice.status);
   const total = Number(invoice.total ?? 0);
   const paid = Number(invoice.paidAmount);
@@ -461,11 +453,11 @@ export function InvoiceDetailView({ activities, business, invoice, role }: Invoi
               </div>
               <div>
                 <dt className="nota-label text-zinc-500">Issued</dt>
-                <dd className="mt-2 font-mono text-xs">{formatDate(invoice.issuedAt)}</dd>
+                <dd className="mt-2 font-mono text-xs">{formatDate(invoice.issuedAt, locale)}</dd>
               </div>
               <div>
                 <dt className="nota-label text-zinc-500">Due</dt>
-                <dd className="mt-2 font-mono text-xs">{formatDate(invoice.dueAt)}</dd>
+                <dd className="mt-2 font-mono text-xs">{formatDate(invoice.dueAt, locale)}</dd>
               </div>
             </dl>
 
@@ -484,14 +476,14 @@ export function InvoiceDetailView({ activities, business, invoice, role }: Invoi
                       <td className="py-5 pr-4">
                         <span className="font-medium">{item.description}</span>
                         <span className="mt-1 block font-mono text-xs text-zinc-500">
-                          {formatCurrency(Number(item.unitPrice), currency)} each
+                          {formatCurrency(Number(item.unitPrice), currency, locale)} each
                         </span>
                       </td>
                       <td className="py-5 text-right font-mono text-xs whitespace-nowrap">
                         {item.quantity}
                       </td>
                       <td className="py-5 text-right font-mono text-xs whitespace-nowrap">
-                        {formatCurrency(Number(item.amount), currency)}
+                        {formatCurrency(Number(item.amount), currency, locale)}
                       </td>
                     </tr>
                   ))}
@@ -500,15 +492,15 @@ export function InvoiceDetailView({ activities, business, invoice, role }: Invoi
               <dl className="mt-6 ml-auto w-full max-w-64 space-y-2 font-mono text-xs">
                 <div className="flex justify-between">
                   <dt className="text-zinc-500">Subtotal</dt>
-                  <dd>{formatCurrency(Number(invoice.subtotal), currency)}</dd>
+                  <dd>{formatCurrency(Number(invoice.subtotal), currency, locale)}</dd>
                 </div>
                 <div className="flex justify-between">
                   <dt className="text-zinc-500">VAT {invoice.taxRate}%</dt>
-                  <dd>{formatCurrency(Number(invoice.taxAmount), currency)}</dd>
+                  <dd>{formatCurrency(Number(invoice.taxAmount), currency, locale)}</dd>
                 </div>
                 <div className="mt-3 flex justify-between border-t pt-3 text-sm font-bold">
                   <dt>Total</dt>
-                  <dd>{formatCurrency(total, currency)}</dd>
+                  <dd>{formatCurrency(total, currency, locale)}</dd>
                 </div>
               </dl>
             </div>
@@ -532,7 +524,9 @@ export function InvoiceDetailView({ activities, business, invoice, role }: Invoi
                 className="absolute right-7 bottom-7 left-7 flex items-center justify-between rounded-md px-5 py-4 text-sm font-semibold text-white sm:right-12 sm:left-12"
                 style={{ backgroundColor: business.brandColor || "#1f1b16" }}
               >
-                <span>{balance > 0 ? `${formatCurrency(balance, currency)} due` : "Settled"}</span>
+                <span>
+                  {balance > 0 ? `${formatCurrency(balance, currency, locale)} due` : "Settled"}
+                </span>
                 <span aria-hidden="true">→</span>
               </div>
             ) : null}
@@ -543,7 +537,7 @@ export function InvoiceDetailView({ activities, business, invoice, role }: Invoi
           <section className="border-b pb-7">
             <p className="nota-label text-muted-foreground">Still owed</p>
             <p className="mt-2 text-4xl font-semibold tabular-nums">
-              {formatCurrency(balance, currency)}
+              {formatCurrency(balance, currency, locale)}
             </p>
             <div
               aria-label={`${paidPercent}% paid`}
@@ -553,7 +547,7 @@ export function InvoiceDetailView({ activities, business, invoice, role }: Invoi
               <div className="h-full bg-primary" style={{ width: `${paidPercent}%` }} />
             </div>
             <div className="mt-2 flex justify-between font-mono text-[11px] text-muted-foreground">
-              <span>{formatCurrency(paid, currency)} paid</span>
+              <span>{formatCurrency(paid, currency, locale)} paid</span>
               <span>
                 {balance <= 0 || status === "cancelled"
                   ? "Settled"
@@ -621,9 +615,9 @@ export function InvoiceDetailView({ activities, business, invoice, role }: Invoi
                   <li className="grid grid-cols-[8px_1fr] gap-3" key={activity.id}>
                     <span className="mt-1.5 size-2 rounded-full bg-foreground" />
                     <div>
-                      <p className="text-sm">{activityText(activity, currency)}</p>
+                      <p className="text-sm">{activityText(activity, currency, locale)}</p>
                       <p className="mt-1 font-mono text-[11px] text-muted-foreground">
-                        {formatDate(activity.createdAt)} · via {sourceLabel(activity)}
+                        {formatDate(activity.createdAt, locale)} · via {sourceLabel(activity)}
                       </p>
                     </div>
                   </li>

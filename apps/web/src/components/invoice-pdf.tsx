@@ -2,6 +2,7 @@ import { Document, Font, Image, Link, Page, StyleSheet, Text, View } from "@reac
 
 import { formatIbanDisplay } from "@/lib/iban";
 import { formatTaxIdentifier, type TaxIdentifier } from "@/lib/tax-identifier";
+import { formatCurrency, formatDate, type Locale } from "@/lib/utils";
 
 // ---------------------------------------------------------------------------
 // Register Inter font family
@@ -44,6 +45,7 @@ type InvoicePdfProps = {
     bic?: string | null;
     brandColor?: string | null;
     iban?: string | null;
+    locale?: Locale;
     logoSrc?: string | null;
     name?: string | null;
     taxIdentifier?: TaxIdentifier | null;
@@ -349,20 +351,9 @@ const styles = StyleSheet.create({
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-function formatCurrencyPdf(amount: number | string, currency: string): string {
+function formatCurrencyPdf(amount: number | string, currency: string, locale: Locale): string {
   const num = typeof amount === "string" ? Number.parseFloat(amount) : amount;
-  return new Intl.NumberFormat("en-US", {
-    currency,
-    style: "currency",
-  }).format(num);
-}
-
-function formatDatePdf(dateStr: string): string {
-  return new Date(dateStr).toLocaleDateString("en-US", {
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-  });
+  return formatCurrency(num, currency, locale);
 }
 
 // ---------------------------------------------------------------------------
@@ -370,6 +361,7 @@ function formatDatePdf(dateStr: string): string {
 // ---------------------------------------------------------------------------
 export function InvoicePdf({ business, client, invoice }: InvoicePdfProps) {
   const currency = invoice.currency;
+  const locale = business.locale ?? "en-US";
   const taxRate = Number.parseFloat(invoice.taxRate);
   const hasPaymentDetails = business.iban || business.bankDetails || invoice.paymentLinkUrl;
   const accent = /^#[\da-f]{6}$/i.test(business.brandColor ?? "") ? business.brandColor! : c.text;
@@ -421,11 +413,11 @@ export function InvoicePdf({ business, client, invoice }: InvoicePdfProps) {
           <View>
             <View style={styles.dateRow}>
               <Text style={styles.dateLabel}>Issued</Text>
-              <Text style={styles.dateValue}>{formatDatePdf(invoice.issuedAt)}</Text>
+              <Text style={styles.dateValue}>{formatDate(invoice.issuedAt, locale)}</Text>
             </View>
             <View style={styles.dateRow}>
               <Text style={styles.dateLabel}>Due</Text>
-              <Text style={styles.dateValueDue}>{formatDatePdf(invoice.dueAt)}</Text>
+              <Text style={styles.dateValueDue}>{formatDate(invoice.dueAt, locale)}</Text>
             </View>
           </View>
         </View>
@@ -442,8 +434,12 @@ export function InvoicePdf({ business, client, invoice }: InvoicePdfProps) {
             <View key={index} style={styles.tableRow}>
               <Text style={styles.lineItemDesc}>{item.description}</Text>
               <Text style={styles.lineItemQty}>{item.quantity}</Text>
-              <Text style={styles.lineItemRate}>{formatCurrencyPdf(item.unitPrice, currency)}</Text>
-              <Text style={styles.lineItemAmount}>{formatCurrencyPdf(item.amount, currency)}</Text>
+              <Text style={styles.lineItemRate}>
+                {formatCurrencyPdf(item.unitPrice, currency, locale)}
+              </Text>
+              <Text style={styles.lineItemAmount}>
+                {formatCurrencyPdf(item.amount, currency, locale)}
+              </Text>
             </View>
           ))}
         </View>
@@ -452,20 +448,24 @@ export function InvoicePdf({ business, client, invoice }: InvoicePdfProps) {
         <View style={styles.totals}>
           <View style={styles.totalRow}>
             <Text style={styles.totalLabel}>Subtotal</Text>
-            <Text style={styles.totalValue}>{formatCurrencyPdf(invoice.subtotal, currency)}</Text>
+            <Text style={styles.totalValue}>
+              {formatCurrencyPdf(invoice.subtotal, currency, locale)}
+            </Text>
           </View>
           {taxRate > 0 && (
             <View style={styles.totalRow}>
               <Text style={styles.totalLabel}>Tax ({invoice.taxRate}%)</Text>
               <Text style={styles.totalValue}>
-                {formatCurrencyPdf(invoice.taxAmount, currency)}
+                {formatCurrencyPdf(invoice.taxAmount, currency, locale)}
               </Text>
             </View>
           )}
           <View style={styles.totalSeparator} />
           <View style={styles.totalRow}>
             <Text style={styles.grandTotalLabel}>Total</Text>
-            <Text style={styles.grandTotalValue}>{formatCurrencyPdf(invoice.total, currency)}</Text>
+            <Text style={styles.grandTotalValue}>
+              {formatCurrencyPdf(invoice.total, currency, locale)}
+            </Text>
           </View>
         </View>
 

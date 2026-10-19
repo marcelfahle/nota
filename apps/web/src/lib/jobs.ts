@@ -23,6 +23,7 @@ import { getAppEnv } from "@/lib/env";
 import { buildInvoiceFilename } from "@/lib/invoice-filename";
 import { reminderPayloadSchema } from "@/lib/proposal-service";
 import { invoiceTaxIdentifier } from "@/lib/tax-identifier";
+import { orgLocale } from "@/lib/utils";
 
 const JOB_LOCK_TIMEOUT_MS = 1000 * 60 * 10;
 
@@ -137,6 +138,7 @@ async function sendInvoiceEmail(invoiceId: string, recipient?: string, idempoten
       business: {
         address: formatOrgAddress(org),
         bankDetails,
+        locale: orgLocale(org),
         logoSrc,
         name: org.legalName ?? org.businessName ?? org.name,
         taxIdentifier: invoiceTaxIdentifier(invoice.status, invoice.sellerTaxIdentifier, org),
@@ -197,6 +199,7 @@ async function sendInvoiceEmail(invoiceId: string, recipient?: string, idempoten
       dueAt: invoice.dueAt,
       invoiceNumber: invoice.number,
       invoiceUrl: getPublicInvoiceUrl(invoice.publicToken),
+      locale: orgLocale(org),
       paymentLinkUrl: invoice.stripePaymentLinkUrl,
       testCopy: Boolean(recipient),
       total: invoice.total ?? "0",
@@ -257,6 +260,7 @@ async function sendInvoiceReminderEmail(
         dueAt: stored.dueAt,
         invoiceNumber: stored.invoiceNumber,
         invoiceUrl: getPublicInvoiceUrl(invoice.publicToken),
+        locale: stored.locale,
         paymentLinkUrl: stored.paymentLinkUrl,
         reminder: true,
         total: stored.total,
@@ -286,6 +290,7 @@ async function sendInvoiceReminderEmail(
       dueAt: invoice.dueAt,
       invoiceNumber: invoice.number,
       invoiceUrl: getPublicInvoiceUrl(invoice.publicToken),
+      locale: orgLocale(org),
       paymentLinkUrl: invoice.stripePaymentLinkUrl,
       reminder: true,
       total: invoice.total ?? "0",
@@ -308,6 +313,7 @@ async function sendPaymentReceivedEmail(invoiceId: string, idempotencyKey?: stri
       clientId: invoices.clientId,
       currency: invoices.currency,
       number: invoices.number,
+      orgId: invoices.orgId,
       paidAt: invoices.paidAt,
       total: invoices.total,
       userId: invoices.userId,
@@ -319,6 +325,14 @@ async function sendPaymentReceivedEmail(invoiceId: string, idempotencyKey?: stri
   if (!invoice) {
     throw new Error("Invoice not found");
   }
+
+  const [org] = invoice.orgId
+    ? await db
+        .select({ country: orgs.country })
+        .from(orgs)
+        .where(eq(orgs.id, invoice.orgId))
+        .limit(1)
+    : [];
 
   const [client] = await db
     .select({ name: clients.name })
@@ -342,6 +356,7 @@ async function sendPaymentReceivedEmail(invoiceId: string, idempotencyKey?: stri
       clientName: client?.name ?? "Client",
       currency: invoice.currency ?? "EUR",
       invoiceNumber: invoice.number,
+      locale: orgLocale(org),
       paidAt: invoice.paidAt ?? new Date().toISOString().split("T")[0],
       total: invoice.total ?? "0",
     }),

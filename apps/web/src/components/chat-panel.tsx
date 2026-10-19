@@ -21,7 +21,7 @@ import { ChatMarkdown } from "@/components/chat-markdown";
 import { NotaGlyph } from "@/components/nota-marks";
 import { Button } from "@/components/ui/button";
 import type { ChatActivity } from "@/lib/chat-store";
-import { formatCurrency } from "@/lib/utils";
+import { formatCurrency, type Locale } from "@/lib/utils";
 import { cn } from "@/lib/utils";
 
 type ToolOutputShape = {
@@ -156,11 +156,20 @@ function formatActivity(activity: ChatActivity) {
 function formatInvoiceAmount(
   total: string | null | undefined,
   currency: string | null | undefined,
+  locale: Locale,
 ) {
-  return formatCurrency(Number(total ?? 0), currency ?? "EUR");
+  return formatCurrency(Number(total ?? 0), currency ?? "EUR", locale);
 }
 
-function ToolResultCard({ output, type }: { output: ToolOutputShape; type: string }) {
+function ToolResultCard({
+  locale,
+  output,
+  type,
+}: {
+  locale: Locale;
+  output: ToolOutputShape;
+  type: string;
+}) {
   const label = getToolLabel(type);
 
   if (output.kind === "invoice-archive" && output.downloadUrl) {
@@ -221,18 +230,30 @@ function ToolResultCard({ output, type }: { output: ToolOutputShape; type: strin
                   ) : null}
                 </div>
                 <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-xs">
-                  <Metric currency={currency.currency} label="Issued" value={currency.issued} />
+                  <Metric
+                    currency={currency.currency}
+                    label="Issued"
+                    locale={locale}
+                    value={currency.issued}
+                  />
                   <Metric
                     currency={currency.currency}
                     label="Collected"
+                    locale={locale}
                     value={currency.collected}
                   />
                   <Metric
                     currency={currency.currency}
                     label="Outstanding"
+                    locale={locale}
                     value={currency.outstanding}
                   />
-                  <Metric currency={currency.currency} label="Overdue" value={currency.overdue} />
+                  <Metric
+                    currency={currency.currency}
+                    label="Overdue"
+                    locale={locale}
+                    value={currency.overdue}
+                  />
                 </dl>
                 {currency.topClients?.[0] ? (
                   <p className="mt-2 text-[11px] text-zinc-500">
@@ -273,7 +294,7 @@ function ToolResultCard({ output, type }: { output: ToolOutputShape; type: strin
           {output.invoice.clientName ?? "Unknown client"}
         </p>
         <div className="mt-3 flex items-center justify-between text-sm text-zinc-700">
-          <span>{formatInvoiceAmount(output.invoice.total, output.invoice.currency)}</span>
+          <span>{formatInvoiceAmount(output.invoice.total, output.invoice.currency, locale)}</span>
           <span>{output.invoice.dueAt ?? "No due date"}</span>
         </div>
         {output.downloadUrl ? (
@@ -325,7 +346,7 @@ function ToolResultCard({ output, type }: { output: ToolOutputShape; type: strin
               </div>
               <div className="text-right">
                 <p className="text-zinc-800">
-                  {formatInvoiceAmount(invoice.total, invoice.currency)}
+                  {formatInvoiceAmount(invoice.total, invoice.currency, locale)}
                 </p>
                 <p className="text-xs text-zinc-500 uppercase">{invoice.status}</p>
               </div>
@@ -383,18 +404,34 @@ function ToolResultCard({ output, type }: { output: ToolOutputShape; type: strin
   );
 }
 
-function Metric({ currency, label, value }: { currency?: string; label: string; value?: number }) {
+function Metric({
+  currency,
+  label,
+  locale,
+  value,
+}: {
+  currency?: string;
+  label: string;
+  locale: Locale;
+  value?: number;
+}) {
   return (
     <div>
       <dt className="text-zinc-500">{label}</dt>
       <dd className="mt-0.5 font-medium text-zinc-900 tabular-nums">
-        {formatCurrency(value ?? 0, currency ?? "EUR")}
+        {formatCurrency(value ?? 0, currency ?? "EUR", locale)}
       </dd>
     </div>
   );
 }
 
-function ToolPart({ part }: { part: Extract<UIMessage["parts"][number], { type: string }> }) {
+function ToolPart({
+  locale,
+  part,
+}: {
+  locale: Locale;
+  part: Extract<UIMessage["parts"][number], { type: string }>;
+}) {
   if (!isToolOrDynamicToolUIPart(part)) {
     return null;
   }
@@ -422,6 +459,7 @@ function ToolPart({ part }: { part: Extract<UIMessage["parts"][number], { type: 
   if (part.state === "output-available") {
     return (
       <ToolResultCard
+        locale={locale}
         output={part.output as ToolOutputShape}
         type={part.type === "dynamic-tool" ? part.toolName : part.type}
       />
@@ -431,7 +469,7 @@ function ToolPart({ part }: { part: Extract<UIMessage["parts"][number], { type: 
   return null;
 }
 
-function MessageBubble({ message }: { message: UIMessage }) {
+function MessageBubble({ locale, message }: { locale: Locale; message: UIMessage }) {
   const isUser = message.role === "user";
   const hasText = message.parts.some((part) => isTextUIPart(part));
   const hasTools = message.parts.some((part) => isToolOrDynamicToolUIPart(part));
@@ -466,7 +504,7 @@ function MessageBubble({ message }: { message: UIMessage }) {
           <div className="space-y-2">
             {message.parts.map((part, index) =>
               isToolOrDynamicToolUIPart(part) ? (
-                <ToolPart key={`${message.id}-tool-${index}`} part={part} />
+                <ToolPart key={`${message.id}-tool-${index}`} locale={locale} part={part} />
               ) : null,
             )}
           </div>
@@ -479,6 +517,7 @@ function MessageBubble({ message }: { message: UIMessage }) {
 export function ChatPanel({
   dockAction,
   inputRef,
+  locale = "en-US",
   mode,
   onDockSubmit,
   onOpenChange,
@@ -489,6 +528,8 @@ export function ChatPanel({
   /** First run only: the one next step, offered in the phone dock. */
   dockAction?: { label: string; onClick: () => void };
   inputRef: React.RefObject<HTMLTextAreaElement | null>;
+  /** Display locale for amounts in result cards. */
+  locale?: Locale;
   mode: "first-run" | "home" | "panel";
   /** First run only: a message was sent from the phone dock. */
   onDockSubmit?: () => void;
@@ -951,7 +992,9 @@ export function ChatPanel({
             </div>
           </div>
         ) : (
-          messages.map((message) => <MessageBubble key={message.id} message={message} />)
+          messages.map((message) => (
+            <MessageBubble key={message.id} locale={locale} message={message} />
+          ))
         )}
 
         {csvFile ? (
