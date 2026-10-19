@@ -635,7 +635,12 @@ export function createChatTools(auth: ChatToolContext) {
           .optional(),
         city: z.string().trim().optional(),
         company: z.string().trim().optional(),
-        countryCode: z.string().trim().length(2).describe("ISO 3166-1 alpha-2, e.g. DE").optional(),
+        countryCode: z
+          .string()
+          .trim()
+          .regex(/^[A-Za-z]{2}$/)
+          .describe("ISO 3166-1 alpha-2, e.g. DE")
+          .optional(),
         defaultBuyerReference: z
           .string()
           .trim()
@@ -723,13 +728,16 @@ export function createChatTools(auth: ChatToolContext) {
             throw error;
           }
 
+          // An explicit "not reverse charge" skips the copied template and takes the workspace default.
           const taxTreatment =
             input.taxTreatment ??
-            (input.reverseCharge
+            (input.reverseCharge === true
               ? "reverse_charge"
-              : useTemplateDefaults
-                ? latestInvoiceTemplate?.taxTreatment
-                : undefined);
+              : input.reverseCharge === false
+                ? undefined
+                : useTemplateDefaults
+                  ? latestInvoiceTemplate?.taxTreatment
+                  : undefined);
           const serviceMonth = input.serviceMonth?.match(/^(\d{4})-(\d{2})$/);
           const servicePeriod =
             input.servicePeriodStart || input.servicePeriodEnd

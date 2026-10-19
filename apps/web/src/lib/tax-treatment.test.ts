@@ -1,26 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
-import {
-  legacyReverseCharge,
-  taxCategory,
-  taxTreatmentFromLegacy,
-  taxTreatmentNote,
-} from "@/lib/tax-treatment";
-
-describe("taxTreatmentFromLegacy", () => {
-  test("keeps reverse charge and reads 0% as zero-rated, never as an exemption", () => {
-    expect(taxTreatmentFromLegacy("true", "0")).toBe("reverse_charge");
-    expect(taxTreatmentFromLegacy(true, "19")).toBe("reverse_charge");
-    expect(taxTreatmentFromLegacy("false", "0")).toBe("zero_rated");
-    expect(taxTreatmentFromLegacy(null, null)).toBe("zero_rated");
-    expect(taxTreatmentFromLegacy("false", "19")).toBe("standard");
-  });
-
-  test("round-trips through the legacy flag", () => {
-    expect(legacyReverseCharge("reverse_charge")).toBe("true");
-    expect(legacyReverseCharge("exempt_small_business")).toBe("false");
-  });
-});
+import { legacyReverseCharge, taxCategory, taxTreatmentNote } from "@/lib/tax-treatment";
 
 describe("taxCategory", () => {
   test("maps each treatment to its UNTDID 5305 category", () => {
@@ -40,6 +20,8 @@ describe("taxCategory", () => {
 
   test("prints a legal note for everything except standard VAT", () => {
     expect(taxTreatmentNote("standard")).toBeNull();
+    expect(legacyReverseCharge("reverse_charge")).toBe("true");
+    expect(legacyReverseCharge("exempt_small_business")).toBe("false");
     expect(taxTreatmentNote("exempt_small_business")).toContain("§ 19 UStG");
     expect(taxTreatmentNote("reverse_charge")).toContain("Steuerschuldnerschaft");
   });

@@ -16,6 +16,7 @@ import {
 } from "@/lib/tax-identifier";
 import { TAX_TREATMENTS } from "@/lib/tax-treatment";
 import { clientTaxIdentifierFields } from "@/lib/vat";
+import { toCountryCode } from "@/lib/xrechnung";
 
 const settingsSchema = z.object({
   defaultCurrency: z.string().optional().default("EUR"),
@@ -155,6 +156,13 @@ export async function updateBrandSettings(
   }
   if (dirtyFields.includes("defaultTaxTreatment")) {
     update.defaultTaxTreatment = values.defaultTaxTreatment;
+  }
+  // A new country name refreshes the ISO code unless the code was edited itself.
+  if (dirtyFields.includes("country") && !dirtyFields.includes("countryCode")) {
+    const code = toCountryCode(values.country);
+    if (code) {
+      update.countryCode = code;
+    }
   }
   if (dirtyFields.includes("taxIdentifierType") || dirtyFields.includes("taxIdentifierValue")) {
     try {

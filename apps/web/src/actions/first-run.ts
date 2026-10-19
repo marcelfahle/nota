@@ -20,6 +20,7 @@ import {
 } from "@/lib/roles";
 import { TAX_IDENTIFIER_TYPES, TaxIdentifierValidationError } from "@/lib/tax-identifier";
 import { clientTaxIdentifierFields } from "@/lib/vat";
+import { toCountryCode } from "@/lib/xrechnung";
 
 const MAX_UNCONFIRMED_TEST_COPIES = 3;
 
@@ -87,6 +88,8 @@ export async function saveFirstRunProfile(
       .update(orgs)
       .set({
         ...profile,
+        // The free text stays as typed; the ISO code is what invoices need.
+        countryCode: toCountryCode(profile.country) ?? org.countryCode,
         ...(await clientTaxIdentifierFields({
           type: taxIdentifierType,
           value: taxIdentifierValue,

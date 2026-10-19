@@ -12,19 +12,21 @@ ALTER TABLE "invoices" ADD COLUMN "tax_treatment" "tax_treatment" DEFAULT 'stand
 ALTER TABLE "orgs" ADD COLUMN "contact_name" text;--> statement-breakpoint
 ALTER TABLE "orgs" ADD COLUMN "contact_phone" text;--> statement-breakpoint
 ALTER TABLE "orgs" ADD COLUMN "country_code" text;--> statement-breakpoint
-ALTER TABLE "orgs" ADD COLUMN "default_tax_treatment" "tax_treatment" DEFAULT 'standard' NOT NULL;
+ALTER TABLE "orgs" ADD COLUMN "default_tax_treatment" "tax_treatment" DEFAULT 'standard' NOT NULL;--> statement-breakpoint
 
 -- Existing documents only carried a reverse-charge flag and a rate. Reverse
--- charge stays reverse charge; a 0% rate becomes zero-rated because that is
--- what the document said. A Kleinunternehmer exemption is never inferred.
+-- charge stays reverse charge; a stated 0% rate becomes zero-rated because that
+-- is what the document said. A rate that was never entered stays standard, and
+-- a Kleinunternehmer exemption is never inferred. Rows that stay standard are
+-- not rewritten.
 UPDATE "invoices" SET "tax_treatment" = CASE
   WHEN "reverse_charge" = 'true' THEN 'reverse_charge'::"tax_treatment"
-  WHEN coalesce("tax_rate", 0) = 0 THEN 'zero_rated'::"tax_treatment"
-  ELSE 'standard'::"tax_treatment" END;--> statement-breakpoint
+  ELSE 'zero_rated'::"tax_treatment" END
+WHERE "reverse_charge" = 'true' OR "tax_rate" = 0;--> statement-breakpoint
 
 -- One-time best-effort read of the free-text country. The text itself is kept.
+-- Names are matched first so "UK" becomes GB; bare codes must be real ISO codes.
 UPDATE "orgs" SET "country_code" = CASE
-  WHEN upper(btrim("country")) ~ '^[A-Z]{2}$' THEN upper(btrim("country"))
   WHEN lower(btrim("country")) IN ('germany', 'deutschland') THEN 'DE'
   WHEN lower(btrim("country")) IN ('austria', 'österreich', 'oesterreich') THEN 'AT'
   WHEN lower(btrim("country")) IN ('switzerland', 'schweiz', 'suisse', 'svizzera') THEN 'CH'
@@ -33,22 +35,31 @@ UPDATE "orgs" SET "country_code" = CASE
   WHEN lower(btrim("country")) IN ('italy', 'italia') THEN 'IT'
   WHEN lower(btrim("country")) IN ('netherlands', 'the netherlands', 'nederland') THEN 'NL'
   WHEN lower(btrim("country")) IN ('belgium', 'belgië', 'belgique') THEN 'BE'
+  WHEN lower(btrim("country")) IN ('luxembourg', 'luxemburg') THEN 'LU'
   WHEN lower(btrim("country")) IN ('portugal') THEN 'PT'
   WHEN lower(btrim("country")) IN ('ireland') THEN 'IE'
   WHEN lower(btrim("country")) IN ('poland', 'polska') THEN 'PL'
+  WHEN lower(btrim("country")) IN ('czechia', 'czech republic') THEN 'CZ'
   WHEN lower(btrim("country")) IN ('denmark', 'danmark') THEN 'DK'
   WHEN lower(btrim("country")) IN ('sweden', 'sverige') THEN 'SE'
+  WHEN lower(btrim("country")) IN ('norway', 'norge') THEN 'NO'
+  WHEN lower(btrim("country")) IN ('finland', 'suomi') THEN 'FI'
   WHEN lower(btrim("country")) IN ('united kingdom', 'uk', 'great britain', 'england') THEN 'GB'
   WHEN lower(btrim("country")) IN ('united states', 'united states of america', 'usa') THEN 'US'
+  WHEN upper(btrim("country")) IN ('AT','BE','BG','CH','CY','CZ','DE','DK','EE','ES','FI','FR','GB','GR','HR','HU','IE','IT','LI','LT','LU','LV','MT','NL','NO','PL','PT','RO','SE','SI','SK','US')
+    THEN upper(btrim("country"))
   ELSE NULL END
 WHERE "country_code" IS NULL AND "country" IS NOT NULL AND btrim("country") <> '';--> statement-breakpoint
 
--- Seller contact (BR-DE-2) defaults to the workspace owner. Only fills gaps.
+-- Seller contact (BR-DE-2) defaults to the first workspace owner. Only fills gaps.
 UPDATE "orgs" o SET
   "contact_name" = coalesce(o."contact_name", u."name"),
   "contact_email" = coalesce(o."contact_email", u."email")
-FROM "org_members" m JOIN "users" u ON u."id" = m."user_id"
-WHERE m."org_id" = o."id" AND m."role" = 'owner'
+FROM (
+  SELECT DISTINCT ON ("org_id") "org_id", "user_id"
+  FROM "org_members" WHERE "role" = 'owner' ORDER BY "org_id", "created_at", "id"
+) m JOIN "users" u ON u."id" = m."user_id"
+WHERE m."org_id" = o."id"
   AND (o."contact_name" IS NULL OR o."contact_email" IS NULL);--> statement-breakpoint
 
 -- One-time best-effort split of "Street, 12345 City, Country" or the same on
@@ -63,9 +74,7 @@ UPDATE "clients" c SET
   "street" = parts[1],
   "postal_code" = parts[2],
   "city" = parts[3],
-  "country_code" = CASE
-    WHEN parts[4] IS NULL THEN NULL
-    WHEN upper(btrim(parts[4])) ~ '^[A-Z]{2}$' THEN upper(btrim(parts[4]))
+  "country_code" = CASE WHEN parts[4] IS NULL THEN NULL ELSE CASE
     WHEN lower(btrim(parts[4])) IN ('germany', 'deutschland') THEN 'DE'
     WHEN lower(btrim(parts[4])) IN ('austria', 'österreich', 'oesterreich') THEN 'AT'
     WHEN lower(btrim(parts[4])) IN ('switzerland', 'schweiz', 'suisse', 'svizzera') THEN 'CH'
@@ -74,13 +83,19 @@ UPDATE "clients" c SET
     WHEN lower(btrim(parts[4])) IN ('italy', 'italia') THEN 'IT'
     WHEN lower(btrim(parts[4])) IN ('netherlands', 'the netherlands', 'nederland') THEN 'NL'
     WHEN lower(btrim(parts[4])) IN ('belgium', 'belgië', 'belgique') THEN 'BE'
+    WHEN lower(btrim(parts[4])) IN ('luxembourg', 'luxemburg') THEN 'LU'
     WHEN lower(btrim(parts[4])) IN ('portugal') THEN 'PT'
     WHEN lower(btrim(parts[4])) IN ('ireland') THEN 'IE'
     WHEN lower(btrim(parts[4])) IN ('poland', 'polska') THEN 'PL'
+    WHEN lower(btrim(parts[4])) IN ('czechia', 'czech republic') THEN 'CZ'
     WHEN lower(btrim(parts[4])) IN ('denmark', 'danmark') THEN 'DK'
     WHEN lower(btrim(parts[4])) IN ('sweden', 'sverige') THEN 'SE'
+    WHEN lower(btrim(parts[4])) IN ('norway', 'norge') THEN 'NO'
+    WHEN lower(btrim(parts[4])) IN ('finland', 'suomi') THEN 'FI'
     WHEN lower(btrim(parts[4])) IN ('united kingdom', 'uk', 'great britain', 'england') THEN 'GB'
     WHEN lower(btrim(parts[4])) IN ('united states', 'united states of america', 'usa') THEN 'US'
-    ELSE NULL END
+    WHEN upper(btrim(parts[4])) IN ('AT','BE','BG','CH','CY','CZ','DE','DK','EE','ES','FI','FR','GB','GR','HR','HU','IE','IT','LI','LT','LU','LV','MT','NL','NO','PL','PT','RO','SE','SI','SK','US')
+      THEN upper(btrim(parts[4]))
+    ELSE NULL END END
 FROM parsed
 WHERE parsed."id" = c."id" AND parsed.parts IS NOT NULL;

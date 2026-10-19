@@ -131,7 +131,7 @@ describe("validateForIssuance", () => {
     input.invoice.taxTreatment = "reverse_charge";
     input.invoice.taxRate = "0";
     expect(validateForIssuance(input)).toEqual([
-      "Reverse charge applies to business customers outside Germany. Use standard VAT for German clients.",
+      "Reverse charge applies to business customers in another country. Use standard VAT for domestic clients.",
     ]);
 
     input.client.countryCode = "FR";
@@ -191,6 +191,15 @@ describe("validateForIssuance", () => {
     ]);
   });
 
+  test("an Austrian seller may reverse-charge a German business", () => {
+    const input = germanB2B();
+    input.org.countryCode = "AT";
+    input.invoice.taxTreatment = "reverse_charge";
+    input.invoice.taxRate = "0";
+    expect(validateForIssuance(input)).toEqual([]);
+    expect(validateForXRechnung(input)).toEqual([]);
+  });
+
   test("non-German orgs keep their legacy freedom apart from consistency", () => {
     const input = germanB2B();
     input.org.countryCode = "ES";
@@ -211,6 +220,14 @@ describe("validateForIssuance", () => {
 });
 
 describe("validateForXRechnung", () => {
+  test("does not demand a period from an already issued legacy invoice", () => {
+    const input = germanB2B();
+    input.invoice.issued = true;
+    input.invoice.servicePeriodStart = null;
+    input.invoice.servicePeriodEnd = null;
+    expect(validateForXRechnung(input)).toEqual([]);
+  });
+
   test("adds the seller phone and party requirements for any org", () => {
     const input = germanB2B();
     input.org.contactPhone = null;

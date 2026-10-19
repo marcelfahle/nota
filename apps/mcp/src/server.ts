@@ -232,13 +232,35 @@ function buildServer(client: NotaClient, options: NotaMcpServerOptions = {}) {
       annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
       description: "Create a new client in Nota.",
       inputSchema: {
-        address: z.string().trim().optional(),
+        address: z
+          .string()
+          .trim()
+          .describe("Legacy free text. Prefer street, postalCode, city and countryCode.")
+          .optional(),
         bankAccountId: z.string().uuid().nullable().optional(),
+        city: z.string().trim().optional(),
         company: z.string().trim().optional(),
+        countryCode: z
+          .string()
+          .trim()
+          .regex(/^[A-Za-z]{2}$/)
+          .describe("ISO 3166-1 alpha-2, e.g. DE")
+          .optional(),
+        defaultBuyerReference: z
+          .string()
+          .trim()
+          .describe("Leitweg-ID for public-sector clients, or a standing PO reference.")
+          .optional(),
         defaultCurrency: z.string().trim().optional(),
         email: z.string().email(),
         name: z.string().trim().min(1),
         notes: z.string().trim().optional(),
+        postalCode: z.string().trim().optional(),
+        publicSector: z
+          .boolean()
+          .describe("German public authority; its invoices need a Leitweg-ID.")
+          .optional(),
+        street: z.string().trim().optional(),
         taxIdentifier: z
           .object({
             countryCode: z.string().length(2).nullable().optional(),

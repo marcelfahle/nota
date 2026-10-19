@@ -21,7 +21,7 @@ import {
 } from "@/lib/db/schema";
 import { getDeploymentEnv, getStripeMode } from "@/lib/env";
 import {
-  type ComplianceInput,
+  complianceInput,
   taxTreatmentConflict,
   validateForIssuance,
 } from "@/lib/invoice-compliance";
@@ -64,7 +64,7 @@ import {
 } from "@/lib/roles";
 import { defaultServicePeriod } from "@/lib/service-period";
 import { createPaymentLink, deactivatePaymentLink } from "@/lib/stripe";
-import { invoiceTaxIdentifier, taxIdentifierFromColumns } from "@/lib/tax-identifier";
+import { invoiceTaxIdentifier } from "@/lib/tax-identifier";
 import { legacyReverseCharge, type TaxTreatment } from "@/lib/tax-treatment";
 
 export type InvoiceServiceContext = {
@@ -333,117 +333,56 @@ function draftIdentifier(id: string) {
   return `DRAFT-${id}`;
 }
 
-const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
+function isCalendarDate(value: string) {
+  return (
+    /^\d{4}-\d{2}-\d{2}$/.test(value) &&
+    new Date(`${value}T00:00:00Z`).toISOString().startsWith(value)
+  );
+}
+
+type LegalFields = {
+  buyerReference: string | null;
+  servicePeriodEnd: string | null;
+  servicePeriodStart: string | null;
+  taxTreatment: TaxTreatment;
+};
 
 /**
  * The legal fields of a draft: treatment, service period and buyer reference.
- * Missing values take the workspace and client defaults so every surface
- * (web, API, chat, MCP) ends up with the same document.
+ * Whatever the input leaves out comes from `fallback`: the workspace and client
+ * defaults on create, the stored draft on update. Every surface (web, API,
+ * chat, MCP) therefore ends up with the same document.
  */
 function resolveLegalFields(
   input: InvoiceMutationInput,
-  org: { defaultTaxTreatment: TaxTreatment },
-  client: { defaultBuyerReference: string | null },
-):
-  | { error: string }
-  | {
-      buyerReference: string | null;
-      reverseCharge: string;
-      servicePeriodEnd: string | null;
-      servicePeriodStart: string | null;
-      taxTreatment: TaxTreatment;
-    } {
+  fallback: LegalFields,
+): { error: string } | (LegalFields & { reverseCharge: string }) {
   const taxTreatment =
     input.taxTreatment ??
-    (input.reverseCharge === "true" ? "reverse_charge" : org.defaultTaxTreatment);
+    (input.reverseCharge === "true" ? "reverse_charge" : fallback.taxTreatment);
   const conflict = taxTreatmentConflict(taxTreatment, input.taxRate);
   if (conflict) {
     return { error: conflict };
   }
-  const start = input.servicePeriodStart?.trim() || null;
+  const start = input.servicePeriodStart?.trim() || input.servicePeriodEnd?.trim() || null;
   const end = input.servicePeriodEnd?.trim() || start;
-  if ((start && !ISO_DATE.test(start)) || (end && !ISO_DATE.test(end))) {
-    return { error: "Service period dates must use YYYY-MM-DD format" };
+  if ((start && !isCalendarDate(start)) || (end && !isCalendarDate(end))) {
+    return { error: "Service period dates must be real dates in YYYY-MM-DD format" };
   }
   if (start && end && end < start) {
     return { error: "The service period must end on or after it starts" };
   }
-  const period = start
-    ? { end: end!, start }
-    : defaultServicePeriod(input.lineItems, input.issuedAt);
   return {
     buyerReference:
       input.buyerReference === undefined
-        ? client.defaultBuyerReference
+        ? fallback.buyerReference
         : input.buyerReference?.trim() || null,
     reverseCharge: legacyReverseCharge(taxTreatment),
-    servicePeriodEnd: period?.end ?? null,
-    servicePeriodStart: period?.start ?? null,
+    servicePeriodEnd: end ?? fallback.servicePeriodEnd,
+    servicePeriodStart: start ?? fallback.servicePeriodStart,
     taxTreatment,
   };
 }
-
-function complianceInput(
-  org: Parameters<typeof taxIdentifierFromColumns>[0] & ComplianceOrgColumns,
-  client: Parameters<typeof taxIdentifierFromColumns>[0] & ComplianceClientColumns,
-  invoice: typeof invoices.$inferSelect,
-  lineItemCount: number,
-): ComplianceInput {
-  return {
-    client: {
-      address: client.address,
-      city: client.city,
-      company: client.company,
-      countryCode: client.countryCode,
-      name: client.name,
-      postalCode: client.postalCode,
-      publicSector: client.publicSector,
-      street: client.street,
-      taxIdentifier: invoiceTaxIdentifier(invoice.status, invoice.clientTaxIdentifier, client),
-    },
-    invoice: {
-      buyerReference: invoice.buyerReference,
-      kind: invoice.kind,
-      lineItemCount,
-      servicePeriodEnd: invoice.servicePeriodEnd,
-      servicePeriodStart: invoice.servicePeriodStart,
-      taxRate: invoice.taxRate,
-      taxTreatment: invoice.taxTreatment,
-    },
-    org: {
-      businessName: org.businessName,
-      city: org.city,
-      contactEmail: org.contactEmail,
-      contactName: org.contactName,
-      contactPhone: org.contactPhone,
-      countryCode: org.countryCode,
-      legalName: org.legalName,
-      name: org.name,
-      postalCode: org.postalCode,
-      street: org.street,
-      taxIdentifier: invoiceTaxIdentifier(invoice.status, invoice.sellerTaxIdentifier, org),
-    },
-  };
-}
-
-type ComplianceOrgColumns = Pick<
-  typeof orgs.$inferSelect,
-  | "businessName"
-  | "city"
-  | "contactEmail"
-  | "contactName"
-  | "contactPhone"
-  | "countryCode"
-  | "legalName"
-  | "name"
-  | "postalCode"
-  | "street"
->;
-
-type ComplianceClientColumns = Pick<
-  typeof clients.$inferSelect,
-  "address" | "city" | "company" | "countryCode" | "name" | "postalCode" | "publicSector" | "street"
->;
 
 function issuanceError(problems: Array<string>): InvoiceMutationError {
   return {
@@ -645,7 +584,13 @@ export async function createInvoice(
   if (!org) {
     return { error: "Organization not found" };
   }
-  const legal = resolveLegalFields(input, org, client);
+  const period = defaultServicePeriod(items, input.issuedAt);
+  const legal = resolveLegalFields(input, {
+    buyerReference: client.defaultBuyerReference,
+    servicePeriodEnd: period?.end ?? null,
+    servicePeriodStart: period?.start ?? null,
+    taxTreatment: org.defaultTaxTreatment,
+  });
   if ("error" in legal) {
     return legal;
   }
@@ -739,12 +684,13 @@ export async function updateInvoice(
   if (!org) {
     return { error: "Organization not found" };
   }
-  // An edit keeps the stored buyer reference unless the caller sets one.
-  const legal = resolveLegalFields(
-    { ...input, buyerReference: input.buyerReference ?? invoice.buyerReference },
-    org,
-    client,
-  );
+  // An edit keeps what the draft already says unless the caller changes it.
+  const legal = resolveLegalFields(input, {
+    buyerReference: invoice.buyerReference,
+    servicePeriodEnd: invoice.servicePeriodEnd,
+    servicePeriodStart: invoice.servicePeriodStart,
+    taxTreatment: invoice.taxTreatment,
+  });
   if ("error" in legal) {
     return legal;
   }

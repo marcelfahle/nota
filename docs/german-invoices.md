@@ -49,10 +49,10 @@ Always, even on save:
 At issuance, for every workspace:
 
 - A public-sector client without a buyer reference.
-- Reverse charge to a German client, or to an EU client without a VAT ID.
 
 At issuance, for German workspaces (`countryCode` DE), following § 14 Abs. 4 UStG:
 
+- Reverse charge to a client in the seller's own country, or to an EU client without a VAT ID.
 - Missing seller name, structured address, country, or tax identifier (Nr. 1 and 2).
 - Missing seller contact name or email (needed for the XRechnung the same invoice may become).
 - Missing client name or structured address with country (Nr. 1).
@@ -76,14 +76,18 @@ note.
 The migration keeps every historical value and only interprets the old flags:
 
 - `reverseCharge = true` becomes `reverse_charge`.
-- A 0% rate without the flag becomes `zero_rated`, because that is what the document said.
+- A stated 0% rate without the flag becomes `zero_rated`, because that is what the document said.
   A Kleinunternehmer exemption is never inferred; set the workspace default and edit drafts.
-- Everything else is `standard`.
+- Everything else, including a rate that was never entered, is `standard`.
 - Free-text addresses of the form "Street, 12345 City, Country" (or on three lines) are split
   once into structured fields. The free text is kept. Anything else stays free text until the
   client is edited, and a German workspace sees "Split the client's address" before issuing.
-- The workspace country code is read from the country name once when it is unambiguous.
-- The seller contact defaults to the workspace owner's name and email.
+- The workspace country code is read from the country name once when it is unambiguous
+  ("UK" becomes GB; unknown two-letter text is left empty). At runtime a workspace without a
+  stored code still counts as German when its country name says so.
+- The seller contact defaults to the first workspace owner's name and email.
+- An already issued invoice without a service period can still be exported as XRechnung; the
+  period is simply absent, because issued documents cannot be edited.
 
 Issued invoices are never renumbered, recalculated or rewritten.
 

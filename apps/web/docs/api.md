@@ -340,6 +340,7 @@ Notes:
 
 - returns `409` if the invoice is no longer a draft
 - request body matches `POST /invoices`
+- `taxTreatment`, `servicePeriodStart`/`servicePeriodEnd` and `buyerReference` keep their stored values when omitted; send `buyerReference: null` to clear it
 
 ### PATCH /invoices/:id/due-date
 

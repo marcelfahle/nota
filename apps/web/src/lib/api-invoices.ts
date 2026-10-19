@@ -30,7 +30,11 @@ export const apiLineItemSchema = z.object({
 const isoDate = z
   .string()
   .trim()
-  .regex(/^\d{4}-\d{2}-\d{2}$/, "Use YYYY-MM-DD dates");
+  .regex(/^\d{4}-\d{2}-\d{2}$/, "Use YYYY-MM-DD dates")
+  .refine(
+    (value) => new Date(`${value}T00:00:00Z`).toISOString().startsWith(value),
+    "Use a real calendar date",
+  );
 
 export const apiInvoicePayloadSchema = z.object({
   buyerReference: z.string().trim().max(200).nullable().optional(),

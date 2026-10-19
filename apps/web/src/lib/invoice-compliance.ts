@@ -1,5 +1,6 @@
-import { isViesCountry, type TaxIdentifier } from "@/lib/tax-identifier";
-import { requiresZeroRate, type TaxTreatment } from "@/lib/tax-treatment";
+import { invoiceTaxIdentifier, isViesCountry, type TaxIdentifier } from "@/lib/tax-identifier";
+import { requiresZeroRate, TAX_TREATMENT_LABELS, type TaxTreatment } from "@/lib/tax-treatment";
+import { toCountryCode } from "@/lib/xrechnung";
 
 /**
  * One place that says what a German invoice needs before it may be issued or
@@ -37,6 +38,8 @@ export type ComplianceClient = {
 
 export type ComplianceInvoice = {
   buyerReference?: string | null;
+  /** Issued documents are frozen; rules that need an edit are not raised against them. */
+  issued?: boolean;
   kind?: "credit_note" | "invoice";
   lineItemCount: number;
   servicePeriodEnd?: string | null;
@@ -53,6 +56,103 @@ export type ComplianceInput = {
 
 export function isGermanOrg(org: Pick<ComplianceOrg, "countryCode">) {
   return org.countryCode?.toUpperCase() === "DE";
+}
+
+type OrgColumns = {
+  businessName: string | null;
+  city: string | null;
+  contactEmail: string | null;
+  contactName: string | null;
+  contactPhone: string | null;
+  country: string | null;
+  countryCode: string | null;
+  legalName: string | null;
+  name: string;
+  postalCode: string | null;
+  street: string | null;
+  taxIdentifierCanonicalValue?: string | null;
+  taxIdentifierCountryCode?: string | null;
+  taxIdentifierType?: string | null;
+  taxIdentifierValue?: string | null;
+  vatNumber?: string | null;
+};
+
+type ClientColumns = {
+  address: string | null;
+  city: string | null;
+  company: string | null;
+  countryCode: string | null;
+  name: string;
+  postalCode: string | null;
+  publicSector: boolean;
+  street: string | null;
+  taxIdentifierCanonicalValue?: string | null;
+  taxIdentifierCountryCode?: string | null;
+  taxIdentifierType?: string | null;
+  taxIdentifierValue?: string | null;
+  vatNumber?: string | null;
+};
+
+type InvoiceColumns = {
+  buyerReference: string | null;
+  clientTaxIdentifier: TaxIdentifier | null;
+  kind: "credit_note" | "invoice";
+  sellerTaxIdentifier: TaxIdentifier | null;
+  servicePeriodEnd: string | null;
+  servicePeriodStart: string | null;
+  status: string | null;
+  taxRate: string | null;
+  taxTreatment: TaxTreatment;
+};
+
+/** The workspace's ISO country: the stored code, or the free-text name when it is unambiguous. */
+export function orgCountryCode(org: { country?: string | null; countryCode?: string | null }) {
+  return org.countryCode?.trim() || (org.country ? toCountryCode(org.country) : null);
+}
+
+/** Builds the validation input from database rows. The one place that knows the column names. */
+export function complianceInput(
+  org: OrgColumns,
+  client: ClientColumns,
+  invoice: InvoiceColumns,
+  lineItemCount: number,
+): ComplianceInput {
+  return {
+    client: {
+      address: client.address,
+      city: client.city,
+      company: client.company,
+      countryCode: client.countryCode,
+      name: client.name,
+      postalCode: client.postalCode,
+      publicSector: client.publicSector,
+      street: client.street,
+      taxIdentifier: invoiceTaxIdentifier(invoice.status, invoice.clientTaxIdentifier, client),
+    },
+    invoice: {
+      buyerReference: invoice.buyerReference,
+      issued: invoice.status !== "draft",
+      kind: invoice.kind,
+      lineItemCount,
+      servicePeriodEnd: invoice.servicePeriodEnd,
+      servicePeriodStart: invoice.servicePeriodStart,
+      taxRate: invoice.taxRate,
+      taxTreatment: invoice.taxTreatment,
+    },
+    org: {
+      businessName: org.businessName,
+      city: org.city,
+      contactEmail: org.contactEmail,
+      contactName: org.contactName,
+      contactPhone: org.contactPhone,
+      countryCode: orgCountryCode(org),
+      legalName: org.legalName,
+      name: org.name,
+      postalCode: org.postalCode,
+      street: org.street,
+      taxIdentifier: invoiceTaxIdentifier(invoice.status, invoice.sellerTaxIdentifier, org),
+    },
+  };
 }
 
 function hasStructuredAddress(party: {
@@ -72,13 +172,7 @@ export function taxTreatmentConflict(
   taxRate: string | number | null | undefined,
 ): string | null {
   if (requiresZeroRate(treatment) && Number(taxRate ?? 0) !== 0) {
-    const label =
-      treatment === "reverse_charge"
-        ? "Reverse charge"
-        : treatment === "exempt_small_business"
-          ? "Small business exemption (§ 19 UStG)"
-          : "Zero-rated";
-    return `${label} invoices carry no VAT. Set the tax rate to 0 or choose standard VAT.`;
+    return `${TAX_TREATMENT_LABELS[treatment]} invoices carry no VAT. Set the tax rate to 0 or choose standard VAT.`;
   }
   return null;
 }
@@ -125,14 +219,21 @@ function buyerProblems(client: ComplianceClient) {
   return problems;
 }
 
-function taxProblems({ client, invoice }: ComplianceInput, explicitZero: boolean) {
+/**
+ * `strict` is on for German workspaces at issuance and for every XRechnung
+ * export. Other workspaces keep their legacy freedom apart from the conflict.
+ */
+function taxProblems({ client, invoice, org }: ComplianceInput, strict: boolean) {
   const problems: Array<string> = [];
   const conflict = taxTreatmentConflict(invoice.taxTreatment, invoice.taxRate);
   if (conflict) {
     problems.push(conflict);
   }
+  if (!strict) {
+    return problems;
+  }
   // § 14 Abs. 4 Nr. 8 UStG: a 0% invoice must say why. BR-S-05: category S needs a rate above zero.
-  if (explicitZero && invoice.taxTreatment === "standard" && Number(invoice.taxRate ?? 0) === 0) {
+  if (invoice.taxTreatment === "standard" && Number(invoice.taxRate ?? 0) === 0) {
     problems.push(
       "The tax rate is 0% but the treatment is standard VAT. Pick zero-rated, small business exemption (§ 19 UStG) or reverse charge, or set a tax rate.",
     );
@@ -140,9 +241,10 @@ function taxProblems({ client, invoice }: ComplianceInput, explicitZero: boolean
   // § 13b UStG / Art. 196 VAT Directive: a business customer abroad owes the VAT.
   if (invoice.taxTreatment === "reverse_charge") {
     const clientCountry = client.countryCode?.toUpperCase() ?? "";
-    if (clientCountry === "DE") {
+    const sellerCountry = org.countryCode?.toUpperCase() ?? "";
+    if (clientCountry && clientCountry === sellerCountry) {
       problems.push(
-        "Reverse charge applies to business customers outside Germany. Use standard VAT for German clients.",
+        "Reverse charge applies to business customers in another country. Use standard VAT for domestic clients.",
       );
     }
     if (clientCountry && isViesCountry(clientCountry) && client.taxIdentifier?.type !== "eu_vat") {
@@ -171,7 +273,7 @@ export function validateForIssuance(input: ComplianceInput): Array<string> {
   const problems = [
     ...taxProblems(input, german),
     ...(invoice.lineItemCount === 0 ? ["Add at least one line item."] : []),
-    ...periodProblems(invoice, german),
+    ...periodProblems(invoice, german && !invoice.issued),
     ...(german ? [...sellerProblems(org), ...buyerProblems(client)] : []),
   ];
   // Leitweg-ID for public-sector buyers (BT-10 is mandatory in XRechnung).
@@ -184,12 +286,14 @@ export function validateForIssuance(input: ComplianceInput): Array<string> {
 /** Everything issuance needs plus what the XRechnung export additionally requires. */
 export function validateForXRechnung(input: ComplianceInput): Array<string> {
   const { client, invoice, org } = input;
+  // An issued document cannot be edited any more, so a missing period on a
+  // legacy invoice is reported in the XML as no period rather than blocking it.
   const problems = new Set([
     ...validateForIssuance(input),
     ...taxProblems(input, true),
     ...sellerProblems(org),
     ...buyerProblems(client),
-    ...periodProblems(invoice, true),
+    ...periodProblems(invoice, !invoice.issued),
   ]);
   // BR-DE-6: the seller contact needs a phone number.
   if (!org.contactPhone?.trim()) {

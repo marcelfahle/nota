@@ -7,10 +7,6 @@ export const TAX_TREATMENTS = [
 
 export type TaxTreatment = (typeof TAX_TREATMENTS)[number];
 
-export function isTaxTreatment(value: unknown): value is TaxTreatment {
-  return TAX_TREATMENTS.includes(value as TaxTreatment);
-}
-
 /** Short label for forms, lists and chat replies. */
 export const TAX_TREATMENT_LABELS: Record<TaxTreatment, string> = {
   exempt_small_business: "Small business exemption (§ 19 UStG)",
@@ -50,7 +46,7 @@ export function taxCategory(treatment: TaxTreatment, taxRate: string) {
     case "exempt_small_business":
       return {
         code: "E",
-        exemptionReason: "Gemäß § 19 UStG wird keine Umsatzsteuer berechnet.",
+        exemptionReason: taxTreatmentNote("exempt_small_business"),
         exemptionReasonCode: null,
         rate: "0",
       };
@@ -71,21 +67,6 @@ export function taxCategory(treatment: TaxTreatment, taxRate: string) {
 /** Every treatment except standard VAT is only valid with a 0% rate. */
 export function requiresZeroRate(treatment: TaxTreatment) {
   return treatment !== "standard";
-}
-
-/**
- * Existing rows only carried a reverse-charge flag and a rate. Reverse charge
- * stays reverse charge; a 0% rate becomes zero-rated because that is what the
- * document said. Never guess a Kleinunternehmer exemption.
- */
-export function taxTreatmentFromLegacy(
-  reverseCharge: string | boolean | null | undefined,
-  taxRate: string | number | null | undefined,
-): TaxTreatment {
-  if (reverseCharge === true || reverseCharge === "true") {
-    return "reverse_charge";
-  }
-  return Number(taxRate ?? 0) === 0 ? "zero_rated" : "standard";
 }
 
 /** The legacy flag, kept in sync so older API clients keep reading it. */

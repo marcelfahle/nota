@@ -1,4 +1,4 @@
-import { validateForXRechnung } from "@/lib/invoice-compliance";
+import { orgCountryCode, validateForXRechnung } from "@/lib/invoice-compliance";
 import { type InvoiceDocumentOrg, loadInvoiceDocument } from "@/lib/invoice-document";
 import { clientPostalAddress, orgPostalAddress } from "@/lib/postal-address";
 import { generateXRechnung, XRechnungValidationError } from "@/lib/xrechnung";
@@ -28,6 +28,7 @@ export async function renderXRechnungForOrg(org: InvoiceDocumentOrg, invoiceId: 
         name: org.contactName,
         phone: org.contactPhone,
       },
+      countryCode: orgCountryCode(org),
       email: org.contactEmail ?? "",
       iban: bankAccount?.iban ?? null,
       name: org.legalName ?? org.businessName ?? org.name,

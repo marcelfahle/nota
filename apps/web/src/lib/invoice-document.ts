@@ -2,7 +2,7 @@ import { and, asc, eq } from "drizzle-orm";
 
 import { db } from "@/lib/db";
 import { bankAccounts, clients, invoices, lineItems, orgs } from "@/lib/db/schema";
-import { type ComplianceInput } from "@/lib/invoice-compliance";
+import { complianceInput } from "@/lib/invoice-compliance";
 import { buildInvoiceFilename } from "@/lib/invoice-filename";
 import { invoiceTaxIdentifier } from "@/lib/tax-identifier";
 
@@ -109,17 +109,11 @@ export async function loadInvoiceDocument(org: InvoiceDocumentOrg, invoiceId: st
     invoice.clientTaxIdentifier,
     client,
   );
-  const compliance: ComplianceInput = {
-    client: { ...client, taxIdentifier: clientTaxIdentifier },
-    invoice: { ...invoice, lineItemCount: items.length },
-    org: { ...org, taxIdentifier: sellerTaxIdentifier },
-  };
-
   return {
     bankAccount,
     client,
     clientTaxIdentifier,
-    compliance,
+    compliance: complianceInput(org, client, invoice, items.length),
     filename: (extension: "pdf" | "xml") =>
       buildInvoiceFilename(
         {
