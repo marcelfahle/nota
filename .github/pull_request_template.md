@@ -4,10 +4,10 @@
 
 ## Testing
 
-- [ ] `cd inv && bun test`
-- [ ] `cd inv && bun run check`
-- [ ] `cd inv && bun run build`
-- [ ] `cd inv && bun run test:e2e` if browser flows changed
+- [ ] `bun run test`
+- [ ] `bun run check`
+- [ ] `bun run build`
+- [ ] `bun run test:e2e` if browser flows changed
 
 ## Deployment notes
 

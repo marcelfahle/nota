@@ -14,7 +14,7 @@ Nota is maintained by No Rules Software SL.
 
 ## Local workflow
 
-1. Copy `apps/web/.env.example` to `apps/web/.env` and fill in safe development credentials.
+1. Copy `apps/web/.env.example` to `apps/web/.env.local` and point `DATABASE_URL` at a disposable local Postgres database.
 2. Install dependencies from the repository root.
 3. Run migrations and seed a development owner account in `apps/web`.
 4. Start the web app and verify the affected flow locally.
@@ -23,9 +23,12 @@ Nota is maintained by No Rules Software SL.
 bun install
 cd apps/web
 bun run db:migrate
-bun run db:seed
+SEED_CONFIRM=disposable bun run db:seed
 bun run dev
 ```
+
+The seed creates `admin@nota.test` / `nota-demo-password` and refuses to run without
+`SEED_CONFIRM=disposable`. Override the login with `SEED_EMAIL`, `SEED_NAME`, and `SEED_PASSWORD`.
 
 ## Amp orbs
 
@@ -52,15 +55,15 @@ snapshot. After changing dependencies, rerun `.agents/setup`.
 
 ## Before opening a PR
 
-Run focused tests and static checks for the surfaces you changed. Before a release or a cross-surface change, run the shared checks from the repository root:
+Run the shared checks from the repository root. CI runs the same commands.
 
 ```bash
-bun run test:web
-bun run check:web
-bun run check:cli
-bun run check:mcp
-bun run build:web
+bun run test    # unit tests for web, CLI, and MCP
+bun run check   # tsc for every package; oxlint and oxfmt for apps/web
 ```
+
+`bun run --cwd apps/web format` fixes formatting with oxfmt. Before a release or a cross-surface
+change, also run `bun run build`.
 
 If you touched browser flows, also run:
 
@@ -68,9 +71,20 @@ If you touched browser flows, also run:
 bun run test:e2e:web
 ```
 
+## Pull requests
+
+- Open PRs against `main`. Prefix the title with the Linear issue key when there is one, for
+  example `NOTA-51: Allocate invoice numbers at issuance`.
+- Fill in the pull request template: summary, how you tested, and any env, migration, webhook, or
+  cron changes.
+- Keep commit messages plain and imperative.
+- Prefer small, reviewable pull requests with a clear problem statement.
+
 ## Guidelines
 
+- Read [AGENTS.md](./AGENTS.md) before touching invoice numbering, issuance, or audit events.
 - Preserve workspace isolation and the existing owner/admin/member permissions across every surface.
-- Do not commit secrets or real `.env` files.
-- Prefer small, reviewable pull requests with a clear problem statement.
+- Do not commit secrets or real `.env` files. Report vulnerabilities as described in
+  [SECURITY.md](./SECURITY.md), not in public issues.
 - Update docs and runbooks when behavior or deployment requirements change.
+- Be kind. The [code of conduct](./CODE_OF_CONDUCT.md) applies everywhere in this project.

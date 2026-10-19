@@ -10,6 +10,7 @@
     "directory": "packages/sdk"
   },
   "homepage": "https://github.com/marcelfahle/nota/tree/main/packages/sdk",
+  "bugs": "https://github.com/marcelfahle/nota/issues",
   "keywords": [
     "nota",
     "sdk",
@@ -17,6 +18,9 @@
     "invoicing"
   ],
   "type": "module",
+  "publishConfig": {
+    "access": "public"
+  },
   "files": [
     "dist",
     "README.md"
