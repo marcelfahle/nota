@@ -1,19 +1,14 @@
-import { afterAll, expect, test } from "bun:test";
-import { mkdtempSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { expect, test } from "bun:test";
 
-// The local backend, end to end. Blob and S3 need credentials and are exercised in staging.
-const root = mkdtempSync(join(tmpdir(), "nota-file-storage-"));
-process.env.STORAGE = "local";
-process.env.LOCAL_STORAGE_PATH = root;
+import {
+  deletePrivateFiles,
+  localStorageFile,
+  putPrivateFile,
+  readPrivateFile,
+} from "@/lib/file-storage";
 
-const { deletePrivateFiles, localStorageFile, putPrivateFile, readPrivateFile } =
-  await import("./file-storage");
-
-afterAll(() => {
-  rmSync(root, { force: true, recursive: true });
-});
+// The local backend, end to end, in the throwaway root the test preload sets
+// up. Blob and S3 need credentials and are exercised in staging.
 
 test("a private file round-trips byte for byte and disappears on delete", async () => {
   const key = "invoices/org/inv/INV-0001.pdf";

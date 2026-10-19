@@ -31,7 +31,6 @@ mock.module("@/lib/xrechnung-service", () => ({
 
 type Row = Record<string, unknown> & { invoiceId: string; kind: string; orgId: string };
 let rows: Array<Row> = [];
-const files = new Map<string, { content: Buffer; contentType: string }>();
 const dialect = new PgDialect();
 mock.module("@/lib/db", () => ({
   db: {
@@ -48,21 +47,9 @@ mock.module("@/lib/db", () => ({
     }),
   },
 }));
-// Only the three file operations are faked; the rest of the module stays real for its own tests.
-const realFileStorage = await import("@/lib/file-storage");
-mock.module("@/lib/file-storage", () => ({
-  ...realFileStorage,
-  deletePrivateFiles: async (keys: Array<string>) => {
-    for (const key of keys) {
-      files.delete(key);
-    }
-  },
-  putPrivateFile: async (key: string, content: Buffer, contentType: string) => {
-    files.set(key, { content, contentType });
-  },
-  readPrivateFile: async (key: string) => files.get(key)?.content ?? null,
-}));
 
+// Files are written for real into the throwaway storage root from the test preload.
+const { putPrivateFile, readPrivateFile } = await import("@/lib/file-storage");
 const {
   deleteInvoiceDocumentFiles,
   invoiceDocumentKey,
@@ -103,7 +90,6 @@ test("storage keys stay inside the invoice's folder whatever the number looks li
 
 test("issuance stores the PDF and the XML with their hashes and sizes", async () => {
   rows = [];
-  files.clear();
   const stored = await storeIssuedDocuments(
     tx,
     org,
@@ -125,13 +111,12 @@ test("issuance stores the PDF and the XML with their hashes and sizes", async ()
   expect(stored[0].sha256).toBe(sha256(livePdf));
   expect(stored[0].byteSize).toBe(Buffer.byteLength(livePdf));
   expect(stored[1].contentType).toBe("application/xml");
-  expect(files.get(stored[1].storageKey)?.content.toString("utf8")).toBe(liveXml as string);
+  expect((await readPrivateFile(stored[1].storageKey))?.toString("utf8")).toBe(liveXml as string);
   expect(rows).toHaveLength(2);
 });
 
 test("an optional XML that does not validate is simply not stored; a required one fails issuance", async () => {
   rows = [];
-  files.clear();
   liveXml = new XRechnungValidationError([
     "Add a contact phone number for your business in Settings.",
   ]);
@@ -150,7 +135,6 @@ test("an optional XML that does not validate is simply not stored; a required on
 
 test("downloads serve the stored bytes even after the live data changed", async () => {
   rows = [];
-  files.clear();
   const original = livePdf;
   await storeIssuedDocuments(tx, org, { id: invoiceId, number: "INV-0009" }, { attachXml: true });
   // The client moves; a fresh rendering would now differ.
@@ -172,7 +156,6 @@ test("downloads serve the stored bytes even after the live data changed", async 
 
 test("a draft, or an invoice issued before originals were kept, renders live", async () => {
   rows = [];
-  files.clear();
   livePdf = "%PDF-1.7 draft preview";
   const pdf = await loadInvoicePdf(org, invoiceId);
   expect(pdf.stored).toBe(false);
@@ -184,7 +167,6 @@ test("a draft, or an invoice issued before originals were kept, renders live", a
 
 test("a stored original is served only to its own workspace", async () => {
   rows = [];
-  files.clear();
   await storeIssuedDocuments(tx, org, { id: invoiceId, number: "INV-0010" }, { attachXml: false });
   const other = { id: "11111111-2222-4333-8444-555555555555" } as typeof org;
   const pdf = await loadInvoicePdf(other, invoiceId);
@@ -193,14 +175,13 @@ test("a stored original is served only to its own workspace", async () => {
 
 test("a tampered or missing file is an error, never a quiet re-render", async () => {
   rows = [];
-  files.clear();
   const [pdf] = await storeIssuedDocuments(
     tx,
     org,
     { id: invoiceId, number: "INV-0011" },
     { attachXml: false },
   );
-  files.set(pdf.storageKey, { content: Buffer.from("%PDF-1.7 altered"), contentType: "x" });
+  await putPrivateFile(pdf.storageKey, Buffer.from("%PDF-1.7 altered"), "application/pdf");
   await expect(loadInvoicePdf(org, invoiceId)).rejects.toThrow("does not match its recorded hash");
   await deleteInvoiceDocumentFiles([pdf.storageKey]);
   await expect(loadInvoicePdf(org, invoiceId)).rejects.toThrow("missing from storage");

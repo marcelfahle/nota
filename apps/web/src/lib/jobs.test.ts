@@ -38,7 +38,6 @@ type StoredRow = {
   storageKey: string;
 };
 let storedRows: Array<StoredRow> = [];
-const storedFiles = new Map<string, Buffer>();
 let requestedKinds: Array<string> = [];
 const dialect = new PgDialect();
 mock.module("@/lib/db", () => ({
@@ -58,19 +57,14 @@ mock.module("@/lib/db", () => ({
     }),
   },
 }));
-// Only the three file operations are faked; the rest of the module stays real for its own tests.
-const realFileStorage = await import("@/lib/file-storage");
-mock.module("@/lib/file-storage", () => ({
-  ...realFileStorage,
-  deletePrivateFiles: async () => {},
-  putPrivateFile: async () => {},
-  readPrivateFile: async (key: string) => storedFiles.get(key) ?? null,
-}));
 
-function keep(kind: "pdf" | "xrechnung", content: string) {
+// Files are written for real into the throwaway storage root from the test preload.
+const { deletePrivateFiles, putPrivateFile } = await import("@/lib/file-storage");
+
+async function keep(kind: "pdf" | "xrechnung", content: string) {
   const bytes = Buffer.from(content, "utf8");
-  const storageKey = `invoices/org_1/inv_1/INV-0007.${kind === "pdf" ? "pdf" : "xml"}`;
-  storedFiles.set(storageKey, bytes);
+  const storageKey = `invoices/jobs-test/inv_1/INV-0007.${kind === "pdf" ? "pdf" : "xml"}`;
+  await putPrivateFile(storageKey, bytes, kind === "pdf" ? "application/pdf" : "application/xml");
   storedRows.push({
     contentType: kind === "pdf" ? "application/pdf" : "application/xml",
     filename: `stored-${kind}.${kind === "pdf" ? "pdf" : "xml"}`,
@@ -112,8 +106,8 @@ test("an incomplete XML fails the job instead of sending the PDF alone", async (
 test("an issued invoice attaches the stored originals, not a fresh rendering", async () => {
   storedRows = [];
   requestedKinds = [];
-  keep("pdf", "%PDF-1.7 what the customer got");
-  keep("xrechnung", '<?xml version="1.0"?><Invoice>original</Invoice>');
+  await keep("pdf", "%PDF-1.7 what the customer got");
+  await keep("xrechnung", '<?xml version="1.0"?><Invoice>original</Invoice>');
   const files = await renderInvoiceAttachments(org, "inv_1", ["pdf", "xml"]);
   expect(files.map(({ filename }) => filename)).toEqual(["stored-pdf.pdf", "stored-xrechnung.xml"]);
   expect(files[0].content.toString("utf8")).toBe("%PDF-1.7 what the customer got");
@@ -124,8 +118,8 @@ test("an issued invoice attaches the stored originals, not a fresh rendering", a
 
 test("a recorded original whose file is gone fails the job rather than re-rendering", async () => {
   storedRows = [];
-  keep("pdf", "%PDF-1.7 lost");
-  storedFiles.clear();
+  await keep("pdf", "%PDF-1.7 lost");
+  await deletePrivateFiles(storedRows.map((row) => row.storageKey));
   await expect(renderInvoiceAttachments(org, "inv_1", ["pdf"])).rejects.toThrow(
     "missing from storage",
   );
