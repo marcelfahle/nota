@@ -40,7 +40,9 @@ test.beforeAll(async () => {
       ],
       stdin: {
         contents:
-          'import React from "react"; import {createRoot} from "react-dom/client"; import {ChatPanel} from "./src/components/chat-panel"; function Fixture() { const [open, setOpen] = React.useState(false); const input = React.useRef(null); const mode = new URLSearchParams(location.search).get("mode") === "home" ? "home" : "panel"; return <div className="app-shell"><ChatPanel inputRef={input} mode={mode} open={open} onOpenChange={setOpen} /></div>; } createRoot(document.getElementById("root")).render(<Fixture />);',
+          // The chat reads its strings through next-intl, so the fixture provides the
+          // English messages the way the root layout does in the app.
+          'import React from "react"; import {createRoot} from "react-dom/client"; import {NextIntlClientProvider} from "next-intl"; import messages from "./messages/en.json"; import {ChatPanel} from "./src/components/chat-panel"; function Fixture() { const [open, setOpen] = React.useState(false); const input = React.useRef(null); const mode = new URLSearchParams(location.search).get("mode") === "home" ? "home" : "panel"; return <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC"><div className="app-shell"><ChatPanel inputRef={input} mode={mode} open={open} onOpenChange={setOpen} /></div></NextIntlClientProvider>; } createRoot(document.getElementById("root")).render(<Fixture />);',
         loader: "tsx",
         resolveDir: cwd,
       },
