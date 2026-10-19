@@ -116,6 +116,49 @@ Issued invoices are never renumbered, recalculated or rewritten.
   VAT ID (BT-31). A Steuernummer is BT-32 and does not count, so a seller without a VAT ID gets
   its Steuernummer repeated as BT-29.
 
+## Delivery: what the customer receives
+
+A workspace setting, `eInvoiceDelivery`, decides what the invoice email carries:
+
+| Value               | Email attachments                                   | Default for             |
+| ------------------- | --------------------------------------------------- | ----------------------- |
+| `pdf_and_xrechnung` | The PDF and the XRechnung XML, same base name       | Workspaces in DE        |
+| `pdf_only`          | The PDF                                             | Everyone else           |
+
+The switch lives in Settings → Email ("Attach the XRechnung XML to invoice emails"). The
+migration gave every existing German workspace `pdf_and_xrechnung`; a workspace whose country
+is confirmed as Germany during first run gets it too. Changing the country later in Settings does
+not flip the switch, so a choice is never overwritten.
+
+When the XML is attached:
+
+- Sending runs the XRechnung export rules (`validateForSending`) inside the issuance transaction,
+  before a number is allocated or an email job is queued. An incomplete document is refused with
+  the usual `422 { error, problems[] }` on REST, SDK, MCP and CLI, and the same list on the invoice
+  page and in chat. The draft's "Before this can be sent, fix" box shows the same list. For a
+  German workspace the export rules are already the issuance rules, so nothing new is asked; a
+  workspace elsewhere that turns the switch on is held to the same rules before it can send.
+- The list of attachments is written into the email job's payload and into the invoice's `sent`
+  activity entry (`metadata.attachments: ["pdf", "xml"]`). The history on the invoice page reads
+  "Sent with PDF and XRechnung XML". A settings change after the send does not alter either.
+- Both files come from the shared invoice document loader (`loadInvoiceDocument`), so the PDF and
+  the XML always describe the same invoice. The email says in one sentence that the XML is attached.
+- The public invoice page offers "Download XRechnung XML" next to the PDF, under the same token,
+  when the setting is on and the export has no problems.
+
+What does not carry the XML:
+
+- Reminders. They carry no attachments at all today and link to the public page, where the XML
+  can be downloaded. Attaching it again would resend a file the customer already has.
+- Test copies during first run. They may describe a draft that is still incomplete and go to the
+  sender only.
+- "Mark sent". Nothing leaves Nota, so only the issuance rules apply and the entry stays
+  "Invoice sent".
+
+If the XML cannot be rendered when the job runs (the data was complete at send time, so this takes
+a settings edit in between), the job fails and retries like any other email failure; it never sends
+the PDF alone. Frozen originals of what was sent are the next task (NOTA-57).
+
 ## Validation
 
 Every XRechnung Nota can produce is checked against the official KoSIT validator, in CI on every

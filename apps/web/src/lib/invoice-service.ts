@@ -19,11 +19,13 @@ import {
   proposals,
   users,
 } from "@/lib/db/schema";
+import { invoiceAttachmentsFor } from "@/lib/e-invoice-delivery";
 import { getDeploymentEnv, getStripeMode } from "@/lib/env";
 import {
   complianceInput,
   taxTreatmentConflict,
   validateForIssuance,
+  validateForSending,
 } from "@/lib/invoice-compliance";
 import { loadInvoiceBankAccount } from "@/lib/invoice-document";
 import { resolveDueDateChange } from "@/lib/invoice-due-date";
@@ -520,10 +522,10 @@ export async function getInvoiceDetail(orgId: string, invoiceId: string) {
           compareDecimals(settlement.creditedAmount, 0, 4) > 0
         ? "partially_paid"
         : "unpaid";
-  // Drafts list what still blocks issuance; issued documents already passed.
+  // Drafts list what still blocks sending; issued documents already passed.
   const issueProblems =
     invoice.status === "draft" && client && org
-      ? validateForIssuance(
+      ? validateForSending(
           complianceInput(
             org,
             client,
@@ -531,6 +533,7 @@ export async function getInvoiceDetail(orgId: string, invoiceId: string) {
             items.length,
             await loadInvoiceBankAccount(db, orgId, client.bankAccountId),
           ),
+          org.eInvoiceDelivery,
         )
       : [];
 
@@ -926,13 +929,17 @@ export async function sendInvoice(
         .select({ lineItemCount: count() })
         .from(lineItems)
         .where(eq(lineItems.invoiceId, invoiceId));
+      // The XML is validated here, before anything is queued, so the email job
+      // only ever renders a document that is known to be complete.
       const bankAccount = await loadInvoiceBankAccount(tx, context.orgId, client.bankAccountId);
-      const problems = validateForIssuance(
+      const problems = validateForSending(
         complianceInput(org, client, invoice, lineItemCount, bankAccount),
+        org.eInvoiceDelivery,
       );
       if (problems.length) {
         return issuanceError(problems);
       }
+      const attachments = invoiceAttachmentsFor(org.eInvoiceDelivery);
       const account =
         deployment.PAYMENT_MODE === "stripe"
           ? paymentAccount(mode, org.stripeAccountId, org.stripeChargesEnabled)
@@ -982,6 +989,7 @@ export async function sendInvoice(
       await tx.insert(activityLog).values({
         action: "sent",
         invoiceId,
+        metadata: { attachments },
         ...sourceFields(context),
       });
       if (!org.firstRunCompletedAt) {
@@ -1034,7 +1042,7 @@ export async function sendInvoice(
       await expireInvoiceProposals(tx, invoiceId);
       await tx
         .insert(jobs)
-        .values({ invoiceId, payload: { invoiceId }, type: "send_invoice_email" });
+        .values({ invoiceId, payload: { attachments, invoiceId }, type: "send_invoice_email" });
       return { invoiceId, success: true };
     });
     if ("error" in result) {

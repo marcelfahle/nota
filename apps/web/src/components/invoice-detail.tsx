@@ -35,6 +35,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import type { AuthenticatedRole } from "@/lib/auth";
+import { invoiceActivityText } from "@/lib/invoice-activity";
 import {
   canCancelInvoice as canCancelStatus,
   normalizeInvoiceStatus,
@@ -113,16 +114,6 @@ type InvoiceDetailProps = {
   role: AuthenticatedRole;
 };
 
-const ACTIVITY_LABELS: Record<string, string> = {
-  cancelled: "Invoice cancelled",
-  created: "Invoice created",
-  marked_overdue: "Invoice marked overdue",
-  paid: "Payment recorded",
-  reminder_sent: "Payment reminder sent",
-  sent: "Invoice sent",
-  viewed: "Invoice opened",
-};
-
 function formatDate(value: string) {
   return new Intl.DateTimeFormat("en-GB", {
     day: "numeric",
@@ -169,17 +160,6 @@ function sourceLabel(activity: ActivityEntry) {
     return "MCP";
   }
   return "Nota";
-}
-
-function activityText(activity: ActivityEntry, currency: string) {
-  const metadata =
-    activity.metadata && typeof activity.metadata === "object"
-      ? (activity.metadata as Record<string, unknown>)
-      : null;
-  if (activity.action === "paid" && typeof metadata?.amount === "string") {
-    return `${formatCurrency(Number(metadata.amount), currency)} payment recorded`;
-  }
-  return ACTIVITY_LABELS[activity.action] ?? activity.action.replaceAll("_", " ");
 }
 
 export function InvoiceDetailView({ activities, business, invoice, role }: InvoiceDetailProps) {
@@ -669,7 +649,7 @@ export function InvoiceDetailView({ activities, business, invoice, role }: Invoi
                   <li className="grid grid-cols-[8px_1fr] gap-3" key={activity.id}>
                     <span className="mt-1.5 size-2 rounded-full bg-foreground" />
                     <div>
-                      <p className="text-sm">{activityText(activity, currency)}</p>
+                      <p className="text-sm">{invoiceActivityText(activity, currency)}</p>
                       <p className="mt-1 font-mono text-[11px] text-muted-foreground">
                         {formatDate(activity.createdAt)} · via {sourceLabel(activity)}
                       </p>

@@ -2,6 +2,8 @@ import { and, desc, eq } from "drizzle-orm";
 
 import { db } from "@/lib/db";
 import { activityLog, bankAccounts, clients, invoices, orgs } from "@/lib/db/schema";
+import { attachesXRechnung } from "@/lib/e-invoice-delivery";
+import { complianceInput, validateForXRechnung } from "@/lib/invoice-compliance";
 import { getInvoiceDetail } from "@/lib/invoice-service";
 
 const VIEW_DEDUPE_MS = 30 * 60 * 1000;
@@ -86,6 +88,18 @@ export async function getPublicInvoice(token: string, recordView = false) {
     bankAccount: bankAccount ?? null,
     client: context.client,
     organization: context.organization,
+    // Offered only where the email carried it and the export is complete.
+    xrechnungAvailable:
+      attachesXRechnung(context.organization.eInvoiceDelivery) &&
+      validateForXRechnung(
+        complianceInput(
+          context.organization,
+          context.client,
+          invoice,
+          invoice.lineItems.length,
+          bankAccount,
+        ),
+      ).length === 0,
   };
 }
 

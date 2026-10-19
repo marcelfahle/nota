@@ -4,6 +4,7 @@ import {
   type ComplianceInput,
   taxTreatmentConflict,
   validateForIssuance,
+  validateForSending,
   validateForXRechnung,
 } from "@/lib/invoice-compliance";
 
@@ -318,5 +319,37 @@ describe("validateForXRechnung", () => {
       "The tax rate is 0% but the treatment is standard VAT. Pick zero-rated, small business exemption (§ 19 UStG) or reverse charge, or set a tax rate.",
     );
     expect(new Set(problems).size).toBe(problems.length);
+  });
+});
+
+describe("validateForSending", () => {
+  test("attaching the XML holds a non-German workspace to the export rules before anything is queued", () => {
+    const input = germanB2B();
+    input.org.countryCode = "AT";
+    input.org.taxIdentifier = {
+      canonicalValue: "ATU12345675",
+      countryCode: "AT",
+      type: "eu_vat",
+      value: "ATU12345675",
+    };
+    input.org.contactPhone = null;
+    expect(validateForSending(input, "pdf_only")).toEqual([]);
+    expect(validateForSending(input, "pdf_and_xrechnung")).toEqual([
+      "Add a contact phone number for your business in Settings.",
+    ]);
+  });
+
+  test("a German workspace sees the same list either way, each problem once", () => {
+    const input = germanB2B();
+    input.org.contactPhone = null;
+    input.client.countryCode = null;
+    input.client.street = null;
+    const problems = [
+      "Add a contact phone number for your business in Settings.",
+      "Add the client's street, postal code, city and country.",
+      "Add the client's country.",
+    ];
+    expect(validateForSending(input, "pdf_only")).toEqual(problems);
+    expect(validateForSending(input, "pdf_and_xrechnung")).toEqual(problems);
   });
 });

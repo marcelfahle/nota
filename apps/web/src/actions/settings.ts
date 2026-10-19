@@ -7,6 +7,7 @@ import { z } from "zod";
 import { getCurrentUser } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { invoiceNumberEvents, orgs } from "@/lib/db/schema";
+import { E_INVOICE_DELIVERIES } from "@/lib/e-invoice-delivery";
 import { deleteManagedLogo, uploadOrgFavicon, uploadOrgLogo } from "@/lib/logo-storage";
 import { canManageSettings, getInsufficientPermissionsError } from "@/lib/roles";
 import {
@@ -297,5 +298,23 @@ export async function updateSettings(
 
   revalidatePath("/settings");
   revalidatePath("/");
+  return { success: true };
+}
+
+export async function updateEInvoiceDelivery(value: string) {
+  const parsed = z.enum(E_INVOICE_DELIVERIES).safeParse(value);
+  if (!parsed.success) {
+    return { error: "Choose whether to attach the XRechnung XML" };
+  }
+  const { org, role } = await getCurrentUser();
+  if (!canManageSettings(role)) {
+    return { error: getInsufficientPermissionsError() };
+  }
+  try {
+    await db.update(orgs).set({ eInvoiceDelivery: parsed.data }).where(eq(orgs.id, org.id));
+  } catch {
+    return { error: "Could not save the email setting right now" };
+  }
+  revalidatePath("/settings");
   return { success: true };
 }

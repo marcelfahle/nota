@@ -16,6 +16,7 @@ import {
   uuid,
 } from "drizzle-orm/pg-core";
 
+import type { EInvoiceDelivery } from "@/lib/e-invoice-delivery";
 import type { SiteProfile } from "@/lib/site-reader/types";
 import type { TaxIdentifier } from "@/lib/tax-identifier";
 
@@ -105,6 +106,11 @@ export const orgs = pgTable("orgs", {
   deactivatedAt: timestamp("deactivated_at"),
   defaultCurrency: text("default_currency").notNull().default("EUR"),
   defaultTaxTreatment: taxTreatmentEnum("default_tax_treatment").notNull().default("standard"),
+  // What the invoice email carries. German workspaces start with the XML attached.
+  eInvoiceDelivery: text("e_invoice_delivery")
+    .$type<EInvoiceDelivery>()
+    .notNull()
+    .default("pdf_only"),
   faviconUrl: text("favicon_url"),
   firstRunCompletedAt: timestamp("first_run_completed_at").defaultNow(),
   id: uuid().defaultRandom().primaryKey(),
