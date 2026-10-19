@@ -25,7 +25,9 @@ and every surface (web, chat, REST, SDK, MCP, CLI) shows the same problems.
 1. **Ordinary German B2B or B2C invoice.** `standard` with 19% or 7%. Category S in the XRechnung.
 2. **Kleinunternehmer (§ 19 UStG).** `exempt_small_business`, 0%. The invoice prints
    "Gemäß § 19 UStG wird keine Umsatzsteuer berechnet." Category E with that text as the
-   exemption reason. A Steuernummer is enough; no VAT ID is needed on either side.
+   exemption reason. A Steuernummer is enough; no VAT ID is needed on either side. In the XML the
+   Steuernummer is both the tax registration (BT-32) and the seller identifier (BT-29), which
+   BR-CO-26 demands when there is no VAT ID.
 3. **Reverse charge to a business customer abroad (§ 13b UStG, Art. 196 VAT Directive).**
    `reverse_charge`, 0%. The invoice prints "Steuerschuldnerschaft des Leistungsempfängers".
    Category AE with `VATEX-EU-AE`. The client must be outside Germany; inside the EU it must
@@ -57,14 +59,14 @@ At issuance, for German workspaces (`countryCode` DE), following § 14 Abs. 4 US
   IBAN is not held against the invoice, because a guess from free text is not reliable enough.
 - Reverse charge to a client in the seller's own country, or to an EU client without a VAT ID.
 - Missing seller name, structured address, country, or tax identifier (Nr. 1 and 2).
-- Missing seller contact name or email (needed for the XRechnung the same invoice may become).
+- Missing seller contact name, email or phone with at least three digits (XRechnung BR-DE-5,
+  BR-DE-6 and BR-DE-27; the same invoice may have to become an XRechnung).
 - Missing client name or structured address with country (Nr. 1).
 - Missing service date or period (Nr. 6).
 - `standard` with a 0% rate: say which exemption applies instead (Nr. 8).
 
 At XRechnung export, for every workspace, in addition:
 
-- Missing seller phone (BR-DE-6).
 - No valid IBAN on the bank account. The XML announces a SEPA credit transfer (payment means
   58), so the validator demands an account (BR-61, BR-DE-23) and warns on a wrong IBAN
   (BR-DE-19). The IBAN is read as the export reads it: the structured field when it passes the
@@ -141,6 +143,7 @@ tests use:
 | `credit-note`              | UBL CreditNote (381) referring to the original invoice          |
 | `public-sector-leitweg-id` | Behörde as buyer with its Leitweg-ID as BT-10                  |
 | `multi-month-period-7`     | Two lines at 7%, fractional quantity, period July to September |
+| `zero-rated`               | Genuine 0% supply, category Z, no exemption reason             |
 
 The run fails on any rejected document, any document that matches no scenario, or a missing
 report. Warnings are printed but do not fail the run; the fixtures produce none. BR-DE-19 is the

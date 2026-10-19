@@ -125,6 +125,7 @@ describe("validateForIssuance", () => {
     input.org.street = null;
     input.org.taxIdentifier = null;
     input.org.contactName = "";
+    input.org.contactPhone = "+49";
     input.client.street = null;
     input.client.address = "Kundenweg 2, 80331 München";
     input.invoice.servicePeriodStart = null;
@@ -133,6 +134,7 @@ describe("validateForIssuance", () => {
     expect(problems).toContain("Add your street, postal code and city in Settings.");
     expect(problems).toContain("Add your tax number (Steuernummer) or VAT ID in Settings.");
     expect(problems).toContain("Add a contact name and email for your business in Settings.");
+    expect(problems).toContain("Add a contact phone number for your business in Settings.");
     expect(problems).toContain(
       "Split the client's address into street, postal code, city and country.",
     );
@@ -293,13 +295,17 @@ describe("validateForXRechnung", () => {
     ]);
   });
 
-  test("adds the seller phone and party requirements for any org", () => {
+  test("adds the party requirements for any org", () => {
     const input = germanB2B();
     input.org.contactPhone = null;
+    expect(validateForIssuance(input)).toEqual([
+      "Add a contact phone number for your business in Settings.",
+    ]);
     expect(validateForXRechnung(input)).toEqual([
       "Add a contact phone number for your business in Settings.",
     ]);
 
+    input.org.contactPhone = "+49 30 1234567";
     input.org.countryCode = "ES";
     input.org.street = null;
     input.invoice.servicePeriodStart = null;

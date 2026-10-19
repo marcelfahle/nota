@@ -204,7 +204,7 @@ export function taxTreatmentConflict(
   return null;
 }
 
-// § 14 Abs. 4 Nr. 1 and 2 UStG plus the XRechnung seller contact (BR-DE-2, 5, 7).
+// § 14 Abs. 4 Nr. 1 and 2 UStG plus the XRechnung seller contact (BR-DE-2, 5, 6, 7).
 function sellerProblems(org: ComplianceOrg) {
   const problems: Array<string> = [];
   if (!(org.legalName?.trim() || org.businessName?.trim())) {
@@ -223,6 +223,10 @@ function sellerProblems(org: ComplianceOrg) {
   }
   if (!org.contactName?.trim() || !org.contactEmail?.trim()) {
     problems.push("Add a contact name and email for your business in Settings.");
+  }
+  // BR-DE-6 and BR-DE-27: the seller phone is mandatory and needs at least three digits.
+  if ((org.contactPhone?.replaceAll(/\D/g, "").length ?? 0) < 3) {
+    problems.push("Add a contact phone number for your business in Settings.");
   }
   return problems;
 }
@@ -325,9 +329,5 @@ export function validateForXRechnung(input: ComplianceInput): Array<string> {
     ...periodProblems(invoice, !invoice.issued),
     ...bankProblems(bankAccount, true),
   ]);
-  // BR-DE-6: the seller contact needs a phone number.
-  if (!org.contactPhone?.trim()) {
-    problems.add("Add a contact phone number for your business in Settings.");
-  }
   return [...problems];
 }

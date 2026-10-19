@@ -205,20 +205,6 @@ function buildPartyTaxScheme(identifier: TaxIdentifier | null | undefined): stri
 </cac:PartyTaxScheme>`;
 }
 
-/**
- * BR-CO-26: the seller needs BT-29, BT-30 or BT-31 so the buyer can identify
- * it. A VAT ID is BT-31; a Steuernummer only fills BT-32, so it is repeated as
- * the seller identifier (BT-29), the one official identifier such a seller has.
- */
-function buildSellerIdentification(identifier: TaxIdentifier | null | undefined): string {
-  if (identifier?.type !== "tax_id") {
-    return "";
-  }
-  return `<cac:PartyIdentification>
-<cbc:ID>${escapeXml(identifier.value)}</cbc:ID>
-</cac:PartyIdentification>`;
-}
-
 function buildTaxCategoryXml(tax: ReturnType<typeof taxCategory>): string {
   return `<cac:TaxCategory>
 <cbc:ID>${tax.code}</cbc:ID>
@@ -286,6 +272,11 @@ export function generateXRechnung(data: XRechnungData): string {
   // number is the only honest value for a private buyer.
   const buyerReference = invoice.buyerReference?.trim() || invoice.number;
   const contact = business.contact!;
+  // BR-CO-26 wants a seller identifier (BT-29), legal registration (BT-30) or
+  // VAT ID (BT-31). A Kleinunternehmer has none of those, so the Steuernummer
+  // doubles as the seller identifier; BT-32 alone does not satisfy the rule.
+  const sellerIdentifier =
+    business.taxIdentifier?.type === "tax_id" ? business.taxIdentifier.value : null;
 
   const lines = invoice.lineItems
     .map(
@@ -354,7 +345,7 @@ ${isCreditNote && invoice.originalNumber ? `<cac:BillingReference>\n<cac:Invoice
 <cac:AccountingSupplierParty>
 <cac:Party>
 <cbc:EndpointID schemeID="EM">${escapeXml(business.email)}</cbc:EndpointID>
-${buildSellerIdentification(business.taxIdentifier)}
+${sellerIdentifier ? `<cac:PartyIdentification>\n<cbc:ID>${escapeXml(sellerIdentifier)}</cbc:ID>\n</cac:PartyIdentification>` : ""}
 ${business.name ? `<cac:PartyName>\n<cbc:Name>${escapeXml(business.name)}</cbc:Name>\n</cac:PartyName>` : ""}
 ${buildPartyAddress(business, business.countryCode!)}
 ${buildPartyTaxScheme(business.taxIdentifier)}

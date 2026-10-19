@@ -175,6 +175,18 @@ export function multiMonthPeriod(): XRechnungData {
   return data;
 }
 
+/** A genuine 0% supply: category Z without an exemption reason. */
+export function zeroRated(): XRechnungData {
+  const data = germanB2B();
+  Object.assign(data.invoice, {
+    taxAmount: "0.00",
+    taxRate: "0",
+    taxTreatment: "zero_rated" as const,
+    total: "1000.00",
+  });
+  return data;
+}
+
 /** Every scenario the KoSIT validator run covers, keyed by the file name it produces. */
 export const XRECHNUNG_FIXTURES: Record<string, () => XRechnungData> = {
   "credit-note": creditNote,
@@ -183,4 +195,5 @@ export const XRECHNUNG_FIXTURES: Record<string, () => XRechnungData> = {
   "multi-month-period-7": multiMonthPeriod,
   "public-sector-leitweg-id": publicSectorBuyer,
   "reverse-charge-eu": reverseChargeToFrance,
+  "zero-rated": zeroRated,
 };

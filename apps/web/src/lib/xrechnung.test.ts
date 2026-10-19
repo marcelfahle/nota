@@ -15,6 +15,7 @@ import {
   publicSectorBuyer,
   reverseChargeToFrance,
   XRECHNUNG_FIXTURES,
+  zeroRated,
 } from "@/lib/xrechnung.fixtures";
 
 // ---------------------------------------------------------------------------
@@ -112,6 +113,7 @@ describe("generateXRechnung fixtures", () => {
     expect(xml).toContain(
       "<cbc:CompanyID>DE123456789</cbc:CompanyID>\n<cac:TaxScheme>\n<cbc:ID>VAT</cbc:ID>",
     );
+    expect(xml).not.toContain("<cac:PartyIdentification>");
     expect(xml).toContain("<cbc:CompanyID>DE987654321</cbc:CompanyID>");
     expect(xml).not.toContain("<cac:PartyIdentification>");
     expect(xml).toContain("<cbc:StreetName>Musterstraße 1</cbc:StreetName>");
@@ -132,7 +134,7 @@ describe("generateXRechnung fixtures", () => {
     expect(xml).toContain(
       "<cbc:CompanyID>21/123/45678</cbc:CompanyID>\n<cac:TaxScheme>\n<cbc:ID>FC</cbc:ID>",
     );
-    // BR-CO-26: without a VAT ID the Steuernummer doubles as the seller identifier (BT-29).
+    // BR-CO-26: the Steuernummer also serves as the seller identifier (BT-29).
     expect(xml).toContain(
       "<cac:PartyIdentification>\n<cbc:ID>21/123/45678</cbc:ID>\n</cac:PartyIdentification>",
     );
@@ -182,21 +184,14 @@ describe("generateXRechnung fixtures", () => {
   });
 
   test("every fixture the KoSIT run validates can be generated", () => {
-    expect(Object.keys(XRECHNUNG_FIXTURES)).toHaveLength(6);
+    expect(Object.keys(XRECHNUNG_FIXTURES)).toHaveLength(7);
     for (const build of Object.values(XRECHNUNG_FIXTURES)) {
       expect(() => generateXRechnung(build())).not.toThrow();
     }
   });
 
   test("zero-rated supply: category Z without an exemption reason", () => {
-    const data = germanB2B();
-    Object.assign(data.invoice, {
-      taxAmount: "0.00",
-      taxRate: "0",
-      taxTreatment: "zero_rated" as const,
-      total: "1000.00",
-    });
-    const xml = generateXRechnung(data);
+    const xml = generateXRechnung(zeroRated());
     expect(xml).toContain("<cbc:ID>Z</cbc:ID>");
     expect(xml).not.toContain("<cbc:TaxExemptionReason>");
   });
