@@ -12,6 +12,7 @@ import {
   Paperclip,
   Send,
 } from "lucide-react";
+import { useTranslations } from "next-intl";
 import { useRouter } from "next/navigation";
 import { usePathname } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -99,12 +100,6 @@ type InvoiceAnalysisSummary = {
   statusCounts?: Record<string, number>;
 };
 
-const STARTER_PROMPTS = [
-  "Create a draft invoice",
-  "Who still owes me money?",
-  "Download all invoices for last quarter",
-] as const;
-
 const transport = new DefaultChatTransport({
   api: "/api/chat",
   credentials: "same-origin",
@@ -117,40 +112,72 @@ function isDocked(mode: "first-run" | "home" | "panel") {
   return mode === "first-run" && window.matchMedia(DOCK_QUERY).matches;
 }
 
-function getPageContextLabel(pathname: string) {
+type Translate = ReturnType<typeof useTranslations<"chat">>;
+
+function getPageContextKey(pathname: string) {
   if (pathname === "/invoices/new") {
-    return "a new invoice";
+    return "newInvoice";
   }
   if (/^\/invoices\/[^/]+\/edit$/.test(pathname)) {
-    return "an invoice editor";
+    return "editor";
   }
   if (/^\/invoices\/[^/]+$/.test(pathname)) {
-    return "an invoice";
+    return "invoice";
   }
   if (pathname === "/invoices") {
-    return "your invoices";
+    return "invoices";
   }
   if (/^\/clients\/[^/]+$/.test(pathname)) {
-    return "a client";
+    return "client";
   }
   if (pathname === "/clients") {
-    return "your clients";
+    return "clients";
   }
   if (pathname === "/settings") {
     return "settings";
   }
-  return "this page";
+  return "page";
 }
 
-function getToolLabel(type: string) {
+const TOOL_NAMES = [
+  "cancel_invoice",
+  "change_invoice_due_date",
+  "create_client",
+  "create_invoice",
+  "delete_invoice_draft",
+  "download_invoice_archive",
+  "duplicate_invoice",
+  "get_client_billing_history",
+  "get_client_insights",
+  "get_dashboard_stats",
+  "get_invoice",
+  "get_invoice_analytics",
+  "list_clients",
+  "list_invoices",
+  "mark_invoice_paid",
+  "send_invoice",
+  "send_invoice_reminder",
+] as const;
+
+type ToolName = (typeof TOOL_NAMES)[number];
+
+function isToolName(name: string): name is ToolName {
+  return (TOOL_NAMES as ReadonlyArray<string>).includes(name);
+}
+
+/** Known tools get a translated name; a new tool is shown by its humanised name until it has one. */
+function getToolLabel(type: string, t: Translate) {
   const raw = type.startsWith("tool-") ? type.slice(5) : type;
+  if (isToolName(raw)) {
+    return t(`tools.${raw}`);
+  }
   return raw.replaceAll("_", " ").replaceAll(/\b\w/g, (char) => char.toUpperCase());
 }
 
-function formatActivity(activity: ChatActivity) {
+function formatActivity(activity: ChatActivity, t: Translate) {
   const action = activity.action.replaceAll("_", " ");
-  const source = activity.sourceClient ?? (activity.source === "cli" ? "Nota CLI" : "an agent");
-  return `${activity.invoiceNumber} · ${action} via ${source}`;
+  const source = activity.sourceClient ?? (activity.source === "cli" ? t("cli") : t("agent"));
+  return t("activity", { action, number: activity.invoiceNumber, source });
 }
 
 function formatInvoiceAmount(
@@ -170,7 +197,8 @@ function ToolResultCard({
   output: ToolOutputShape;
   type: string;
 }) {
-  const label = getToolLabel(type);
+  const t = useTranslations("chat");
+  const label = getToolLabel(type, t);
 
   if (output.kind === "invoice-archive" && output.downloadUrl) {
     return (
@@ -184,7 +212,7 @@ function ToolResultCard({
               {output.period?.label ?? label}
             </p>
             <p className="mt-1 text-sm font-medium text-zinc-950">
-              {output.count ?? 0} invoice{output.count === 1 ? "" : "s"} · ZIP
+              {t("cards.zip", { count: output.count ?? 0 })}
             </p>
             <p className="mt-0.5 truncate text-xs text-zinc-500">{output.filename}</p>
           </div>
@@ -192,7 +220,7 @@ function ToolResultCard({
         <Button asChild className="mt-3 w-full" size="sm">
           <a download={output.filename} href={output.downloadUrl}>
             <Download />
-            Download archive
+            {t("cards.downloadArchive")}
           </a>
         </Button>
       </div>
@@ -209,11 +237,11 @@ function ToolResultCard({
               {output.kind === "client-insights" ? output.client?.name : label}
             </p>
             <p className="mt-1 text-sm font-medium text-zinc-950">
-              {output.period?.label ?? "Invoice history"}
+              {output.period?.label ?? t("cards.history")}
             </p>
           </div>
           <span className="text-xs text-zinc-500 tabular-nums">
-            {output.summary.invoiceCount ?? 0} invoices
+            {t("cards.invoiceCount", { count: output.summary.invoiceCount ?? 0 })}
           </span>
         </div>
 
@@ -225,39 +253,39 @@ function ToolResultCard({
                   <span className="text-xs font-semibold text-zinc-900">{currency.currency}</span>
                   {currency.averageDaysToPay !== null && currency.averageDaysToPay !== undefined ? (
                     <span className="text-[11px] text-zinc-500">
-                      Paid in {currency.averageDaysToPay} days avg.
+                      {t("cards.paidIn", { days: currency.averageDaysToPay })}
                     </span>
                   ) : null}
                 </div>
                 <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-xs">
                   <Metric
                     currency={currency.currency}
-                    label="Issued"
+                    label={t("cards.issued")}
                     locale={locale}
                     value={currency.issued}
                   />
                   <Metric
                     currency={currency.currency}
-                    label="Collected"
+                    label={t("cards.collected")}
                     locale={locale}
                     value={currency.collected}
                   />
                   <Metric
                     currency={currency.currency}
-                    label="Outstanding"
+                    label={t("cards.outstanding")}
                     locale={locale}
                     value={currency.outstanding}
                   />
                   <Metric
                     currency={currency.currency}
-                    label="Overdue"
+                    label={t("cards.overdue")}
                     locale={locale}
                     value={currency.overdue}
                   />
                 </dl>
                 {currency.topClients?.[0] ? (
                   <p className="mt-2 text-[11px] text-zinc-500">
-                    Top client: {currency.topClients[0].clientName}
+                    {t("cards.topClient", { name: currency.topClients[0].clientName ?? "" })}
                   </p>
                 ) : null}
               </div>
@@ -265,13 +293,13 @@ function ToolResultCard({
           </div>
         ) : (
           <p className="mt-3 border-y border-zinc-100 py-3 text-sm text-zinc-500">
-            No matching invoice value.
+            {t("cards.noValue")}
           </p>
         )}
 
         {output.comparison?.period?.label ? (
           <p className="mt-2 text-xs text-zinc-500">
-            Compared with {output.comparison.period.label}
+            {t("cards.comparedWith", { period: output.comparison.period.label })}
           </p>
         ) : null}
       </div>
@@ -291,17 +319,17 @@ function ToolResultCard({
         </div>
         <p className="font-mono text-sm font-semibold text-zinc-950">{output.invoice.number}</p>
         <p className="mt-1 text-sm text-zinc-600">
-          {output.invoice.clientName ?? "Unknown client"}
+          {output.invoice.clientName ?? t("cards.unknownClient")}
         </p>
         <div className="mt-3 flex items-center justify-between text-sm text-zinc-700">
           <span>{formatInvoiceAmount(output.invoice.total, output.invoice.currency, locale)}</span>
-          <span>{output.invoice.dueAt ?? "No due date"}</span>
+          <span>{output.invoice.dueAt ?? t("cards.noDueDate")}</span>
         </div>
         {output.downloadUrl ? (
           <Button asChild className="mt-3 w-full" size="sm" variant="outline">
             <a href={output.downloadUrl}>
               <Download />
-              Download PDF
+              {t("cards.downloadPdf")}
             </a>
           </Button>
         ) : null}
@@ -315,7 +343,7 @@ function ToolResultCard({
       <div className="rounded-2xl border border-zinc-200/80 bg-white px-3 py-3 shadow-sm">
         <p className="text-[11px] font-medium tracking-[0.2em] text-zinc-500 uppercase">{label}</p>
         <p className="mt-1 text-sm font-semibold text-zinc-950">{output.client.name}</p>
-        <p className="text-sm text-zinc-600">{output.client.email ?? "No email"}</p>
+        <p className="text-sm text-zinc-600">{output.client.email ?? t("cards.noEmail")}</p>
         {output.client.company ? (
           <p className="text-xs text-zinc-500">{output.client.company}</p>
         ) : null}
@@ -331,7 +359,7 @@ function ToolResultCard({
             {label}
           </p>
           <span className="text-xs text-zinc-500">
-            {output.pagination?.total ?? output.invoices.length} total
+            {t("cards.total", { count: output.pagination?.total ?? output.invoices.length })}
           </span>
         </div>
         <div className="space-y-2">
@@ -342,7 +370,9 @@ function ToolResultCard({
             >
               <div>
                 <p className="font-mono text-zinc-950">{invoice.number}</p>
-                <p className="text-xs text-zinc-500">{invoice.clientName ?? "Unknown client"}</p>
+                <p className="text-xs text-zinc-500">
+                  {invoice.clientName ?? t("cards.unknownClient")}
+                </p>
               </div>
               <div className="text-right">
                 <p className="text-zinc-800">
@@ -365,14 +395,16 @@ function ToolResultCard({
             {label}
           </p>
           <span className="text-xs text-zinc-500">
-            {output.total ?? output.clients.length} matches
+            {t("cards.matches", { count: output.total ?? output.clients.length })}
           </span>
         </div>
         <div className="space-y-2">
           {output.clients.slice(0, 3).map((client) => (
             <div key={client.id ?? client.email}>
-              <p className="text-sm font-medium text-zinc-950">{client.name ?? "Unnamed client"}</p>
-              <p className="text-xs text-zinc-500">{client.email ?? "No email"}</p>
+              <p className="text-sm font-medium text-zinc-950">
+                {client.name ?? t("cards.unnamed")}
+              </p>
+              <p className="text-xs text-zinc-500">{client.email ?? t("cards.noEmail")}</p>
             </div>
           ))}
         </div>
@@ -399,7 +431,7 @@ function ToolResultCard({
   return (
     <div className="rounded-2xl border border-zinc-200/80 bg-white px-3 py-3 shadow-sm">
       <p className="text-[11px] font-medium tracking-[0.2em] text-zinc-500 uppercase">{label}</p>
-      <p className="mt-1 text-sm text-zinc-700">{output.message ?? "Tool completed."}</p>
+      <p className="mt-1 text-sm text-zinc-700">{output.message ?? t("cards.completed")}</p>
     </div>
   );
 }
@@ -432,11 +464,12 @@ function ToolPart({
   locale: Locale;
   part: Extract<UIMessage["parts"][number], { type: string }>;
 }) {
+  const t = useTranslations("chat");
   if (!isToolOrDynamicToolUIPart(part)) {
     return null;
   }
 
-  const label = getToolLabel(part.type === "dynamic-tool" ? part.toolName : part.type);
+  const label = getToolLabel(part.type === "dynamic-tool" ? part.toolName : part.type, t);
 
   if (part.state === "output-error") {
     return (
@@ -523,7 +556,7 @@ export function ChatPanel({
   onOpenChange,
   open,
   prompt,
-  starterPrompts = STARTER_PROMPTS,
+  starterPrompts,
 }: {
   /** First run only: the one next step, offered in the phone dock. */
   dockAction?: { label: string; onClick: () => void };
@@ -538,8 +571,14 @@ export function ChatPanel({
   prompt?: { label: string; placeholder: string; question?: string; submitLabel: string };
   starterPrompts?: ReadonlyArray<string>;
 }) {
+  const t = useTranslations("chat");
   const router = useRouter();
   const pathname = usePathname();
+  const prompts = starterPrompts ?? [
+    t("starters.draft"),
+    t("starters.owes"),
+    t("starters.archive"),
+  ];
   const [activity, setActivity] = useState<Array<ChatActivity>>([]);
   const [available, setAvailable] = useState(true);
   const [input, setInput] = useState("");
@@ -744,7 +783,7 @@ export function ChatPanel({
     router.refresh();
   }, [messages, router]);
 
-  const headerLabel = useMemo(() => getPageContextLabel(pathname), [pathname]);
+  const headerLabel = t(`context.${useMemo(() => getPageContextKey(pathname), [pathname])}`);
 
   async function submitInput(value: string) {
     const trimmedValue = value.trim();
@@ -793,7 +832,7 @@ export function ChatPanel({
     if (!available) {
       return (
         <div className="border-t bg-card px-4 py-3 text-sm text-muted-foreground" role="status">
-          AI chat is not configured. Invoices, clients, PDF exports, and sending remain available.
+          {t("composer.notConfigured")}
         </div>
       );
     }
@@ -821,10 +860,10 @@ export function ChatPanel({
           className={cn("nota-label block px-2 text-foreground", dock && "max-lg:sr-only")}
           htmlFor="nota-chat-input"
         >
-          {homePrompt ? (prompt?.label ?? "What did you do?") : "Say what you did"}
+          {homePrompt ? (prompt?.label ?? t("composer.whatDidYouDo")) : t("composer.sayWhatYouDid")}
         </label>
         <textarea
-          aria-label="Ask Nota"
+          aria-label={t("composer.askNota")}
           className={cn(
             "w-full resize-none border-0 bg-transparent px-2 py-2 leading-6 text-foreground placeholder:text-muted-foreground",
             "focus-visible:outline-none",
@@ -845,9 +884,8 @@ export function ChatPanel({
           }}
           placeholder={
             homePrompt
-              ? (prompt?.placeholder ??
-                "Invoice Oxide for 46 hours of consulting in September, same rate as last time")
-              : "Bill, chase, quote or ask…"
+              ? (prompt?.placeholder ?? t("composer.placeholderHome"))
+              : t("composer.placeholderPanel")
           }
           ref={inputRef}
           rows={3}
@@ -855,7 +893,7 @@ export function ChatPanel({
         />
         {homePrompt ? (
           <div className={cn("mb-3 flex flex-wrap gap-1.5 px-2", dock && "max-lg:hidden")}>
-            {starterPrompts.map((prompt) => (
+            {prompts.map((prompt) => (
               <button
                 className="min-h-11 rounded-full border px-3 text-sm hover:bg-accent active:bg-accent sm:min-h-8 sm:text-xs"
                 disabled={isBusy}
@@ -876,7 +914,7 @@ export function ChatPanel({
         >
           <input
             accept=".csv,text/csv"
-            aria-label="Client CSV file"
+            aria-label={t("composer.csvLabel")}
             className="hidden"
             data-testid="client-csv-input"
             onChange={(event) => {
@@ -888,7 +926,7 @@ export function ChatPanel({
             type="file"
           />
           <Button
-            aria-label="Attach client CSV"
+            aria-label={t("composer.attachCsv")}
             className={cn(dock && "max-lg:hidden")}
             disabled={isBusy}
             onClick={() => fileInput.current?.click()}
@@ -904,7 +942,7 @@ export function ChatPanel({
               dock ? "lg:inline" : "sm:inline",
             )}
           >
-            {homePrompt ? "Enter to send" : "⌘J from anywhere"}
+            {homePrompt ? t("composer.enterToSend") : t("composer.shortcut")}
           </span>
           <Button
             className={cn(dock && "max-lg:h-12 max-lg:px-4")}
@@ -913,7 +951,7 @@ export function ChatPanel({
             type="submit"
           >
             <Send />
-            {homePrompt ? (prompt?.submitLabel ?? "Draft it") : "Send"}
+            {homePrompt ? (prompt?.submitLabel ?? t("composer.draftIt")) : t("composer.send")}
           </Button>
         </div>
       </form>
@@ -932,7 +970,7 @@ export function ChatPanel({
             variant="ghost"
           >
             <ArrowLeft />
-            {mode === "first-run" ? "Back to invoice" : "Back to Home"}
+            {mode === "first-run" ? t("backToInvoice") : t("backToHome")}
           </Button>
         ) : (
           <div className="min-w-0">
@@ -943,7 +981,7 @@ export function ChatPanel({
         )}
         {mode === "panel" ? (
           <Button
-            aria-label="Close chat"
+            aria-label={t("closeChat")}
             onClick={closePanel}
             ref={closeButton}
             size="icon-sm"
@@ -965,20 +1003,20 @@ export function ChatPanel({
         ref={messagesContainer}
       >
         {activity.length > 0 ? (
-          <ol aria-label="Recent agent activity" className="space-y-2">
+          <ol aria-label={t("recentActivity")} className="space-y-2">
             {activity.map((item) => (
               <li className="nota-label text-muted-foreground" key={item.id}>
-                {formatActivity(item)}
+                {formatActivity(item, t)}
               </li>
             ))}
           </ol>
         ) : null}
         {messages.length === 0 ? (
           <div className="space-y-4 rounded-md border border-dashed bg-background p-4 text-sm text-muted-foreground">
-            <p className="font-medium text-foreground">Put Nota to work</p>
-            <p className="font-voice text-base">Clients, invoices, and getting paid.</p>
+            <p className="font-medium text-foreground">{t("putToWork")}</p>
+            <p className="font-voice text-base">{t("clientsInvoices")}</p>
             <div className="flex flex-wrap gap-1.5">
-              {starterPrompts.map((prompt) => (
+              {prompts.map((prompt) => (
                 <button
                   className="min-h-11 rounded-full border px-3 text-sm hover:bg-accent active:bg-accent sm:min-h-8 sm:text-xs"
                   disabled={isBusy}
@@ -1008,14 +1046,18 @@ export function ChatPanel({
                 ...previous,
                 {
                   id: crypto.randomUUID(),
-                  parts: [{ text: "Import my client CSV.", type: "text" }],
+                  parts: [{ text: t("importPrompt"), type: "text" }],
                   role: "user",
                 },
                 {
                   id: crypto.randomUUID(),
                   parts: [
                     {
-                      text: `Added **${result.added} client${result.added === 1 ? "" : "s"}** from your CSV. Skipped ${result.counts.duplicate} duplicates and ${result.counts.invalid} rows needing attention. No invoices were created or sent.`,
+                      text: t("imported", {
+                        added: result.added,
+                        duplicate: result.counts.duplicate,
+                        invalid: result.counts.invalid,
+                      }),
                       type: "text",
                     },
                   ],
@@ -1031,7 +1073,7 @@ export function ChatPanel({
         {isBusy ? (
           <div className="flex items-center gap-2 px-2 text-sm text-muted-foreground">
             <LoaderCircle className="size-4 animate-spin" />
-            Thinking…
+            {t("thinking")}
           </div>
         ) : null}
         {error ? (
@@ -1075,7 +1117,7 @@ export function ChatPanel({
           />
         ) : null}
         <section
-          aria-label={open ? "Conversation with Nota" : "Ask Nota"}
+          aria-label={open ? t("conversation") : t("composer.askNota")}
           className={cn(
             "flex flex-col bg-card",
             // On a phone the invoice is the page and Nota docks under the thumb:
@@ -1122,9 +1164,9 @@ export function ChatPanel({
                   error && "text-destructive",
                 )}
               >
-                {error?.message || lastReplyText || (working ? "Drafting…" : "Nota replied.")}
+                {error?.message || lastReplyText || (working ? t("drafting") : t("replied"))}
               </span>
-              <span className="sr-only">Show conversation</span>
+              <span className="sr-only">{t("showConversation")}</span>
               <ChevronUp className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
             </button>
           )}
@@ -1147,7 +1189,7 @@ export function ChatPanel({
               variant="outline"
             >
               <NotaGlyph />
-              Continue importing {csvFile.name}
+              {t("continueImporting", { name: csvFile.name })}
             </Button>
           ) : (
             renderComposer("dock")
@@ -1160,7 +1202,11 @@ export function ChatPanel({
   if (mode === "home") {
     return (
       <>
-        <section aria-label="Ask Nota" className="mx-auto mt-8 max-w-[700px]" hidden={open}>
+        <section
+          aria-label={t("composer.askNota")}
+          className="mx-auto mt-8 max-w-[700px]"
+          hidden={open}
+        >
           {csvFile ? (
             <Button
               onClick={() => onOpenChange(true)}
@@ -1169,7 +1215,7 @@ export function ChatPanel({
               variant="outline"
             >
               <NotaGlyph />
-              Continue importing {csvFile.name}
+              {t("continueImporting", { name: csvFile.name })}
             </Button>
           ) : (
             renderComposer("home")
@@ -1177,7 +1223,7 @@ export function ChatPanel({
         </section>
         {open || csvFile ? (
           <section
-            aria-label="Conversation with Nota"
+            aria-label={t("conversation")}
             className="fixed inset-x-0 top-[var(--chat-viewport-top,0px)] z-50 mx-auto flex h-[var(--chat-viewport-height,100dvh)] max-w-[700px] flex-col overflow-hidden border bg-card sm:static sm:h-[calc(100dvh-10rem)] sm:rounded-lg"
             hidden={!open}
             ref={conversationContainer}
@@ -1193,7 +1239,9 @@ export function ChatPanel({
     <>
       <button
         aria-expanded="false"
-        aria-label={csvFile ? `Continue importing ${csvFile.name}` : "Ask Nota"}
+        aria-label={
+          csvFile ? t("continueImporting", { name: csvFile.name }) : t("composer.askNota")
+        }
         className="fixed right-[max(1rem,env(safe-area-inset-right))] bottom-[max(1rem,env(safe-area-inset-bottom))] z-20 inline-flex size-[46px] items-center justify-center rounded-full border bg-card text-sm font-semibold shadow-[0_14px_30px_-18px_rgb(25_21_16/60%)] hover:bg-accent active:bg-accent sm:right-6 sm:bottom-6 sm:h-auto sm:min-h-[46px] sm:w-auto sm:gap-2.5 sm:px-4 sm:pl-3"
         data-testid="chat-panel-toggle"
         hidden={open}
@@ -1203,7 +1251,7 @@ export function ChatPanel({
       >
         <NotaGlyph />
         <span className="hidden sm:inline">
-          {csvFile ? `Continue importing ${csvFile.name}` : "Ask Nota"}
+          {csvFile ? t("continueImporting", { name: csvFile.name }) : t("composer.askNota")}
         </span>
         {!csvFile ? (
           <kbd className="hidden font-mono text-[11px] font-normal text-muted-foreground sm:inline">
@@ -1212,7 +1260,7 @@ export function ChatPanel({
         ) : null}
       </button>
       <dialog
-        aria-label="Nota Chat"
+        aria-label={t("chatLabel")}
         className="fixed inset-x-0 top-[var(--chat-viewport-top,0px)] z-50 m-0 h-[var(--chat-viewport-height,100dvh)] max-h-none w-screen max-w-none flex-col overflow-hidden border bg-card p-0 text-foreground backdrop:bg-background/70 open:flex sm:inset-y-0 sm:right-0 sm:left-auto sm:h-dvh sm:w-[340px]"
         onCancel={(event) => {
           event.preventDefault();

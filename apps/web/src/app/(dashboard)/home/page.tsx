@@ -54,7 +54,7 @@ export default async function HomePage() {
       emailVerified: user.emailVerified,
       invoice: invoice
         ? {
-            client: invoice.client ?? { email: "", name: "Unknown client" },
+            client: invoice.client ?? { email: "", name: t("unknownClient") },
             currency: invoice.currency ?? org.defaultCurrency ?? "EUR",
             dueAt: invoice.dueAt,
             id: invoice.id,
@@ -69,6 +69,7 @@ export default async function HomePage() {
             total: invoice.total ?? "0.00",
           }
         : null,
+      locale: user.locale,
       org: {
         brandColor: org.brandColor,
         businessName: org.businessName,

@@ -1,6 +1,7 @@
 "use client";
 
 import { Check, FileSpreadsheet, LoaderCircle, X } from "lucide-react";
+import { useTranslations } from "next-intl";
 import { useEffect, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -15,6 +16,7 @@ type Props = {
 };
 
 export function ChatClientImport({ file, onBusyChange, onComplete, onDismiss }: Props) {
+  const t = useTranslations("chat.import");
   const [preview, setPreview] = useState<ClientImportPreview | null>(null);
   const [csv, setCsv] = useState("");
   const [busy, setBusy] = useState(true);
@@ -32,10 +34,10 @@ export function ChatClientImport({ file, onBusyChange, onComplete, onDismiss }: 
     async function readFile() {
       try {
         if (!/\.csv$/i.test(file.name)) {
-          throw new Error("Choose a .csv client export.");
+          throw new Error(t("notCsv"));
         }
         if (file.size > 250 * 1024) {
-          throw new Error("Keep client CSV files under 250 KB (up to 1,000 clients).");
+          throw new Error(t("tooBig"));
         }
         const content = await file.text();
         if (controller.signal.aborted) {
@@ -49,7 +51,7 @@ export function ChatClientImport({ file, onBusyChange, onComplete, onDismiss }: 
         });
         const result = await response.json().catch(() => null);
         if (!response.ok || !result?.data) {
-          throw new Error(result?.error ?? "This file could not be read.");
+          throw new Error(result?.error ?? t("unreadable"));
         }
         if (controller.signal.aborted) {
           return;
@@ -58,7 +60,7 @@ export function ChatClientImport({ file, onBusyChange, onComplete, onDismiss }: 
         setPreview(result.data);
       } catch (error) {
         if (!controller.signal.aborted) {
-          setError(error instanceof Error ? error.message : "This file could not be read.");
+          setError(error instanceof Error ? error.message : t("unreadable"));
         }
       } finally {
         if (!controller.signal.aborted) {
@@ -72,7 +74,7 @@ export function ChatClientImport({ file, onBusyChange, onComplete, onDismiss }: 
       controller.abort();
       onBusyChange(false);
     };
-  }, [file, onBusyChange]);
+  }, [file, onBusyChange, t]);
 
   async function commit() {
     if (!preview || commitInFlight.current) {
@@ -94,11 +96,11 @@ export function ChatClientImport({ file, onBusyChange, onComplete, onDismiss }: 
         setPreview(result.data);
       }
       if (!response.ok || !result?.data) {
-        throw new Error(result?.error ?? "The import could not finish. Try again.");
+        throw new Error(result?.error ?? t("failed"));
       }
       onComplete(result.data);
     } catch (error) {
-      setError(error instanceof Error ? error.message : "The import could not finish. Try again.");
+      setError(error instanceof Error ? error.message : t("failed"));
     } finally {
       commitInFlight.current = false;
       setBusy(false);
@@ -108,7 +110,7 @@ export function ChatClientImport({ file, onBusyChange, onComplete, onDismiss }: 
 
   return (
     <section
-      aria-label="Client CSV import"
+      aria-label={t("label")}
       className="rounded-md border bg-card p-4"
       data-testid="client-import-card"
       ref={card}
@@ -121,7 +123,7 @@ export function ChatClientImport({ file, onBusyChange, onComplete, onDismiss }: 
           </p>
         </div>
         <Button
-          aria-label="Dismiss CSV import"
+          aria-label={t("dismiss")}
           disabled={busy}
           onClick={onDismiss}
           size="icon-sm"
@@ -134,19 +136,20 @@ export function ChatClientImport({ file, onBusyChange, onComplete, onDismiss }: 
       {busy && !preview ? (
         <p aria-live="polite" className="mt-3 flex items-center gap-2 text-sm text-zinc-500">
           <LoaderCircle className="size-4 animate-spin" />
-          Reading your client list…
+          {t("reading")}
         </p>
       ) : null}
       {preview ? (
         <>
           <p className="mt-3 text-sm leading-6 text-zinc-900">
-            {preview.counts.ready} new client{preview.counts.ready === 1 ? "" : "s"} ready.
+            {t("ready", { count: preview.counts.ready })}
           </p>
           {preview.counts.duplicate || preview.counts.invalid ? (
             <p className="text-xs leading-5 text-zinc-500">
-              {preview.counts.duplicate} already listed · {preview.counts.invalid}{" "}
-              {preview.counts.invalid === 1 ? "needs" : "need"} attention. These rows will be
-              skipped.
+              {t("skipped", {
+                duplicate: preview.counts.duplicate,
+                invalid: preview.counts.invalid,
+              })}
             </p>
           ) : null}
           <Button
@@ -157,17 +160,12 @@ export function ChatClientImport({ file, onBusyChange, onComplete, onDismiss }: 
             type="button"
           >
             {busy ? <LoaderCircle className="size-4 animate-spin" /> : <Check className="size-4" />}
-            {busy
-              ? "Adding clients…"
-              : `Add ${preview.counts.ready} client${preview.counts.ready === 1 ? "" : "s"}`}
+            {busy ? t("adding") : t("add", { count: preview.counts.ready })}
           </Button>
-          <p className="mt-2 text-[11px] leading-4 text-zinc-500">
-            Existing clients stay intact. No invoices or emails are created.
-          </p>
+          <p className="mt-2 text-[11px] leading-4 text-zinc-500">{t("intact")}</p>
           <details className="mt-3 text-xs text-zinc-600">
             <summary className="cursor-pointer py-1 font-medium">
-              Review {preview.counts.total} row{preview.counts.total === 1 ? "" : "s"} and matched
-              columns
+              {t("review", { count: preview.counts.total })}
             </summary>
             <p className="mt-2 leading-5">
               {preview.columns
@@ -181,7 +179,9 @@ export function ChatClientImport({ file, onBusyChange, onComplete, onDismiss }: 
                 .join(" · ")}
             </p>
             {preview.ignoredColumns.length ? (
-              <p className="mt-1 leading-5">Unused columns: {preview.ignoredColumns.join(", ")}</p>
+              <p className="mt-1 leading-5">
+                {t("unused", { columns: preview.ignoredColumns.join(", ") })}
+              </p>
             ) : null}
             <div className="mt-2 max-h-64 space-y-2 overflow-y-auto">
               {preview.rows.map((row) => (
@@ -190,11 +190,14 @@ export function ChatClientImport({ file, onBusyChange, onComplete, onDismiss }: 
                   key={row.line}
                 >
                   <p className="font-medium text-zinc-900">
-                    Line {row.line} · {row.client.name || "Missing name"} ·{" "}
-                    {row.status === "ready" ? "Add" : "Skip"}
+                    {t("line", {
+                      action: row.status === "ready" ? t("addAction") : t("skip"),
+                      line: row.line,
+                      name: row.client.name || t("missingName"),
+                    })}
                   </p>
                   <p>
-                    {row.client.email || "Missing email"} · {row.client.defaultCurrency}
+                    {row.client.email || t("missingEmail")} · {row.client.defaultCurrency}
                   </p>
                   {row.client.company && row.client.company !== row.client.name ? (
                     <p>{row.client.company}</p>
@@ -203,9 +206,9 @@ export function ChatClientImport({ file, onBusyChange, onComplete, onDismiss }: 
                     <p className="mt-1 whitespace-pre-line">{row.client.address}</p>
                   ) : null}
                   {row.client.taxIdentifier ? (
-                    <p>Tax ID: {row.client.taxIdentifier.value}</p>
+                    <p>{t("taxId", { value: row.client.taxIdentifier.value })}</p>
                   ) : row.client.vatNumber ? (
-                    <p>VAT ID: {row.client.vatNumber}</p>
+                    <p>{t("vatId", { value: row.client.vatNumber })}</p>
                   ) : null}
                   {row.client.notes ? (
                     <p className="mt-1 whitespace-pre-line">{row.client.notes}</p>
