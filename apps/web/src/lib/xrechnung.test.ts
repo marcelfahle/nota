@@ -258,6 +258,7 @@ describe("generateXRechnung fixtures", () => {
     expect(xml).toContain(
       "<cbc:CompanyID>DE123456789</cbc:CompanyID>\n<cac:TaxScheme>\n<cbc:ID>VAT</cbc:ID>",
     );
+    expect(xml).not.toContain("<cac:PartyIdentification>");
     expect(xml).toContain("<cbc:CompanyID>DE987654321</cbc:CompanyID>");
     expect(xml).toContain("<cbc:StreetName>Musterstraße 1</cbc:StreetName>");
     expect(xml).toContain("<cbc:PostalZone>80331</cbc:PostalZone>");
@@ -276,6 +277,10 @@ describe("generateXRechnung fixtures", () => {
     expect(xml).not.toContain("<cbc:TaxExemptionReasonCode>");
     expect(xml).toContain(
       "<cbc:CompanyID>21/123/45678</cbc:CompanyID>\n<cac:TaxScheme>\n<cbc:ID>FC</cbc:ID>",
+    );
+    // BR-CO-26: the Steuernummer also serves as the seller identifier (BT-29).
+    expect(xml).toContain(
+      "<cac:PartyIdentification>\n<cbc:ID>21/123/45678</cbc:ID>\n</cac:PartyIdentification>",
     );
     expect(xml).toContain('<cbc:TaxAmount currencyID="EUR">0.00</cbc:TaxAmount>');
     expect(xml).toContain('<cbc:PayableAmount currencyID="EUR">1000.00</cbc:PayableAmount>');

@@ -88,6 +88,7 @@ describe("validateForIssuance", () => {
     input.org.street = null;
     input.org.taxIdentifier = null;
     input.org.contactName = "";
+    input.org.contactPhone = "+49";
     input.client.street = null;
     input.client.address = "Kundenweg 2, 80331 München";
     input.invoice.servicePeriodStart = null;
@@ -96,6 +97,7 @@ describe("validateForIssuance", () => {
     expect(problems).toContain("Add your street, postal code and city in Settings.");
     expect(problems).toContain("Add your tax number (Steuernummer) or VAT ID in Settings.");
     expect(problems).toContain("Add a contact name and email for your business in Settings.");
+    expect(problems).toContain("Add a contact phone number for your business in Settings.");
     expect(problems).toContain(
       "Split the client's address into street, postal code, city and country.",
     );
@@ -229,13 +231,17 @@ describe("validateForXRechnung", () => {
     expect(validateForXRechnung(input)).toEqual([]);
   });
 
-  test("adds the seller phone and party requirements for any org", () => {
+  test("adds the party requirements for any org", () => {
     const input = germanB2B();
     input.org.contactPhone = null;
+    expect(validateForIssuance(input)).toEqual([
+      "Add a contact phone number for your business in Settings.",
+    ]);
     expect(validateForXRechnung(input)).toEqual([
       "Add a contact phone number for your business in Settings.",
     ]);
 
+    input.org.contactPhone = "+49 30 1234567";
     input.org.countryCode = "ES";
     input.org.street = null;
     input.invoice.servicePeriodStart = null;
@@ -252,8 +258,15 @@ describe("validateForXRechnung", () => {
 });
 
 describe("validateForSending", () => {
-  test("a workspace that attaches the XML is held to the export rules before anything is queued", () => {
+  test("attaching the XML holds a non-German workspace to the export rules before anything is queued", () => {
     const input = germanB2B();
+    input.org.countryCode = "AT";
+    input.org.taxIdentifier = {
+      canonicalValue: "ATU12345675",
+      countryCode: "AT",
+      type: "eu_vat",
+      value: "ATU12345675",
+    };
     input.org.contactPhone = null;
     expect(validateForSending(input, "pdf_only")).toEqual([]);
     expect(validateForSending(input, "pdf_and_xrechnung")).toEqual([
@@ -261,15 +274,17 @@ describe("validateForSending", () => {
     ]);
   });
 
-  test("lists every problem once, in plain English", () => {
+  test("a German workspace sees the same list either way, each problem once", () => {
     const input = germanB2B();
     input.org.contactPhone = null;
     input.client.countryCode = null;
     input.client.street = null;
-    expect(validateForSending(input, "pdf_and_xrechnung")).toEqual([
+    const problems = [
+      "Add a contact phone number for your business in Settings.",
       "Add the client's street, postal code, city and country.",
       "Add the client's country.",
-      "Add a contact phone number for your business in Settings.",
-    ]);
+    ];
+    expect(validateForSending(input, "pdf_only")).toEqual(problems);
+    expect(validateForSending(input, "pdf_and_xrechnung")).toEqual(problems);
   });
 });
