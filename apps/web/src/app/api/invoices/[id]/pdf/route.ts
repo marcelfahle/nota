@@ -1,14 +1,15 @@
 import { NextResponse } from "next/server";
 
 import { getCurrentUser } from "@/lib/auth";
-import { InvoicePdfDataError, renderInvoicePdfForOrg } from "@/lib/invoice-pdf-service";
+import { loadInvoicePdf } from "@/lib/invoice-documents";
+import { InvoicePdfDataError } from "@/lib/invoice-pdf-service";
 
 export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const { org } = await getCurrentUser();
 
   try {
-    const pdf = await renderInvoicePdfForOrg(org, id);
+    const pdf = await loadInvoicePdf(org, id);
     return new Response(pdf.buffer, {
       headers: {
         "Cache-Control": "private, no-store",

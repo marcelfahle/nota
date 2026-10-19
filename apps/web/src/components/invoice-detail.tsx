@@ -70,6 +70,14 @@ type ActivityEntry = {
   sourceClient: string | null;
 };
 
+type StoredDocument = {
+  byteSize: number;
+  createdAt: string;
+  id: string;
+  kind: "pdf" | "xrechnung";
+  sha256: string;
+};
+
 type InvoiceDetailProps = {
   activities: Array<ActivityEntry>;
   business: {
@@ -80,6 +88,8 @@ type InvoiceDetailProps = {
   };
   /** The language the document is written in: statutory notes follow it, not the UI. */
   documentLocale: AppLocale;
+  /** Issued originals, exactly as the customer received them. */
+  documents: Array<StoredDocument>;
   invoice: {
     balance: string;
     buyerReference: string | null;
@@ -132,6 +142,7 @@ type InvoiceDetailProps = {
 const ACTIVITY_ACTIONS = [
   "cancelled",
   "created",
+  "credited",
   "marked_overdue",
   "paid",
   "proposal_approved",
@@ -147,6 +158,18 @@ function isActivityAction(action: string): action is ActivityAction {
 }
 
 type Translate = ReturnType<typeof useTranslations<"invoiceDetail">>;
+
+function formatBytes(size: number) {
+  return size < 1024 ? `${size} B` : `${Math.round(size / 1024)} KB`;
+}
+
+/** The invoice a history entry points at: the credit note, or the original it corrects. */
+function relatedInvoiceId(metadata: unknown) {
+  const record =
+    metadata && typeof metadata === "object" ? (metadata as Record<string, unknown>) : null;
+  const id = record?.creditNoteId ?? record?.creditsInvoiceId;
+  return typeof id === "string" ? id : null;
+}
 
 function formatServicePeriod(start: string | null, end: string | null, locale: Locale) {
   if (!start || !end) {
@@ -200,6 +223,12 @@ function activityText(activity: ActivityEntry, currency: string, locale: Locale,
       amount: formatCurrency(Number(metadata.amount), currency, locale),
     });
   }
+  if (activity.action === "created" && typeof metadata?.originalNumber === "string") {
+    return t("activity.creditNoteCreated", { number: metadata.originalNumber });
+  }
+  if (activity.action === "credited" && typeof metadata?.creditNoteNumber === "string") {
+    return t("activity.creditedBy", { number: metadata.creditNoteNumber });
+  }
   if (activity.action === "sent" && Array.isArray(metadata?.attachments)) {
     return parseInvoiceAttachments(metadata.attachments).includes("xml")
       ? t("activity.sentWithXml")
@@ -215,6 +244,7 @@ export function InvoiceDetailView({
   activities,
   business,
   documentLocale,
+  documents,
   invoice,
   locale: language,
   role,
@@ -361,6 +391,34 @@ export function InvoiceDetailView({
           : status === "cancelled"
             ? t("stamp.cancelled")
             : null;
+
+  // One list, newest first: what happened and the originals stored at issuance.
+  const history = [
+    ...activities.map((activity) => ({
+      createdAt: activity.createdAt,
+      detail: t("via", {
+        date: formatDate(activity.createdAt, locale),
+        source: sourceLabel(activity, t),
+      }),
+      href: null,
+      id: activity.id,
+      relatedId: relatedInvoiceId(activity.metadata),
+      text: activityText(activity, currency, locale, t),
+    })),
+    ...documents.map((document) => ({
+      createdAt: document.createdAt,
+      detail: t("documentDetail", {
+        date: formatDate(document.createdAt, locale),
+        sha: document.sha256.slice(0, 12),
+        size: formatBytes(document.byteSize),
+      }),
+      href: `/api/invoices/${invoice.id}/${document.kind === "pdf" ? "pdf" : "xrechnung"}`,
+      id: document.id,
+      relatedId: null,
+      text:
+        document.kind === "pdf" ? t("activity.originalPdfStored") : t("activity.originalXmlStored"),
+    })),
+  ].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 
   return (
     <article aria-labelledby="invoice-title" className="min-w-0 space-y-6">
@@ -729,18 +787,41 @@ export function InvoiceDetailView({
                 </span>
               ) : null}
             </div>
-            {activities.length ? (
+            {history.length ? (
               <ol className="mt-5 space-y-5">
-                {activities.map((activity) => (
-                  <li className="grid grid-cols-[8px_1fr] gap-3" key={activity.id}>
+                {history.map((entry) => (
+                  <li className="grid grid-cols-[8px_1fr] gap-3" key={entry.id}>
                     <span className="mt-1.5 size-2 rounded-full bg-foreground" />
                     <div>
-                      <p className="text-sm">{activityText(activity, currency, locale, t)}</p>
+                      <p className="text-sm">
+                        {entry.text}
+                        {entry.href ? (
+                          <>
+                            {" · "}
+                            <a
+                              className="underline underline-offset-4"
+                              href={entry.href}
+                              rel="noopener noreferrer"
+                              target="_blank"
+                            >
+                              {t("download")}
+                            </a>
+                          </>
+                        ) : null}
+                        {entry.relatedId ? (
+                          <>
+                            {" · "}
+                            <Link
+                              className="underline underline-offset-4"
+                              href={`/invoices/${entry.relatedId}`}
+                            >
+                              {t("open")}
+                            </Link>
+                          </>
+                        ) : null}
+                      </p>
                       <p className="mt-1 font-mono text-[11px] text-muted-foreground">
-                        {t("via", {
-                          date: formatDate(activity.createdAt, locale),
-                          source: sourceLabel(activity, t),
-                        })}
+                        {entry.detail}
                       </p>
                     </div>
                   </li>

@@ -1,6 +1,9 @@
-import { orgCountryCode, validateForXRechnung } from "@/lib/invoice-compliance";
-import { type InvoiceDocumentOrg, loadInvoiceDocument } from "@/lib/invoice-document";
-import { clientPostalAddress, orgPostalAddress } from "@/lib/postal-address";
+import { validateForXRechnung } from "@/lib/invoice-compliance";
+import {
+  type InvoiceDocumentDatabase,
+  type InvoiceDocumentOrg,
+  loadInvoiceDocument,
+} from "@/lib/invoice-document";
 import { generateXRechnung, XRechnungValidationError } from "@/lib/xrechnung";
 
 export { InvoiceDocumentError, type InvoiceDocumentOrg } from "@/lib/invoice-document";
@@ -9,9 +12,13 @@ export { InvoiceDocumentError, type InvoiceDocumentOrg } from "@/lib/invoice-doc
  * The one path from a stored invoice to XRechnung XML. Validation runs first
  * so an incomplete document never becomes a plausible-looking file.
  */
-export async function renderXRechnungForOrg(org: InvoiceDocumentOrg, invoiceId: string) {
-  const document = await loadInvoiceDocument(org, invoiceId);
-  const { bankAccount, client, invoice, items } = document;
+export async function renderXRechnungForOrg(
+  org: InvoiceDocumentOrg,
+  invoiceId: string,
+  options: { database?: InvoiceDocumentDatabase } = {},
+) {
+  const document = await loadInvoiceDocument(org, invoiceId, options.database);
+  const { bank, buyer, invoice, items, seller, totals } = document;
 
   const problems = validateForXRechnung(document.compliance);
   if (problems.length) {
@@ -20,31 +27,36 @@ export async function renderXRechnungForOrg(org: InvoiceDocumentOrg, invoiceId: 
 
   const xml = generateXRechnung({
     business: {
-      ...orgPostalAddress(org),
-      bankDetails: bankAccount?.details ?? null,
-      bic: bankAccount?.bic ?? null,
+      bankDetails: bank?.details ?? null,
+      bic: bank?.bic ?? null,
+      city: seller.city,
       contact: {
-        email: org.contactEmail,
-        name: org.contactName,
-        phone: org.contactPhone,
+        email: seller.contactEmail,
+        name: seller.contactName,
+        phone: seller.contactPhone,
       },
-      countryCode: orgCountryCode(org),
-      email: org.contactEmail ?? "",
-      iban: bankAccount?.iban ?? null,
-      name: org.legalName ?? org.businessName ?? org.name,
-      taxIdentifier: document.sellerTaxIdentifier,
+      countryCode: seller.countryCode,
+      email: seller.contactEmail ?? "",
+      iban: bank?.iban ?? null,
+      name: seller.name,
+      postalCode: seller.postalCode,
+      street: seller.street,
+      taxIdentifier: seller.taxIdentifier,
     },
     client: {
-      ...clientPostalAddress(client),
-      company: client.company,
-      email: client.email,
-      name: client.name,
-      publicSector: client.publicSector,
-      taxIdentifier: document.clientTaxIdentifier,
+      city: buyer.city,
+      company: buyer.company,
+      countryCode: buyer.countryCode,
+      email: buyer.email,
+      name: buyer.name,
+      postalCode: buyer.postalCode,
+      publicSector: buyer.publicSector,
+      street: buyer.street,
+      taxIdentifier: buyer.taxIdentifier,
     },
     invoice: {
       buyerReference: invoice.buyerReference,
-      currency: invoice.currency ?? "EUR",
+      currency: totals.currency,
       dueAt: invoice.dueAt,
       issuedAt: invoice.issuedAt,
       kind: invoice.kind,
@@ -60,11 +72,11 @@ export async function renderXRechnungForOrg(org: InvoiceDocumentOrg, invoiceId: 
       paymentLinkUrl: invoice.stripePaymentLinkUrl,
       servicePeriodEnd: invoice.servicePeriodEnd,
       servicePeriodStart: invoice.servicePeriodStart,
-      subtotal: invoice.subtotal ?? "0.00",
-      taxAmount: invoice.taxAmount ?? "0.00",
-      taxRate: invoice.taxRate ?? "0.00",
-      taxTreatment: invoice.taxTreatment,
-      total: invoice.total ?? "0.00",
+      subtotal: totals.subtotal,
+      taxAmount: totals.taxAmount,
+      taxRate: totals.taxRate,
+      taxTreatment: totals.taxTreatment,
+      total: totals.total,
     },
   });
 

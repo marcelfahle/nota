@@ -391,7 +391,12 @@
       "proposal_approved": "Reminder approved",
       "paymentRecorded": "{amount} payment recorded",
       "sentWithXml": "Sent with PDF and XRechnung XML",
-      "sentWithPdf": "Sent with PDF"
+      "sentWithPdf": "Sent with PDF",
+      "credited": "Credit note issued",
+      "creditNoteCreated": "Credit note created for {number}",
+      "creditedBy": "Credited by {number}",
+      "originalPdfStored": "Original PDF stored",
+      "originalXmlStored": "Original XRechnung XML stored"
     },
     "sendReminder": "Send reminder",
     "deleteDraft": "Delete draft",
@@ -413,7 +418,10 @@
     },
     "pageTitle": "{number} · {client} — {app}",
     "pageTitleFallback": "Invoice — {app}",
-    "unknownClient": "Unknown client"
+    "unknownClient": "Unknown client",
+    "download": "Download",
+    "open": "Open",
+    "documentDetail": "{date} · sha256 {sha} · {size}"
   },
   "invoiceForm": {
     "newInvoice": "New invoice",

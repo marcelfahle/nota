@@ -391,7 +391,12 @@
       "proposal_approved": "Erinnerung freigegeben",
       "paymentRecorded": "Zahlung über {amount} erfasst",
       "sentWithXml": "Gesendet mit PDF und XRechnung-XML",
-      "sentWithPdf": "Gesendet mit PDF"
+      "sentWithPdf": "Gesendet mit PDF",
+      "credited": "Gutschrift erstellt",
+      "creditNoteCreated": "Gutschrift zu {number} angelegt",
+      "creditedBy": "Gutgeschrieben durch {number}",
+      "originalPdfStored": "Original-PDF gespeichert",
+      "originalXmlStored": "Original-XRechnung-XML gespeichert"
     },
     "sendReminder": "Erinnerung senden",
     "deleteDraft": "Entwurf löschen",
@@ -413,7 +418,10 @@
     },
     "pageTitle": "{number} · {client} — {app}",
     "pageTitleFallback": "Rechnung — {app}",
-    "unknownClient": "Unbekannter Kunde"
+    "unknownClient": "Unbekannter Kunde",
+    "download": "Herunterladen",
+    "open": "Öffnen",
+    "documentDetail": "{date} · sha256 {sha} · {size}"
   },
   "invoiceForm": {
     "newInvoice": "Neue Rechnung",

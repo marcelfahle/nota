@@ -2,10 +2,11 @@ import { randomUUID } from "node:crypto";
 import { mkdir, rename, rm, writeFile } from "node:fs/promises";
 import { dirname, resolve, sep } from "node:path";
 
-import { DeleteObjectCommand, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
+import { DeleteObjectCommand, PutObjectCommand } from "@aws-sdk/client-s3";
 import { del, put } from "@vercel/blob";
 
 import { getAppEnv, getStorageEnv } from "@/lib/env";
+import { s3Client } from "@/lib/file-storage";
 
 const BLOB_HOST_SUFFIX = "blob.vercel-storage.com";
 const LOGO_CACHE_MAX_AGE = 60 * 60 * 24 * 365;
@@ -41,19 +42,6 @@ export function getLocalStorageFile(key: string) {
 
 function localPublicUrl(key: string) {
   return new URL(`/api/storage/${key}`, getAppEnv().APP_URL).toString();
-}
-
-function s3Client() {
-  const env = getStorageEnv();
-  return new S3Client({
-    credentials:
-      env.S3_ACCESS_KEY_ID && env.S3_SECRET_ACCESS_KEY
-        ? { accessKeyId: env.S3_ACCESS_KEY_ID, secretAccessKey: env.S3_SECRET_ACCESS_KEY }
-        : undefined,
-    endpoint: env.S3_ENDPOINT,
-    forcePathStyle: env.S3_FORCE_PATH_STYLE === "true",
-    region: env.S3_REGION,
-  });
 }
 
 async function store(key: string, content: Buffer, contentType: LogoContentType) {

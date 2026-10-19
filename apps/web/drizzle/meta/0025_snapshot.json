@@ -1,5 +1,5 @@
 {
-  "id": "94dc5985-658d-4d68-be5a-215ca3642f8d",
+  "id": "5d2238b2-97cb-4599-a721-feceb45a3d74",
   "prevId": "9e00eb23-6c8f-4ecf-b15c-cfec5591ad2b",
   "version": "7",
   "dialect": "postgresql",
@@ -1213,6 +1213,106 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
+    "public.invoice_documents": {
+      "name": "invoice_documents",
+      "schema": "",
+      "columns": {
+        "byte_size": {
+          "name": "byte_size",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "content_type": {
+          "name": "content_type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "filename": {
+          "name": "filename",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "invoice_id": {
+          "name": "invoice_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "kind": {
+          "name": "kind",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "org_id": {
+          "name": "org_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "sha256": {
+          "name": "sha256",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "storage_key": {
+          "name": "storage_key",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "invoice_documents_invoice_id_invoices_id_fk": {
+          "name": "invoice_documents_invoice_id_invoices_id_fk",
+          "tableFrom": "invoice_documents",
+          "tableTo": "invoices",
+          "columnsFrom": ["invoice_id"],
+          "columnsTo": ["id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "invoice_documents_org_id_orgs_id_fk": {
+          "name": "invoice_documents_org_id_orgs_id_fk",
+          "tableFrom": "invoice_documents",
+          "tableTo": "orgs",
+          "columnsFrom": ["org_id"],
+          "columnsTo": ["id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "invoice_documents_invoice_id_kind_unique": {
+          "name": "invoice_documents_invoice_id_kind_unique",
+          "nullsNotDistinct": false,
+          "columns": ["invoice_id", "kind"]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
     "public.invoice_number_events": {
       "name": "invoice_number_events",
       "schema": "",
@@ -1452,12 +1552,6 @@
           "notNull": false,
           "default": "'EUR'"
         },
-        "document_locale": {
-          "name": "document_locale",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
         "due_at": {
           "name": "due_at",
           "type": "date",
@@ -1482,6 +1576,12 @@
           "type": "date",
           "primaryKey": false,
           "notNull": true
+        },
+        "issued_snapshot": {
+          "name": "issued_snapshot",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
         },
         "kind": {
           "name": "kind",
@@ -3015,13 +3115,6 @@
           "notNull": true,
           "default": "'standard'"
         },
-        "document_locale": {
-          "name": "document_locale",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'en'"
-        },
         "e_invoice_delivery": {
           "name": "e_invoice_delivery",
           "type": "text",
@@ -3872,13 +3965,6 @@
           "primaryKey": false,
           "notNull": true,
           "default": false
-        },
-        "locale": {
-          "name": "locale",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'en'"
         },
         "logo_url": {
           "name": "logo_url",

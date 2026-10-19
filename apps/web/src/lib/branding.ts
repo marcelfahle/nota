@@ -14,6 +14,11 @@ export function formatOrgAddress(
   },
   options?: AddressDocumentOptions,
 ) {
+  // Nothing structured: the free text people typed is the whole address, so a
+  // country line on its own would replace it rather than complete it.
+  if (!org.street && !org.postalCode && !org.city) {
+    return org.businessAddress ?? null;
+  }
   // On a document the country is named in its language and dropped at home;
   // without a stored code the free text people typed is printed as is.
   const country = !options

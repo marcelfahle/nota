@@ -5,11 +5,13 @@ import {
   activityLog,
   bankAccounts,
   clients,
+  invoiceDocuments,
   invoices,
   orgMembers,
   orgs,
   users,
 } from "@/lib/db/schema";
+import { deleteInvoiceDocumentFiles } from "@/lib/invoice-documents";
 import { deleteManagedLogo } from "@/lib/logo-storage";
 
 const LIVE_SUBSCRIPTION = new Set(["active", "past_due", "trialing", "unpaid"]);
@@ -67,13 +69,21 @@ export async function deleteWorkspace(orgId: string): Promise<WorkspaceDeletion>
 
     const doomed = await tx.select({ id: invoices.id }).from(invoices).where(invoiceScope);
     const invoiceIds = doomed.map((invoice) => invoice.id);
+    // Issued originals are kept as long as their invoice exists; they go with the workspace.
+    const storedDocuments =
+      invoiceIds.length > 0
+        ? await tx
+            .select({ storageKey: invoiceDocuments.storageKey })
+            .from(invoiceDocuments)
+            .where(inArray(invoiceDocuments.invoiceId, invoiceIds))
+        : [];
     if (invoiceIds.length > 0) {
       await tx.delete(activityLog).where(inArray(activityLog.invoiceId, invoiceIds));
       await tx
         .update(invoices)
         .set({ creditsInvoiceId: null })
         .where(inArray(invoices.id, invoiceIds));
-      // Line items, payments, proposals and jobs go with their invoice.
+      // Line items, payments, proposals, jobs and document rows go with their invoice.
       await tx.delete(invoices).where(inArray(invoices.id, invoiceIds));
     }
     const removedClients = await tx
@@ -87,10 +97,20 @@ export async function deleteWorkspace(orgId: string): Promise<WorkspaceDeletion>
       // Sessions, credentials and OAuth grants cascade from the user.
       await tx.delete(users).where(inArray(users.id, userIds));
     }
-    return { clients: removedClients.length, invoices: invoiceIds.length, users: userIds.length };
+    return {
+      clients: removedClients.length,
+      documentKeys: storedDocuments.map((document) => document.storageKey),
+      invoices: invoiceIds.length,
+      users: userIds.length,
+    };
   });
 
   // Stored files are outside the transaction; a leftover file is harmless.
-  await Promise.all([deleteManagedLogo(org.logoUrl), deleteManagedLogo(org.faviconUrl)]);
-  return { deleted };
+  const { documentKeys, ...counts } = deleted;
+  await Promise.all([
+    deleteManagedLogo(org.logoUrl),
+    deleteManagedLogo(org.faviconUrl),
+    deleteInvoiceDocumentFiles(documentKeys).catch(() => null),
+  ]);
+  return { deleted: counts };
 }

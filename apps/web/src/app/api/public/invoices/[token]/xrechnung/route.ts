@@ -1,10 +1,11 @@
+import { loadInvoiceXml } from "@/lib/invoice-documents";
 import { getPublicInvoice } from "@/lib/public-invoice";
 import { XRechnungValidationError } from "@/lib/xrechnung";
-import { InvoiceDocumentError, renderXRechnungForOrg } from "@/lib/xrechnung-service";
+import { InvoiceDocumentError } from "@/lib/xrechnung-service";
 
-// Same token as the PDF route. The XML is offered only while the workspace
-// setting is on and the export is complete; like the PDF it is rendered from
-// the current data, not frozen at send time (NOTA-57).
+// Same token as the PDF route. Serves the XML stored at issuance; an invoice
+// issued before originals were kept is rendered live while the workspace
+// setting is on and the export is complete.
 export async function GET(_request: Request, { params }: { params: Promise<{ token: string }> }) {
   const { token } = await params;
   const invoice = await getPublicInvoice(token);
@@ -14,7 +15,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ tok
   }
 
   try {
-    const { filename, xml } = await renderXRechnungForOrg(invoice.organization, invoice.id);
+    const { filename, xml } = await loadInvoiceXml(invoice.organization, invoice.id);
     return new Response(xml, {
       headers: {
         "Cache-Control": "private, no-store",

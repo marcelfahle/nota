@@ -4,6 +4,7 @@ import { and, asc, count, desc, eq, inArray, sql } from "drizzle-orm";
 
 import type { AuthenticatedRole } from "@/lib/auth";
 import { billingMonth, canSendOnPlan, paymentAccount, UPGRADE_MESSAGE } from "@/lib/billing-policy";
+import { getPdfLogoSrc } from "@/lib/branding";
 import { db } from "@/lib/db";
 import {
   activityLog,
@@ -28,6 +29,11 @@ import {
   validateForSending,
 } from "@/lib/invoice-compliance";
 import { loadInvoiceBankAccount } from "@/lib/invoice-document";
+import {
+  deleteInvoiceDocumentFiles,
+  listInvoiceDocuments,
+  storeIssuedDocuments,
+} from "@/lib/invoice-documents";
 import { resolveDueDateChange } from "@/lib/invoice-due-date";
 import {
   canCancelInvoice as canCancelInvoiceStatus,
@@ -39,6 +45,7 @@ import {
   normalizeInvoiceStatus,
 } from "@/lib/invoice-lifecycle";
 import { formatInvoiceNumber } from "@/lib/invoice-number";
+import { buildIssuedSnapshot, displayedBuyer } from "@/lib/issued-snapshot";
 import { processPendingEmailJobs } from "@/lib/jobs";
 import {
   absoluteDecimal,
@@ -440,73 +447,75 @@ export async function getInvoiceDetail(orgId: string, invoiceId: string) {
     return null;
   }
 
-  const [client, items, activities, paymentRows, [creditRow], [viewRow], org] = await Promise.all([
-    db
-      .select({
-        address: clients.address,
-        bankAccountId: clients.bankAccountId,
-        city: clients.city,
-        company: clients.company,
-        countryCode: clients.countryCode,
-        defaultCurrency: clients.defaultCurrency,
-        email: clients.email,
-        id: clients.id,
-        name: clients.name,
-        postalCode: clients.postalCode,
-        publicSector: clients.publicSector,
-        street: clients.street,
-        taxIdentifierCanonicalValue: clients.taxIdentifierCanonicalValue,
-        taxIdentifierCountryCode: clients.taxIdentifierCountryCode,
-        taxIdentifierType: clients.taxIdentifierType,
-        taxIdentifierValue: clients.taxIdentifierValue,
-        vatNumber: clients.vatNumber,
-        vatStatus: clients.vatStatus,
-      })
-      .from(clients)
-      .where(and(eq(clients.id, invoice.clientId), eq(clients.orgId, orgId)))
-      .limit(1)
-      .then((rows) => rows[0] ?? null),
-    db
-      .select()
-      .from(lineItems)
-      .where(eq(lineItems.invoiceId, invoiceId))
-      .orderBy(asc(lineItems.sortOrder)),
-    db
-      .select({
-        action: activityLog.action,
-        createdAt: activityLog.createdAt,
-        id: activityLog.id,
-        metadata: activityLog.metadata,
-        source: activityLog.source,
-        sourceClient: activityLog.sourceClient,
-      })
-      .from(activityLog)
-      .where(eq(activityLog.invoiceId, invoiceId))
-      .orderBy(desc(activityLog.createdAt)),
-    db
-      .select()
-      .from(payments)
-      .where(and(eq(payments.invoiceId, invoiceId), eq(payments.orgId, orgId)))
-      .orderBy(desc(payments.receivedAt)),
-    db
-      .select({ total: sql<string>`coalesce(sum(${invoices.total}::numeric), 0)` })
-      .from(invoices)
-      .where(
-        and(
-          eq(invoices.creditsInvoiceId, invoiceId),
-          eq(invoices.kind, "credit_note"),
-          inArray(invoices.status, ["sent", "overdue", "paid"]),
+  const [client, items, activities, paymentRows, [creditRow], [viewRow], org, documents] =
+    await Promise.all([
+      db
+        .select({
+          address: clients.address,
+          bankAccountId: clients.bankAccountId,
+          city: clients.city,
+          company: clients.company,
+          countryCode: clients.countryCode,
+          defaultCurrency: clients.defaultCurrency,
+          email: clients.email,
+          id: clients.id,
+          name: clients.name,
+          postalCode: clients.postalCode,
+          publicSector: clients.publicSector,
+          street: clients.street,
+          taxIdentifierCanonicalValue: clients.taxIdentifierCanonicalValue,
+          taxIdentifierCountryCode: clients.taxIdentifierCountryCode,
+          taxIdentifierType: clients.taxIdentifierType,
+          taxIdentifierValue: clients.taxIdentifierValue,
+          vatNumber: clients.vatNumber,
+          vatStatus: clients.vatStatus,
+        })
+        .from(clients)
+        .where(and(eq(clients.id, invoice.clientId), eq(clients.orgId, orgId)))
+        .limit(1)
+        .then((rows) => rows[0] ?? null),
+      db
+        .select()
+        .from(lineItems)
+        .where(eq(lineItems.invoiceId, invoiceId))
+        .orderBy(asc(lineItems.sortOrder)),
+      db
+        .select({
+          action: activityLog.action,
+          createdAt: activityLog.createdAt,
+          id: activityLog.id,
+          metadata: activityLog.metadata,
+          source: activityLog.source,
+          sourceClient: activityLog.sourceClient,
+        })
+        .from(activityLog)
+        .where(eq(activityLog.invoiceId, invoiceId))
+        .orderBy(desc(activityLog.createdAt)),
+      db
+        .select()
+        .from(payments)
+        .where(and(eq(payments.invoiceId, invoiceId), eq(payments.orgId, orgId)))
+        .orderBy(desc(payments.receivedAt)),
+      db
+        .select({ total: sql<string>`coalesce(sum(${invoices.total}::numeric), 0)` })
+        .from(invoices)
+        .where(
+          and(
+            eq(invoices.creditsInvoiceId, invoiceId),
+            eq(invoices.kind, "credit_note"),
+            inArray(invoices.status, ["sent", "overdue", "paid"]),
+          ),
         ),
-      ),
-    db
-      .select({
-        count: sql<number>`count(*)::int`,
-        lastViewedAt: sql<Date | null>`max(${activityLog.createdAt})`,
-      })
-      .from(activityLog)
-      .where(and(eq(activityLog.invoiceId, invoiceId), eq(activityLog.action, "viewed"))),
-    getOwnedOrg(orgId),
-  ]);
+      db
+        .select({
+          count: sql<number>`count(*)::int`,
+          lastViewedAt: sql<Date | null>`max(${activityLog.createdAt})`,
+        })
+        .from(activityLog)
+        .where(and(eq(activityLog.invoiceId, invoiceId), eq(activityLog.action, "viewed"))),
+      getOwnedOrg(orgId),
+      listInvoiceDocuments(orgId, invoiceId),
+    ]);
 
   const currency = invoice.currency ?? "EUR";
   const settlement = reconcileStoredInvoiceAmounts(
@@ -541,13 +550,15 @@ export async function getInvoiceDetail(orgId: string, invoiceId: string) {
     ...invoice,
     activityLog: activities,
     balance: settlement.balance,
+    // An issued invoice shows the buyer as it was issued to; a draft shows the client as they are.
     client: client
       ? {
-          ...client,
+          ...displayedBuyer(invoice, client),
           taxIdentifier: invoiceTaxIdentifier(invoice.status, invoice.clientTaxIdentifier, client),
         }
       : null,
     creditedAmount: settlement.creditedAmount,
+    documents,
     issueProblems,
     lastViewedAt: viewRow?.lastViewedAt ?? null,
     lineItems: items.map((item) => ({
@@ -860,8 +871,11 @@ export async function sendInvoice(
   }
 
   const sentAt = new Date();
+  // Fetched before the transaction so no network wait happens under the row locks.
+  const logoSrc = await getPdfLogoSrc((await getOwnedOrg(context.orgId))?.logoUrl);
   let createdLink: { accountId: string | null; id: string } | null = null;
   let creditedLink: { accountId: string | null; id: string; invoiceId: string } | null = null;
+  let storedKeys: Array<string> = [];
   try {
     const result = await db.transaction(async (tx): Promise<InvoiceMutationResult> => {
       // Keep quota, invoice state and the email job atomic, including on request interruption.
@@ -946,6 +960,16 @@ export async function sendInvoice(
           : null;
       const accountId = account === "platform" ? null : account;
       const issuedNumber = await issueDocumentNumber(tx, context, invoice);
+      const sellerTaxIdentifier = invoiceTaxIdentifier(
+        invoice.status,
+        invoice.sellerTaxIdentifier,
+        org,
+      );
+      const clientTaxIdentifier = invoiceTaxIdentifier(
+        invoice.status,
+        invoice.clientTaxIdentifier,
+        client,
+      );
       const paymentLink =
         account && invoice.kind === "invoice"
           ? await createPaymentLink({
@@ -963,20 +987,20 @@ export async function sendInvoice(
       await tx
         .update(invoices)
         .set({
-          clientTaxIdentifier: invoiceTaxIdentifier(
-            invoice.status,
-            invoice.clientTaxIdentifier,
-            client,
-          ),
+          clientTaxIdentifier,
           // The document keeps the language it was issued in, whatever the workspace picks later.
           documentLocale: invoice.documentLocale ?? org.documentLocale,
+          issuedSnapshot: buildIssuedSnapshot({
+            bankAccount,
+            client,
+            clientTaxIdentifier,
+            invoice,
+            org,
+            sellerTaxIdentifier,
+          }),
           publicToken: invoice.publicToken ?? randomBytes(24).toString("base64url"),
           revision: sql`${invoices.revision} + 1`,
-          sellerTaxIdentifier: invoiceTaxIdentifier(
-            invoice.status,
-            invoice.sellerTaxIdentifier,
-            org,
-          ),
+          sellerTaxIdentifier,
           sentAt,
           status: "sent",
           stripeAccountId: accountId,
@@ -985,6 +1009,16 @@ export async function sendInvoice(
           updatedAt: sentAt,
         })
         .where(eq(invoices.id, invoiceId));
+      // What the customer receives is rendered and stored now, from the frozen
+      // row, so the email job and every later download carry the same bytes.
+      storedKeys = (
+        await storeIssuedDocuments(
+          tx,
+          org,
+          { id: invoiceId, number: issuedNumber },
+          { attachXml: attachments.includes("xml"), logoSrc },
+        )
+      ).map((row) => row.storageKey);
       await tx
         .insert(invoiceSends)
         .values({ invoiceId, month: billingMonth(sentAt), orgId: org.id });
@@ -1033,6 +1067,14 @@ export async function sendInvoice(
           });
           await expireInvoiceProposals(tx, original.id);
         }
+        if (original) {
+          await tx.insert(activityLog).values({
+            action: "credited",
+            invoiceId: original.id,
+            metadata: { creditNoteId: invoiceId, creditNoteNumber: issuedNumber },
+            ...sourceFields(context),
+          });
+        }
         if (original?.stripePaymentLinkId) {
           creditedLink = {
             accountId: original.stripeAccountId,
@@ -1051,11 +1093,13 @@ export async function sendInvoice(
       return result;
     }
   } catch {
-    // A link created before a database failure has never been sent to the client.
+    // A link created before a database failure has never been sent to the client,
+    // and a file stored before it belongs to no issued document.
     const orphan = createdLink as { accountId: string | null; id: string } | null;
     if (orphan) {
       await deactivatePaymentLink(orphan.id, orphan.accountId).catch(() => null);
     }
+    await deleteInvoiceDocumentFiles(storedKeys).catch(() => null);
     return { error: "Invoice could not be sent. Please try again." };
   }
   let warning: string | undefined;
@@ -1573,7 +1617,9 @@ export async function markInvoiceSent(
     return { error: getInsufficientPermissionsError() };
   }
 
-  return db.transaction(async (tx) => {
+  const logoSrc = await getPdfLogoSrc((await getOwnedOrg(context.orgId))?.logoUrl);
+  let storedKeys: Array<string> = [];
+  const issue = db.transaction(async (tx): Promise<InvoiceMutationResult> => {
     const [organization] = await tx
       .select()
       .from(orgs)
@@ -1612,35 +1658,71 @@ export async function markInvoiceSent(
       return issuanceError(problems);
     }
 
-    await issueDocumentNumber(tx, context, invoice);
+    const issuedNumber = await issueDocumentNumber(tx, context, invoice);
     const sentAt = new Date();
+    const sellerTaxIdentifier = invoiceTaxIdentifier(
+      invoice.status,
+      invoice.sellerTaxIdentifier,
+      organization,
+    );
+    const clientTaxIdentifier = invoiceTaxIdentifier(
+      invoice.status,
+      invoice.clientTaxIdentifier,
+      client,
+    );
     await tx
       .update(invoices)
       .set({
-        clientTaxIdentifier: invoiceTaxIdentifier(
-          invoice.status,
-          invoice.clientTaxIdentifier,
-          client,
-        ),
+        clientTaxIdentifier,
         documentLocale: invoice.documentLocale ?? organization.documentLocale,
+        issuedSnapshot: buildIssuedSnapshot({
+          bankAccount,
+          client,
+          clientTaxIdentifier,
+          invoice,
+          org: organization,
+          sellerTaxIdentifier,
+        }),
         revision: sql`${invoices.revision} + 1`,
-        sellerTaxIdentifier: invoiceTaxIdentifier(
-          invoice.status,
-          invoice.sellerTaxIdentifier,
-          organization,
-        ),
+        sellerTaxIdentifier,
         sentAt,
         status: "sent",
         updatedAt: sentAt,
       })
       .where(eq(invoices.id, invoiceId));
+    // Nothing leaves Nota, but the original the owner sent by hand is kept all
+    // the same. Only the issuance rules applied, so the XML is stored when it
+    // validates and skipped otherwise; it is never required here.
+    storedKeys = (
+      await storeIssuedDocuments(
+        tx,
+        organization,
+        { id: invoiceId, number: issuedNumber },
+        { attachXml: false, logoSrc },
+      )
+    ).map((row) => row.storageKey);
     await tx.insert(activityLog).values({
       action: "sent",
       invoiceId,
       metadata: { manual: true },
       ...sourceFields(context),
     });
+    if (invoice.kind === "credit_note" && invoice.creditsInvoiceId) {
+      await tx.insert(activityLog).values({
+        action: "credited",
+        invoiceId: invoice.creditsInvoiceId,
+        metadata: { creditNoteId: invoiceId, creditNoteNumber: issuedNumber },
+        ...sourceFields(context),
+      });
+    }
     await tx.update(orgs).set({ firstRunCompletedAt: sentAt }).where(eq(orgs.id, context.orgId));
     return { invoiceId, success: true };
   });
+  try {
+    return await issue;
+  } catch {
+    // Rolled back: the number is free again and a stored file belongs to nothing.
+    await deleteInvoiceDocumentFiles(storedKeys).catch(() => null);
+    return { error: "Invoice could not be marked as sent. Please try again." };
+  }
 }

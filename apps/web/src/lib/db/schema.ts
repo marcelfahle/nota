@@ -17,6 +17,7 @@ import {
 } from "drizzle-orm/pg-core";
 
 import type { EInvoiceDelivery } from "@/lib/e-invoice-delivery";
+import type { IssuedSnapshot } from "@/lib/issued-snapshot";
 import type { SiteProfile } from "@/lib/site-reader/types";
 import type { TaxIdentifier } from "@/lib/tax-identifier";
 
@@ -332,6 +333,9 @@ export const invoices = pgTable(
     id: uuid().defaultRandom().primaryKey(),
     internalNotes: text("internal_notes"),
     issuedAt: date("issued_at").notNull(),
+    // Seller, buyer, bank and totals exactly as rendered at issuance (NOTA-57).
+    // Null on drafts and on documents issued before the snapshot existed.
+    issuedSnapshot: jsonb("issued_snapshot").$type<IssuedSnapshot>(),
     kind: invoiceKindEnum().notNull().default("invoice"),
     notes: text(),
     number: text().notNull(),
@@ -364,6 +368,31 @@ export const invoices = pgTable(
       .references(() => users.id),
   },
   (table) => [unique("invoices_org_id_number_unique").on(table.orgId, table.number)],
+);
+
+/**
+ * The files a customer received for one issued invoice, byte for byte. Rows go
+ * only with their invoice; the stored file is removed when the workspace is.
+ */
+export const invoiceDocuments = pgTable(
+  "invoice_documents",
+  {
+    byteSize: integer("byte_size").notNull(),
+    contentType: text("content_type").notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    filename: text().notNull(),
+    id: uuid().defaultRandom().primaryKey(),
+    invoiceId: uuid("invoice_id")
+      .notNull()
+      .references(() => invoices.id, { onDelete: "cascade" }),
+    kind: text({ enum: ["pdf", "xrechnung"] }).notNull(),
+    orgId: uuid("org_id")
+      .notNull()
+      .references(() => orgs.id, { onDelete: "cascade" }),
+    sha256: text().notNull(),
+    storageKey: text("storage_key").notNull(),
+  },
+  (table) => [unique("invoice_documents_invoice_id_kind_unique").on(table.invoiceId, table.kind)],
 );
 
 export const invoiceNumberEvents = pgTable(

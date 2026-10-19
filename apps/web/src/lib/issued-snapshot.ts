@@ -1,0 +1,253 @@
+import { formatOrgAddress } from "@/lib/branding";
+import { documentLocaleOf } from "@/lib/i18n";
+import type { ComplianceInput } from "@/lib/invoice-compliance";
+import { orgCountryCode } from "@/lib/invoice-compliance";
+import {
+  type AddressDocumentOptions,
+  clientPostalAddress,
+  formatClientAddress,
+  isDomestic,
+  orgPostalAddress,
+} from "@/lib/postal-address";
+import type { TaxIdentifier } from "@/lib/tax-identifier";
+import type { TaxTreatment } from "@/lib/tax-treatment";
+
+/**
+ * What an issued invoice said about its parties, frozen on the invoice row at
+ * issuance. The renderers read this, never the live workspace or client, so a
+ * later settings edit cannot change an issued document. Drafts get the same
+ * shape built from the live rows on every render.
+ */
+export type IssuedSnapshot = {
+  bank: { bic: string | null; details: string | null; iban: string | null } | null;
+  buyer: {
+    /** Address lines as printed on the PDF. */
+    address: string | null;
+    city: string | null;
+    company: string | null;
+    countryCode: string | null;
+    email: string;
+    name: string;
+    postalCode: string | null;
+    publicSector: boolean;
+    street: string | null;
+    taxIdentifier: TaxIdentifier | null;
+  };
+  seller: {
+    /** Address lines as printed on the PDF. */
+    address: string | null;
+    brandColor: string | null;
+    city: string | null;
+    contactEmail: string | null;
+    contactName: string | null;
+    contactPhone: string | null;
+    countryCode: string | null;
+    logoUrl: string | null;
+    name: string;
+    postalCode: string | null;
+    street: string | null;
+    taxIdentifier: TaxIdentifier | null;
+  };
+  totals: {
+    currency: string;
+    subtotal: string;
+    taxAmount: string;
+    taxRate: string;
+    taxTreatment: TaxTreatment;
+    total: string;
+  };
+  version: 1;
+};
+
+export type SnapshotOrg = {
+  brandColor?: string | null;
+  businessAddress?: string | null;
+  businessName?: string | null;
+  city?: string | null;
+  contactEmail?: string | null;
+  contactName?: string | null;
+  contactPhone?: string | null;
+  country?: string | null;
+  countryCode?: string | null;
+  documentLocale?: string | null;
+  legalName?: string | null;
+  logoUrl?: string | null;
+  name: string;
+  postalCode?: string | null;
+  street?: string | null;
+};
+
+export type SnapshotClient = {
+  address?: string | null;
+  city?: string | null;
+  company?: string | null;
+  countryCode?: string | null;
+  email: string;
+  name: string;
+  postalCode?: string | null;
+  publicSector?: boolean | null;
+  street?: string | null;
+};
+
+export type SnapshotInvoice = {
+  currency?: string | null;
+  documentLocale?: string | null;
+  subtotal?: string | null;
+  taxAmount?: string | null;
+  taxRate?: string | null;
+  taxTreatment: TaxTreatment;
+  total?: string | null;
+};
+
+export function buildIssuedSnapshot(input: {
+  bankAccount: IssuedSnapshot["bank"];
+  client: SnapshotClient;
+  clientTaxIdentifier: TaxIdentifier | null;
+  invoice: SnapshotInvoice;
+  org: SnapshotOrg;
+  sellerTaxIdentifier: TaxIdentifier | null;
+}): IssuedSnapshot {
+  const { bankAccount, client, invoice, org } = input;
+  const sellerPostal = orgPostalAddress(org);
+  const buyerPostal = clientPostalAddress(client);
+  // The address lines print the way the document does: country named in the
+  // document language, and left out when both parties are in one country.
+  const address: AddressDocumentOptions = {
+    locale: documentLocaleOf(invoice, org),
+    omitCountry: isDomestic({ countryCode: orgCountryCode(org) }, client),
+  };
+  return {
+    bank: bankAccount
+      ? {
+          bic: bankAccount.bic ?? null,
+          details: bankAccount.details ?? null,
+          iban: bankAccount.iban ?? null,
+        }
+      : null,
+    buyer: {
+      address: formatClientAddress(client, address),
+      city: buyerPostal.city ?? null,
+      company: client.company ?? null,
+      countryCode: buyerPostal.countryCode ?? null,
+      email: client.email,
+      name: client.name,
+      postalCode: buyerPostal.postalCode ?? null,
+      publicSector: client.publicSector ?? false,
+      street: buyerPostal.street ?? null,
+      taxIdentifier: input.clientTaxIdentifier,
+    },
+    seller: {
+      address: formatOrgAddress(org, address),
+      brandColor: org.brandColor ?? null,
+      city: sellerPostal.city ?? null,
+      contactEmail: org.contactEmail ?? null,
+      contactName: org.contactName ?? null,
+      contactPhone: org.contactPhone ?? null,
+      countryCode: orgCountryCode(org) ?? sellerPostal.countryCode ?? null,
+      logoUrl: org.logoUrl ?? null,
+      name: org.legalName ?? org.businessName ?? org.name,
+      postalCode: sellerPostal.postalCode ?? null,
+      street: sellerPostal.street ?? null,
+      taxIdentifier: input.sellerTaxIdentifier,
+    },
+    totals: {
+      currency: invoice.currency ?? "EUR",
+      subtotal: invoice.subtotal ?? "0.00",
+      taxAmount: invoice.taxAmount ?? "0.00",
+      taxRate: invoice.taxRate ?? "0.00",
+      taxTreatment: invoice.taxTreatment,
+      total: invoice.total ?? "0.00",
+    },
+    version: 1,
+  };
+}
+
+/** Compliance checks on an issued document run against what it said, not what the rows say now. */
+export function complianceFromSnapshot(
+  snapshot: IssuedSnapshot,
+  invoice: {
+    buyerReference: string | null;
+    kind: "credit_note" | "invoice";
+    servicePeriodEnd: string | null;
+    servicePeriodStart: string | null;
+  },
+  lineItemCount: number,
+): ComplianceInput {
+  const { bank, buyer, seller, totals } = snapshot;
+  return {
+    bankAccount: bank,
+    client: {
+      address: buyer.address,
+      city: buyer.city,
+      company: buyer.company,
+      countryCode: buyer.countryCode,
+      name: buyer.name,
+      postalCode: buyer.postalCode,
+      publicSector: buyer.publicSector,
+      street: buyer.street,
+      taxIdentifier: buyer.taxIdentifier,
+    },
+    invoice: {
+      buyerReference: invoice.buyerReference,
+      issued: true,
+      kind: invoice.kind,
+      lineItemCount,
+      servicePeriodEnd: invoice.servicePeriodEnd,
+      servicePeriodStart: invoice.servicePeriodStart,
+      taxRate: totals.taxRate,
+      taxTreatment: totals.taxTreatment,
+    },
+    org: {
+      businessName: seller.name,
+      city: seller.city,
+      contactEmail: seller.contactEmail,
+      contactName: seller.contactName,
+      contactPhone: seller.contactPhone,
+      countryCode: seller.countryCode,
+      legalName: seller.name,
+      name: seller.name,
+      postalCode: seller.postalCode,
+      street: seller.street,
+      taxIdentifier: seller.taxIdentifier,
+    },
+  };
+}
+
+type FrozenInvoice = { issuedSnapshot?: IssuedSnapshot | null; status: string | null };
+
+/** The snapshot an issued invoice renders from; null for drafts and for invoices issued before it existed. */
+export function frozenSnapshot(invoice: FrozenInvoice) {
+  return invoice.status !== "draft" ? (invoice.issuedSnapshot ?? null) : null;
+}
+
+/**
+ * The buyer as every screen should show it: frozen on an issued invoice, live
+ * on a draft. The frozen address lines are kept as one block and the structured
+ * columns cleared, so `formatClientAddress` prints exactly what the PDF did.
+ */
+export function displayedBuyer<T extends SnapshotClient>(invoice: FrozenInvoice, client: T): T {
+  const frozen = frozenSnapshot(invoice);
+  if (!frozen) {
+    return client;
+  }
+  return {
+    ...client,
+    address: frozen.buyer.address,
+    city: null,
+    company: frozen.buyer.company,
+    countryCode: null,
+    email: frozen.buyer.email,
+    name: frozen.buyer.name,
+    postalCode: null,
+    street: null,
+  };
+}
+
+/** The seller's address lines as the screen should show them; branding (name, logo, colour) stays live. */
+export function displayedSellerAddress(
+  invoice: FrozenInvoice,
+  org: SnapshotOrg,
+  options?: AddressDocumentOptions,
+) {
+  return frozenSnapshot(invoice)?.seller.address ?? formatOrgAddress(org, options);
+}

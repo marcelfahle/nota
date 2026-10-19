@@ -54,6 +54,14 @@ mock.module("@/lib/invoice-pdf-service", () => {
   return { InvoicePdfDataError, renderInvoicePdfForOrg };
 });
 
+// Stored originals are covered in invoice-documents.test.ts; here every invoice renders.
+mock.module("@/lib/invoice-documents", () => ({
+  loadInvoicePdf: async (org: unknown, invoiceId: string) => ({
+    ...(await renderInvoicePdfForOrg(org, invoiceId)),
+    stored: false,
+  }),
+}));
+
 const { GET } = await import("./route");
 
 beforeEach(() => {

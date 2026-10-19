@@ -7,12 +7,12 @@ import { cache } from "react";
 import { InvoiceDetailView } from "@/components/invoice-detail";
 import { APP_NAME } from "@/lib/app-brand";
 import { getCurrentUser } from "@/lib/auth";
-import { formatOrgAddress } from "@/lib/branding";
 import { db } from "@/lib/db";
 import { clients, invoices } from "@/lib/db/schema";
 import { documentLocaleOf } from "@/lib/i18n";
 import { orgCountryCode } from "@/lib/invoice-compliance";
 import { getInvoiceDetail } from "@/lib/invoice-service";
+import { displayedSellerAddress } from "@/lib/issued-snapshot";
 import { formatClientAddress, isDomestic } from "@/lib/postal-address";
 
 const loadInvoiceWithClient = cache(async (orgId: string, invoiceId: string) => {
@@ -89,12 +89,19 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
         sourceClient: a.sourceClient,
       }))}
       business={{
-        address: formatOrgAddress(org, address),
+        address: displayedSellerAddress(invoice, org, address),
         brandColor: org.brandColor,
         logoUrl: org.logoUrl,
         name: org.businessName || org.name,
       }}
       documentLocale={address.locale}
+      documents={invoice.documents.map((document) => ({
+        byteSize: document.byteSize,
+        createdAt: document.createdAt.toISOString(),
+        id: document.id,
+        kind: document.kind,
+        sha256: document.sha256,
+      }))}
       invoice={{
         ...invoice,
         client: invoice.client

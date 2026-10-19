@@ -22,3 +22,24 @@ test("structured org addresses omit missing fields and fall back to the legacy a
     }),
   ).toBe("81433 Silverton\nCO\nUnited States");
 });
+
+test("a document prints the country in its language, drops it at home and keeps free text whole", () => {
+  const berlin = {
+    city: "Berlin",
+    countryCode: "DE",
+    postalCode: "10115",
+    street: "Musterstraße 1",
+  };
+  expect(formatOrgAddress(berlin, { locale: "de" })).toBe(
+    "Musterstraße 1\n10115 Berlin\nDeutschland",
+  );
+  expect(formatOrgAddress(berlin, { locale: "en", omitCountry: true })).toBe(
+    "Musterstraße 1\n10115 Berlin",
+  );
+  expect(
+    formatOrgAddress(
+      { businessAddress: "Altstraße 9, 80331 München", countryCode: "DE" },
+      { locale: "en" },
+    ),
+  ).toBe("Altstraße 9, 80331 München");
+});

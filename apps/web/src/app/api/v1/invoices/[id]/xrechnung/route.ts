@@ -1,6 +1,7 @@
 import { error as apiError, json, requireAuth } from "@/lib/api-response";
+import { loadInvoiceXml } from "@/lib/invoice-documents";
 import { XRechnungValidationError } from "@/lib/xrechnung";
-import { InvoiceDocumentError, renderXRechnungForOrg } from "@/lib/xrechnung-service";
+import { InvoiceDocumentError } from "@/lib/xrechnung-service";
 
 export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const authResult = await requireAuth(request);
@@ -10,7 +11,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
 
   const { id } = await params;
   try {
-    const { filename, xml } = await renderXRechnungForOrg(authResult.auth.org, id);
+    const { filename, xml } = await loadInvoiceXml(authResult.auth.org, id);
     return new Response(xml, {
       headers: {
         "Content-Disposition": `attachment; filename="${filename}"`,
