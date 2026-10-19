@@ -280,6 +280,11 @@ export function generateXRechnung(data: XRechnungData): string {
   // number is the only honest value for a private buyer.
   const buyerReference = invoice.buyerReference?.trim() || invoice.number;
   const contact = business.contact!;
+  // BR-CO-26 wants a seller identifier (BT-29), legal registration (BT-30) or
+  // VAT ID (BT-31). A Kleinunternehmer has none of those, so the Steuernummer
+  // doubles as the seller identifier; BT-32 alone does not satisfy the rule.
+  const sellerIdentifier =
+    business.taxIdentifier?.type === "tax_id" ? business.taxIdentifier.value : null;
 
   const lines = invoice.lineItems
     .map(
@@ -348,6 +353,7 @@ ${isCreditNote && invoice.originalNumber ? `<cac:BillingReference>\n<cac:Invoice
 <cac:AccountingSupplierParty>
 <cac:Party>
 <cbc:EndpointID schemeID="EM">${escapeXml(business.email)}</cbc:EndpointID>
+${sellerIdentifier ? `<cac:PartyIdentification>\n<cbc:ID>${escapeXml(sellerIdentifier)}</cbc:ID>\n</cac:PartyIdentification>` : ""}
 ${business.name ? `<cac:PartyName>\n<cbc:Name>${escapeXml(business.name)}</cbc:Name>\n</cac:PartyName>` : ""}
 ${buildPartyAddress(business, business.countryCode!)}
 ${buildPartyTaxScheme(business.taxIdentifier)}

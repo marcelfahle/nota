@@ -25,7 +25,9 @@ and every surface (web, chat, REST, SDK, MCP, CLI) shows the same problems.
 1. **Ordinary German B2B or B2C invoice.** `standard` with 19% or 7%. Category S in the XRechnung.
 2. **Kleinunternehmer (§ 19 UStG).** `exempt_small_business`, 0%. The invoice prints
    "Gemäß § 19 UStG wird keine Umsatzsteuer berechnet." Category E with that text as the
-   exemption reason. A Steuernummer is enough; no VAT ID is needed on either side.
+   exemption reason. A Steuernummer is enough; no VAT ID is needed on either side. In the XML the
+   Steuernummer is both the tax registration (BT-32) and the seller identifier (BT-29), which
+   BR-CO-26 demands when there is no VAT ID.
 3. **Reverse charge to a business customer abroad (§ 13b UStG, Art. 196 VAT Directive).**
    `reverse_charge`, 0%. The invoice prints "Steuerschuldnerschaft des Leistungsempfängers".
    Category AE with `VATEX-EU-AE`. The client must be outside Germany; inside the EU it must
@@ -54,14 +56,14 @@ At issuance, for German workspaces (`countryCode` DE), following § 14 Abs. 4 US
 
 - Reverse charge to a client in the seller's own country, or to an EU client without a VAT ID.
 - Missing seller name, structured address, country, or tax identifier (Nr. 1 and 2).
-- Missing seller contact name or email (needed for the XRechnung the same invoice may become).
+- Missing seller contact name, email or phone with at least three digits (XRechnung BR-DE-5,
+  BR-DE-6 and BR-DE-27; the same invoice may have to become an XRechnung).
 - Missing client name or structured address with country (Nr. 1).
 - Missing service date or period (Nr. 6).
 - `standard` with a 0% rate: say which exemption applies instead (Nr. 8).
 
 At XRechnung export, for every workspace, in addition:
 
-- Missing seller phone (BR-DE-6).
 - Any of the German issuance rules above, because XRechnung 3.0 is a German standard.
 
 Mixed VAT rates on one invoice are not supported. One rate per document; split the work into
@@ -104,6 +106,9 @@ Issued invoices are never renumbered, recalculated or rewritten.
   BR-DE-16 (seller VAT ID or tax number), plus EN 16931 categories S, Z, E, AE and their
   exemption reasons.
 
-Running the official KoSIT validator against the export is the next task (NOTA-55). The XML
+All six fixtures (ordinary B2B, Kleinunternehmer, reverse charge, credit note, public sector,
+zero-rated) pass the official KoSIT validator 1.6.3 with the XRechnung 3.0.2 configuration of
+2026-08-31 with no errors or warnings. Wiring that validator into the repo is the next task
+(NOTA-55). The XML
 is built by one function, `generateXRechnung` in `apps/web/src/lib/xrechnung.ts`, so it can be
 validated there without touching the rest.
