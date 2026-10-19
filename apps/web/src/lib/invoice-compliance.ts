@@ -67,6 +67,42 @@ export function isGermanOrg(org: Pick<ComplianceOrg, "countryCode">) {
   return org.countryCode?.toUpperCase() === "DE";
 }
 
+/**
+ * The problems by name. The English sentence is what the API, CLI and MCP
+ * return; the web app shows it in the member's language by looking the
+ * sentence up here (see invoice-problems.ts), so this list is the contract.
+ */
+export const PROBLEMS = {
+  bankAccountMissing: "Add a bank account with a valid IBAN in Settings.",
+  bankIbanInvalid: "The IBAN on your bank account is not valid. Fix it in Settings.",
+  buyerAddress: "Add the client's street, postal code, city and country.",
+  buyerAddressSplit: "Split the client's address into street, postal code, city and country.",
+  buyerCountry: "Add the client's country.",
+  buyerName: "Add the client's name or company.",
+  lineItems: "Add at least one line item.",
+  periodBothDates: "Give both the start and the end of the service period, or a single date.",
+  periodMissing: "Add the service date or period.",
+  periodOrder: "The service period must end on or after it starts.",
+  publicSectorReference: "Public-sector clients need a buyer reference (Leitweg-ID).",
+  reverseChargeDomestic:
+    "Reverse charge applies to business customers in another country. Use standard VAT for domestic clients.",
+  reverseChargeVatId: "Reverse charge in the EU needs the client's VAT ID.",
+  sellerAddress: "Add your street, postal code and city in Settings.",
+  sellerContact: "Add a contact name and email for your business in Settings.",
+  sellerCountry: "Add your country in Settings.",
+  sellerEin: "A German invoice needs a Steuernummer or VAT ID, not an EIN.",
+  sellerName: "Add your legal or business name in Settings.",
+  sellerPhone: "Add a contact phone number for your business in Settings.",
+  sellerTaxId: "Add your tax number (Steuernummer) or VAT ID in Settings.",
+  standardZeroRate:
+    "The tax rate is 0% but the treatment is standard VAT. Pick zero-rated, small business exemption (§ 19 UStG) or reverse charge, or set a tax rate.",
+} as const;
+
+export type ProblemKey = keyof typeof PROBLEMS | "taxTreatmentConflict";
+
+export const TAX_TREATMENT_CONFLICT_SUFFIX =
+  " invoices carry no VAT. Set the tax rate to 0 or choose standard VAT.";
+
 type OrgColumns = {
   businessName: string | null;
   city: string | null;
@@ -178,9 +214,9 @@ function bankProblems(bankAccount: ComplianceBankAccount | null, required: boole
     return [];
   }
   if (bankAccount?.iban?.trim()) {
-    return ["The IBAN on your bank account is not valid. Fix it in Settings."];
+    return [PROBLEMS.bankIbanInvalid];
   }
-  return required ? ["Add a bank account with a valid IBAN in Settings."] : [];
+  return required ? [PROBLEMS.bankAccountMissing] : [];
 }
 
 function hasStructuredAddress(party: {
@@ -200,7 +236,7 @@ export function taxTreatmentConflict(
   taxRate: string | number | null | undefined,
 ): string | null {
   if (requiresZeroRate(treatment) && Number(taxRate ?? 0) !== 0) {
-    return `${TAX_TREATMENT_LABELS[treatment]} invoices carry no VAT. Set the tax rate to 0 or choose standard VAT.`;
+    return `${TAX_TREATMENT_LABELS[treatment]}${TAX_TREATMENT_CONFLICT_SUFFIX}`;
   }
   return null;
 }
@@ -209,25 +245,25 @@ export function taxTreatmentConflict(
 function sellerProblems(org: ComplianceOrg) {
   const problems: Array<string> = [];
   if (!(org.legalName?.trim() || org.businessName?.trim())) {
-    problems.push("Add your legal or business name in Settings.");
+    problems.push(PROBLEMS.sellerName);
   }
   if (!hasStructuredAddress(org)) {
-    problems.push("Add your street, postal code and city in Settings.");
+    problems.push(PROBLEMS.sellerAddress);
   }
   if (!org.countryCode?.trim()) {
-    problems.push("Add your country in Settings.");
+    problems.push(PROBLEMS.sellerCountry);
   }
   if (!org.taxIdentifier) {
-    problems.push("Add your tax number (Steuernummer) or VAT ID in Settings.");
+    problems.push(PROBLEMS.sellerTaxId);
   } else if (org.taxIdentifier.type === "us_ein") {
-    problems.push("A German invoice needs a Steuernummer or VAT ID, not an EIN.");
+    problems.push(PROBLEMS.sellerEin);
   }
   if (!org.contactName?.trim() || !org.contactEmail?.trim()) {
-    problems.push("Add a contact name and email for your business in Settings.");
+    problems.push(PROBLEMS.sellerContact);
   }
   // BR-DE-6 and BR-DE-27: the seller phone is mandatory and needs at least three digits.
   if ((org.contactPhone?.replaceAll(/\D/g, "").length ?? 0) < 3) {
-    problems.push("Add a contact phone number for your business in Settings.");
+    problems.push(PROBLEMS.sellerPhone);
   }
   return problems;
 }
@@ -236,17 +272,13 @@ function sellerProblems(org: ComplianceOrg) {
 function buyerProblems(client: ComplianceClient) {
   const problems: Array<string> = [];
   if (!(client.company?.trim() || client.name.trim())) {
-    problems.push("Add the client's name or company.");
+    problems.push(PROBLEMS.buyerName);
   }
   if (!hasStructuredAddress(client)) {
-    problems.push(
-      client.address?.trim()
-        ? "Split the client's address into street, postal code, city and country."
-        : "Add the client's street, postal code, city and country.",
-    );
+    problems.push(client.address?.trim() ? PROBLEMS.buyerAddressSplit : PROBLEMS.buyerAddress);
   }
   if (!client.countryCode?.trim()) {
-    problems.push("Add the client's country.");
+    problems.push(PROBLEMS.buyerCountry);
   }
   return problems;
 }
@@ -266,21 +298,17 @@ function taxProblems({ client, invoice, org }: ComplianceInput, strict: boolean)
   }
   // § 14 Abs. 4 Nr. 8 UStG: a 0% invoice must say why. BR-S-05: category S needs a rate above zero.
   if (invoice.taxTreatment === "standard" && Number(invoice.taxRate ?? 0) === 0) {
-    problems.push(
-      "The tax rate is 0% but the treatment is standard VAT. Pick zero-rated, small business exemption (§ 19 UStG) or reverse charge, or set a tax rate.",
-    );
+    problems.push(PROBLEMS.standardZeroRate);
   }
   // § 13b UStG / Art. 196 VAT Directive: a business customer abroad owes the VAT.
   if (invoice.taxTreatment === "reverse_charge") {
     const clientCountry = client.countryCode?.toUpperCase() ?? "";
     const sellerCountry = org.countryCode?.toUpperCase() ?? "";
     if (clientCountry && clientCountry === sellerCountry) {
-      problems.push(
-        "Reverse charge applies to business customers in another country. Use standard VAT for domestic clients.",
-      );
+      problems.push(PROBLEMS.reverseChargeDomestic);
     }
     if (clientCountry && isViesCountry(clientCountry) && client.taxIdentifier?.type !== "eu_vat") {
-      problems.push("Reverse charge in the EU needs the client's VAT ID.");
+      problems.push(PROBLEMS.reverseChargeVatId);
     }
   }
   return problems;
@@ -289,13 +317,13 @@ function taxProblems({ client, invoice, org }: ComplianceInput, strict: boolean)
 function periodProblems(invoice: ComplianceInvoice, required: boolean) {
   const { servicePeriodEnd: end, servicePeriodStart: start } = invoice;
   if (start && end) {
-    return end < start ? ["The service period must end on or after it starts."] : [];
+    return end < start ? [PROBLEMS.periodOrder] : [];
   }
   if (start || end) {
-    return ["Give both the start and the end of the service period, or a single date."];
+    return [PROBLEMS.periodBothDates];
   }
   // § 14 Abs. 4 Nr. 6 UStG: date or period of supply.
-  return required ? ["Add the service date or period."] : [];
+  return required ? [PROBLEMS.periodMissing] : [];
 }
 
 /** Problems that stop an invoice from being issued (sent or marked sent). */
@@ -304,7 +332,7 @@ export function validateForIssuance(input: ComplianceInput): Array<string> {
   const german = isGermanOrg(org);
   const problems = [
     ...taxProblems(input, german),
-    ...(invoice.lineItemCount === 0 ? ["Add at least one line item."] : []),
+    ...(invoice.lineItemCount === 0 ? [PROBLEMS.lineItems] : []),
     ...periodProblems(invoice, german && !invoice.issued),
     ...(german
       ? [...sellerProblems(org), ...buyerProblems(client), ...bankProblems(bankAccount, false)]
@@ -312,7 +340,7 @@ export function validateForIssuance(input: ComplianceInput): Array<string> {
   ];
   // Leitweg-ID for public-sector buyers (BT-10 is mandatory in XRechnung).
   if (client.publicSector && !invoice.buyerReference?.trim()) {
-    problems.push("Public-sector clients need a buyer reference (Leitweg-ID).");
+    problems.push(PROBLEMS.publicSectorReference);
   }
   return problems;
 }

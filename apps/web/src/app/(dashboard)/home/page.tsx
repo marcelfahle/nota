@@ -1,4 +1,5 @@
 import { and, asc, desc, eq, gt, gte, isNull, lt, or, sql } from "drizzle-orm";
+import { getTranslations } from "next-intl/server";
 import Link from "next/link";
 
 import { FirstRunHome, type FirstRunHomeData } from "@/components/first-run-home";
@@ -9,13 +10,16 @@ import { StatusBadge } from "@/components/status-badge";
 import { getCurrentUser } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { bankAccounts, clients, invoices, jobs, payments, proposals } from "@/lib/db/schema";
+import { toIntlLocale } from "@/lib/i18n";
 import { getInvoiceDetail } from "@/lib/invoice-service";
-import { formatCurrency, type Locale, orgLocale } from "@/lib/utils";
+import { formatCurrency, type Locale } from "@/lib/utils";
 
 const balance = sql<string>`greatest(coalesce(${invoices.total}::numeric, 0) - coalesce((select sum(p.amount) from payments p where p.invoice_id = ${invoices.id}), 0) - abs(coalesce((select sum(c.total::numeric) from invoices c where c.credits_invoice_id = ${invoices.id} and c.kind = 'credit_note' and c.status in ('sent', 'overdue', 'paid')), 0)), 0)`;
 
 export default async function HomePage() {
   const { org, user } = await getCurrentUser();
+  const locale = toIntlLocale(user.locale);
+  const t = await getTranslations("home");
 
   if (!org.firstRunCompletedAt) {
     const [firstInvoice, [bankAccount]] = await Promise.all([
@@ -147,13 +151,11 @@ export default async function HomePage() {
     return (
       <HomeContent
         empty
-        locale={orgLocale(org)}
+        locale={locale}
         summary={
           <div className="space-y-2">
-            <h1>Welcome to Nota.</h1>
-            <p className="font-voice text-xl text-muted-foreground">
-              Tell me about your first invoice and we’ll send it together.
-            </p>
+            <h1>{t("welcome")}</h1>
+            <p className="font-voice text-xl text-muted-foreground">{t("firstInvoiceLead")}</p>
           </div>
         }
       />
@@ -161,7 +163,6 @@ export default async function HomePage() {
   }
 
   const defaultCurrency = org.defaultCurrency ?? "EUR";
-  const locale = orgLocale(org);
   const owed = new Map<string, number>();
   const overdue = new Map<string, number>();
   for (const invoice of invoiceList) {
@@ -176,7 +177,7 @@ export default async function HomePage() {
   const receivedByCurrency = new Map(
     received.map((row) => [row.currency, Number(row.amount)] as const),
   );
-  const month = now.toLocaleDateString("en-US", { month: "long", timeZone: "UTC" });
+  const month = now.toLocaleDateString(locale, { month: "long", timeZone: "UTC" });
 
   return (
     <HomeContent
@@ -187,12 +188,12 @@ export default async function HomePage() {
             <HighlighterSwipe>
               {formatMoneyTotals(receivedByCurrency, defaultCurrency, locale)}
             </HighlighterSwipe>
-            {` in so far this ${month}.`}
+            {t("received", { month })}
           </h1>
           <p className="text-lg text-muted-foreground">
-            {formatMoneyTotals(owed, defaultCurrency, locale)} still owed to you,{" "}
+            {t("owed", { amount: formatMoneyTotals(owed, defaultCurrency, locale) })}
             <span className="text-destructive">
-              {formatMoneyTotals(overdue, defaultCurrency, locale)} of it late.
+              {t("late", { amount: formatMoneyTotals(overdue, defaultCurrency, locale) })}
             </span>
           </p>
         </div>
@@ -201,9 +202,9 @@ export default async function HomePage() {
       <section aria-labelledby="ready-heading">
         <div className="flex flex-wrap items-baseline justify-between gap-2 border-b pb-2.5">
           <h2 className="nota-label text-foreground" id="ready-heading">
-            Ready for you
+            {t("ready")}
           </h2>
-          <p className="nota-label">Nothing goes out until you say so</p>
+          <p className="nota-label">{t("nothingGoesOut")}</p>
         </div>
         {pendingProposals.length > 0 ? (
           <ul>
@@ -218,23 +219,25 @@ export default async function HomePage() {
               );
               return (
                 <HomeProposal id={proposal.id} key={proposal.id}>
-                  <strong className="font-semibold">
-                    {proposal.clientName} is {daysLate} day{daysLate === 1 ? "" : "s"} late
-                  </strong>{" "}
-                  on{" "}
-                  {formatCurrency(
-                    Number(proposal.balance),
-                    proposal.currency ?? defaultCurrency,
-                    locale,
-                  )}
-                  . <span className="text-muted-foreground">{sentence(proposal.reason)}</span>
+                  {t.rich("proposal", {
+                    amount: formatCurrency(
+                      Number(proposal.balance),
+                      proposal.currency ?? defaultCurrency,
+                      locale,
+                    ),
+                    client: proposal.clientName,
+                    days: daysLate,
+                    muted: (chunks) => <span className="text-muted-foreground">{chunks}</span>,
+                    reason: sentence(proposal.reason),
+                    strong: (chunks) => <strong className="font-semibold">{chunks}</strong>,
+                  })}
                 </HomeProposal>
               );
             })}
           </ul>
         ) : (
           <p className="border-b border-border/50 px-1 py-4 text-sm text-muted-foreground">
-            You’re all caught up.
+            {t("caughtUp")}
           </p>
         )}
       </section>
@@ -242,10 +245,10 @@ export default async function HomePage() {
       <section aria-labelledby="recent-heading">
         <div className="flex items-baseline justify-between gap-2 border-b pb-2.5">
           <h2 className="nota-label text-foreground" id="recent-heading">
-            Recent
+            {t("recent")}
           </h2>
           <Link className="text-[13px] underline-offset-4 hover:underline" href="/invoices">
-            All invoices
+            {t("allInvoices")}
           </Link>
         </div>
         <ul>

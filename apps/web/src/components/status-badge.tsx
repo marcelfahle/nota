@@ -1,3 +1,5 @@
+import { useTranslations } from "next-intl";
+
 const statusStyles: Record<string, string> = {
   cancelled: "text-muted-foreground",
   draft: "border-dashed text-muted-foreground",
@@ -8,17 +10,16 @@ const statusStyles: Record<string, string> = {
   sent: "border-foreground text-foreground",
 };
 
-const labels: Record<string, string> = {
-  cancelled: "Cancelled",
-  draft: "Draft",
-  opened: "Opened",
-  overdue: "Overdue",
-  paid: "Paid",
-  part_paid: "Part paid",
-  sent: "Sent",
-};
+const STATUSES = ["cancelled", "draft", "opened", "overdue", "paid", "part_paid", "sent"] as const;
+
+type KnownStatus = (typeof STATUSES)[number];
+
+function isKnownStatus(status: string): status is KnownStatus {
+  return (STATUSES as ReadonlyArray<string>).includes(status);
+}
 
 export function StatusBadge({ openCount, status }: { openCount?: number; status: string }) {
+  const t = useTranslations("status");
   return (
     <span
       className={`inline-flex items-center rounded-sm border px-2 py-0.5 font-mono text-[11px] font-medium whitespace-nowrap ${statusStyles[status] ?? ""}`}
@@ -26,7 +27,7 @@ export function StatusBadge({ openCount, status }: { openCount?: number; status:
       {status === "part_paid" ? (
         <span aria-hidden="true" className="-my-0.5 mr-1.5 -ml-2 w-2 self-stretch bg-highlighter" />
       ) : null}
-      {labels[status] ?? status}
+      {isKnownStatus(status) ? t(status) : status}
       {status === "opened" && openCount !== undefined ? ` ${openCount}×` : ""}
     </span>
   );

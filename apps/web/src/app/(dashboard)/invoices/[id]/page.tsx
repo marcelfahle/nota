@@ -1,5 +1,6 @@
 import { and, eq } from "drizzle-orm";
 import type { Metadata } from "next";
+import { getTranslations } from "next-intl/server";
 import { notFound } from "next/navigation";
 import { cache } from "react";
 
@@ -34,18 +35,25 @@ export async function generateMetadata({
 }): Promise<Metadata> {
   const { id } = await params;
   const { org } = await getCurrentUser();
-  const record = await loadInvoiceWithClient(org.id, id);
+  const [record, t] = await Promise.all([
+    loadInvoiceWithClient(org.id, id),
+    getTranslations("invoiceDetail"),
+  ]);
 
   return {
     title: record
-      ? `${record.invoice.number} · ${record.clientName ?? "Invoice"} — ${APP_NAME}`
-      : `Invoice — ${APP_NAME}`,
+      ? t("pageTitle", {
+          app: APP_NAME,
+          client: record.clientName ?? t("kind.invoice"),
+          number: record.invoice.number,
+        })
+      : t("pageTitleFallback", { app: APP_NAME }),
   };
 }
 
 export default async function InvoiceDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const { org, role } = await getCurrentUser();
+  const { org, role, user } = await getCurrentUser();
 
   const record = await loadInvoiceWithClient(org.id, id);
 
@@ -71,7 +79,6 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
       business={{
         address: formatOrgAddress(org),
         brandColor: org.brandColor,
-        country: org.country,
         logoUrl: org.logoUrl,
         name: org.businessName || org.name,
       }}
@@ -81,6 +88,7 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
           ? { ...invoice.client, address: formatClientAddress(invoice.client) }
           : { email: "", name: "Unknown" },
       }}
+      locale={user.locale}
       role={role}
     />
   );

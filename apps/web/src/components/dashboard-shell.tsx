@@ -1,6 +1,7 @@
 "use client";
 
 import { Menu, Plus, X } from "lucide-react";
+import { useTranslations } from "next-intl";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import posthog from "posthog-js";
@@ -65,14 +66,15 @@ export function DashboardShell({
   };
   userId: string;
 }) {
+  const t = useTranslations("shell");
   const navItems = [
-    { href: "/home", label: "Home", meta: navCounts.proposals || null },
+    { href: "/home", label: t("nav.home"), meta: navCounts.proposals || null },
     {
       href: "/invoices",
-      label: "Invoices",
-      meta: navCounts.overdue ? `${navCounts.overdue} late` : null,
+      label: t("nav.invoices"),
+      meta: navCounts.overdue ? t("late", { count: navCounts.overdue }) : null,
     },
-    { href: "/clients", label: "Clients", meta: null },
+    { href: "/clients", label: t("nav.clients"), meta: null },
   ];
   const pathname = usePathname();
   const isHome = pathname === "/home";
@@ -147,7 +149,7 @@ export function DashboardShell({
         className="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-50 focus:bg-card focus:p-3"
         href="#main-content"
       >
-        Skip to content
+        {t("skipToContent")}
       </a>
       <aside className="sticky top-0 z-40 border-b bg-sidebar pt-[env(safe-area-inset-top)] md:h-dvh md:overflow-y-auto md:border-r md:border-b-0 md:pt-0">
         <div className="flex h-full flex-col gap-5 p-4">
@@ -180,7 +182,7 @@ export function DashboardShell({
             <Button
               aria-controls="workspace-navigation"
               aria-expanded={menuOpen}
-              aria-label={menuOpen ? "Close navigation" : "Open navigation"}
+              aria-label={menuOpen ? t("closeNav") : t("openNav")}
               className="md:hidden"
               onClick={() => setMenuOpen(!menuOpen)}
               size="icon"
@@ -201,7 +203,7 @@ export function DashboardShell({
               onClick={() => setMenuOpen(false)}
               type="button"
             >
-              Search <kbd className="font-mono text-[11px]">⌘K</kbd>
+              {t("search")} <kbd className="font-mono text-[11px]">⌘K</kbd>
             </button>
             <nav
               aria-label="Main"
@@ -247,7 +249,7 @@ export function DashboardShell({
                 )}
                 href="/agents"
               >
-                Connect an agent
+                {t("connectAgent")}
               </Link>
               <Link
                 aria-current={pathname === "/settings" ? "page" : undefined}
@@ -257,7 +259,7 @@ export function DashboardShell({
                 )}
                 href="/settings"
               >
-                Settings
+                {t("settings")}
               </Link>
             </nav>
             <div className="space-y-2 rounded-md border border-dashed p-3">
@@ -265,20 +267,21 @@ export function DashboardShell({
                 <span className="nota-label">
                   {usage.limit === null
                     ? usage.deploymentMode === "self-hosted"
-                      ? "Self-hosted"
+                      ? t("plan.selfHosted")
                       : usage.plan === "pro"
-                        ? "Pro plan"
-                        : "Unlimited"
-                    : "Free plan"}
+                        ? t("plan.pro")
+                        : t("plan.unlimited")
+                    : t("plan.free")}
                 </span>
                 <span className="font-mono text-[11px]">
-                  {usage.sent}
-                  {usage.limit !== null ? ` / ${usage.limit}` : " sent"}
+                  {usage.limit !== null
+                    ? t("sentOf", { count: usage.sent, limit: usage.limit })
+                    : t("sent", { count: usage.sent })}
                 </span>
               </div>
               {usage.limit !== null ? (
                 <meter
-                  aria-label="Invoices sent this month"
+                  aria-label={t("meterLabel")}
                   className="block h-2 w-full accent-foreground"
                   max={usage.limit}
                   min={0}
@@ -287,10 +290,10 @@ export function DashboardShell({
               ) : null}
               <Link className="text-xs underline underline-offset-4" href="/settings">
                 {usage.deploymentMode === "self-hosted"
-                  ? "Deployment settings"
+                  ? t("deploymentSettings")
                   : usage.limit !== null
-                    ? "View plans and usage"
-                    : "Manage billing"}
+                    ? t("viewPlans")
+                    : t("manageBilling")}
               </Link>
             </div>
             <div className="flex items-center justify-between gap-2 border-t pt-3 pl-2">
@@ -311,7 +314,7 @@ export function DashboardShell({
                 onClick={() => setOpsOpen(!opsOpen)}
                 type="button"
               >
-                {opsOpen ? "Hide" : "Show"} ops
+                {opsOpen ? t("hideOps") : t("showOps")}
               </button>
             </div>
           </div>
@@ -327,7 +330,7 @@ export function DashboardShell({
           <Button asChild size="sm">
             <Link href="/invoices/new">
               <Plus />
-              New Invoice
+              {t("newInvoice")}
             </Link>
           </Button>
         </div>

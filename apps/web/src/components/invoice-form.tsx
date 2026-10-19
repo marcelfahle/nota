@@ -1,6 +1,7 @@
 "use client";
 
 import { Plus, Trash2 } from "lucide-react";
+import { useTranslations } from "next-intl";
 import { useRouter } from "next/navigation";
 import posthog from "posthog-js";
 import { useActionState, useEffect, useState, useCallback } from "react";
@@ -17,13 +18,7 @@ import {
 } from "@/components/ui/select";
 import { addDecimals, currencyExponent, multiplyAndRound, percentageAndRound } from "@/lib/money";
 import { defaultServicePeriod } from "@/lib/service-period";
-import {
-  requiresZeroRate,
-  TAX_TREATMENT_HINTS,
-  TAX_TREATMENT_LABELS,
-  TAX_TREATMENTS,
-  type TaxTreatment,
-} from "@/lib/tax-treatment";
+import { requiresZeroRate, TAX_TREATMENTS, type TaxTreatment } from "@/lib/tax-treatment";
 import { formatCurrency, type Locale } from "@/lib/utils";
 
 type LineItem = {
@@ -95,8 +90,10 @@ export function InvoiceForm({
   locale = "en-US",
   org,
   redirectTo = "/invoices",
-  submitLabel = "Save Draft",
+  submitLabel,
 }: InvoiceFormProps) {
+  const t = useTranslations("invoiceForm");
+  const tTreatment = useTranslations("taxTreatment");
   const [state, formAction, pending] = useActionState(action, null);
   const router = useRouter();
 
@@ -203,10 +200,10 @@ export function InvoiceForm({
       {/* Invoice Details */}
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="space-y-2">
-          <Label htmlFor="clientId">Client *</Label>
+          <Label htmlFor="clientId">{t("client")}</Label>
           <Select name="clientId" onValueChange={setClientId} required value={clientId}>
             <SelectTrigger className="w-full" data-testid="invoice-client-select">
-              <SelectValue placeholder="Select a client" />
+              <SelectValue placeholder={t("selectClient")} />
             </SelectTrigger>
             <SelectContent>
               {clients.map((client) => (
@@ -219,7 +216,7 @@ export function InvoiceForm({
         </div>
 
         <div className="space-y-2">
-          <Label>Currency</Label>
+          <Label>{t("currency")}</Label>
           <Select name="currency_display" onValueChange={setCurrency} value={currency}>
             <SelectTrigger className="w-full" data-testid="invoice-currency-select">
               <SelectValue />
@@ -235,7 +232,7 @@ export function InvoiceForm({
 
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="space-y-2">
-          <Label htmlFor="issuedAt">Issue Date *</Label>
+          <Label htmlFor="issuedAt">{t("issueDate")}</Label>
           <Input
             id="issuedAt"
             name="issuedAt"
@@ -246,7 +243,7 @@ export function InvoiceForm({
           />
         </div>
         <div className="space-y-2">
-          <Label htmlFor="dueAt">Due Date *</Label>
+          <Label htmlFor="dueAt">{t("dueDate")}</Label>
           <Input
             defaultValue={defaultValues?.dueAt ?? defaultDueDate()}
             id="dueAt"
@@ -260,7 +257,10 @@ export function InvoiceForm({
       {/* Service period and buyer reference */}
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="space-y-2">
-          <Label htmlFor="servicePeriodStart">Service period{german ? " *" : ""}</Label>
+          <Label htmlFor="servicePeriodStart">
+            {t("servicePeriod")}
+            {german ? " *" : ""}
+          </Label>
           <div className="flex items-center gap-2">
             <Input
               data-testid="invoice-service-period-start"
@@ -271,9 +271,9 @@ export function InvoiceForm({
               type="date"
               value={servicePeriodStart}
             />
-            <span className="text-sm text-zinc-500">to</span>
+            <span className="text-sm text-zinc-500">{t("to")}</span>
             <Input
-              aria-label="Service period end"
+              aria-label={t("servicePeriodEnd")}
               data-testid="invoice-service-period-end"
               name="servicePeriodEnd"
               onChange={(e) => setEditedPeriod({ end: e.target.value, start: servicePeriodStart })}
@@ -282,42 +282,38 @@ export function InvoiceForm({
               value={servicePeriodEnd}
             />
           </div>
-          <p className="text-xs text-zinc-500">
-            When the work was done. Use the same date twice for a single day. German invoices need
-            this (§ 14 UStG).
-          </p>
+          <p className="text-xs text-zinc-500">{t("servicePeriodHint")}</p>
         </div>
         <div className="space-y-2">
           <Label htmlFor="buyerReference">
-            Buyer reference{selectedClient?.publicSector ? " *" : ""}
+            {t("buyerReference")}
+            {selectedClient?.publicSector ? " *" : ""}
           </Label>
           <Input
             data-testid="invoice-buyer-reference"
             id="buyerReference"
             name="buyerReference"
             onChange={(e) => setEditedReference(e.target.value)}
-            placeholder={selectedClient?.publicSector ? "Leitweg-ID" : "Optional"}
+            placeholder={selectedClient?.publicSector ? t("leitwegId") : t("optional")}
             required={Boolean(selectedClient?.publicSector)}
             value={buyerReference}
           />
           <p className="text-xs text-zinc-500">
-            {selectedClient?.publicSector
-              ? "Public-sector clients need their Leitweg-ID here."
-              : "A PO number or reference the client asked for. Leave empty to use the invoice number."}
+            {selectedClient?.publicSector ? t("publicSectorHint") : t("referenceHint")}
           </p>
         </div>
       </div>
 
       {/* Line Items */}
       <div>
-        <Label className="mb-3 block">Line Items</Label>
+        <Label className="mb-3 block">{t("lineItems")}</Label>
         <div className="rounded-lg border border-zinc-200">
           {/* Header (desktop only) */}
           <div className="hidden gap-2 border-b border-zinc-100 px-3 py-2 text-xs font-medium tracking-wide text-zinc-400 uppercase sm:grid sm:grid-cols-[1fr_80px_100px_100px_36px]">
-            <span>Description</span>
-            <span>Qty/Hrs</span>
-            <span>Rate</span>
-            <span className="text-right">Amount</span>
+            <span>{t("description")}</span>
+            <span>{t("qtyHours")}</span>
+            <span>{t("rate")}</span>
+            <span className="text-right">{t("amount")}</span>
             <span />
           </div>
 
@@ -331,7 +327,7 @@ export function InvoiceForm({
                 className="h-8 text-sm"
                 data-testid={`invoice-line-item-description-${index}`}
                 onChange={(e) => updateItem(index, "description", e.target.value)}
-                placeholder="Description"
+                placeholder={t("description")}
                 required
                 value={item.description}
               />
@@ -341,7 +337,7 @@ export function InvoiceForm({
                   data-testid={`invoice-line-item-quantity-${index}`}
                   min="0"
                   onChange={(e) => updateItem(index, "quantity", e.target.value)}
-                  placeholder="Qty"
+                  placeholder={t("qty")}
                   required
                   step="0.000001"
                   type="number"
@@ -352,7 +348,7 @@ export function InvoiceForm({
                   data-testid={`invoice-line-item-unit-price-${index}`}
                   min="0"
                   onChange={(e) => updateItem(index, "unitPrice", e.target.value)}
-                  placeholder="Rate"
+                  placeholder={t("rate")}
                   required
                   step="0.000001"
                   type="number"
@@ -382,7 +378,7 @@ export function InvoiceForm({
               type="button"
             >
               <Plus className="size-3.5" />
-              Add line item
+              {t("addLineItem")}
             </button>
           </div>
         </div>
@@ -391,7 +387,7 @@ export function InvoiceForm({
       {/* Tax treatment and totals */}
       <div className="grid gap-6 sm:grid-cols-[minmax(0,1fr)_16rem]">
         <div className="space-y-2">
-          <Label htmlFor="taxTreatment">VAT treatment</Label>
+          <Label htmlFor="taxTreatment">{t("vatTreatment")}</Label>
           <Select
             onValueChange={(value) => changeTreatment(value as TaxTreatment)}
             value={taxTreatment}
@@ -402,25 +398,23 @@ export function InvoiceForm({
             <SelectContent>
               {TAX_TREATMENTS.map((treatment) => (
                 <SelectItem key={treatment} value={treatment}>
-                  {TAX_TREATMENT_LABELS[treatment]}
+                  {tTreatment(`labels.${treatment}`)}
                 </SelectItem>
               ))}
             </SelectContent>
           </Select>
-          <p className="text-xs text-zinc-500">{TAX_TREATMENT_HINTS[taxTreatment]}</p>
-          <p className="text-xs text-zinc-500">
-            One VAT rate per invoice. Mixed rates need separate invoices.
-          </p>
+          <p className="text-xs text-zinc-500">{tTreatment(`hints.${taxTreatment}`)}</p>
+          <p className="text-xs text-zinc-500">{t("oneRate")}</p>
         </div>
         <div className="space-y-2">
           <div className="flex items-center justify-between text-sm">
-            <span className="text-zinc-500">Subtotal</span>
+            <span className="text-zinc-500">{t("subtotal")}</span>
             <span className="font-medium">{formatCurrency(subtotal, currency, locale)}</span>
           </div>
           <div className="flex items-center gap-2 text-sm">
-            <span className="text-zinc-500">VAT</span>
+            <span className="text-zinc-500">{t("vat")}</span>
             <Input
-              aria-label="Tax rate"
+              aria-label={t("taxRate")}
               className="h-7 w-20 text-center text-xs"
               data-testid="invoice-tax-rate"
               disabled={zeroRated}
@@ -437,7 +431,7 @@ export function InvoiceForm({
             </span>
           </div>
           <div className="flex items-center justify-between border-t border-zinc-200 pt-2 text-sm">
-            <span className="font-semibold">Total</span>
+            <span className="font-semibold">{t("total")}</span>
             <span className="text-lg font-semibold">{formatCurrency(total, currency, locale)}</span>
           </div>
         </div>
@@ -446,24 +440,24 @@ export function InvoiceForm({
       {/* Notes */}
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="space-y-2">
-          <Label htmlFor="notes">Notes (visible on invoice)</Label>
+          <Label htmlFor="notes">{t("notes")}</Label>
           <textarea
             className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:outline-none"
             defaultValue={defaultValues?.notes ?? ""}
             id="notes"
             name="notes"
-            placeholder="Payment terms, thank you message, etc."
+            placeholder={t("notesPlaceholder")}
             rows={3}
           />
         </div>
         <div className="space-y-2">
-          <Label htmlFor="internalNotes">Internal Notes</Label>
+          <Label htmlFor="internalNotes">{t("internalNotes")}</Label>
           <textarea
             className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:outline-none"
             defaultValue={defaultValues?.internalNotes ?? ""}
             id="internalNotes"
             name="internalNotes"
-            placeholder="Notes for your own reference"
+            placeholder={t("internalNotesPlaceholder")}
             rows={3}
           />
         </div>
@@ -478,10 +472,10 @@ export function InvoiceForm({
       {/* Actions */}
       <div className="flex justify-end gap-2">
         <Button onClick={() => router.push("/invoices")} type="button" variant="outline">
-          Cancel
+          {t("cancel")}
         </Button>
         <Button data-testid="invoice-submit" disabled={pending} type="submit">
-          {pending ? "Saving..." : submitLabel}
+          {pending ? t("saving") : (submitLabel ?? t("saveDraft"))}
         </Button>
       </div>
     </form>

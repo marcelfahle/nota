@@ -1,6 +1,7 @@
 "use client";
 
 import { ArrowLeft, Pencil, Trash2 } from "lucide-react";
+import { useTranslations } from "next-intl";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
@@ -71,6 +72,7 @@ export function ClientDetailView({
   invoices: Array<Invoice>;
   locale?: Locale;
 }) {
+  const t = useTranslations("clients");
   const [editing, setEditing] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -91,7 +93,7 @@ export function ClientDetailView({
         href="/clients"
       >
         <ArrowLeft className="size-4" />
-        Back to clients
+        {t("backToClients")}
       </Link>
 
       <div className="mb-8 min-w-0 [overflow-wrap:anywhere]">
@@ -117,7 +119,7 @@ export function ClientDetailView({
         <div className="flex flex-wrap items-center gap-2">
           <Button onClick={() => setEditing(!editing)} size="sm" variant="outline">
             <Pencil className="size-4" />
-            {editing ? "Cancel" : "Edit"}
+            {editing ? t("detail.cancel") : t("detail.edit")}
           </Button>
           <Button
             className="text-red-600 hover:bg-red-50 hover:text-red-700"
@@ -126,7 +128,7 @@ export function ClientDetailView({
             variant="outline"
           >
             <Trash2 className="size-4" />
-            Delete
+            {t("detail.delete")}
           </Button>
         </div>
       </div>
@@ -139,33 +141,36 @@ export function ClientDetailView({
             defaultValues={client}
             onCancel={() => setEditing(false)}
             onSuccess={() => setEditing(false)}
-            submitLabel="Update Client"
+            submitLabel={t("updateClient")}
           />
         </div>
       ) : (
         <div className="mb-8 grid max-w-2xl gap-4 sm:grid-cols-2">
-          <DetailItem label="Address" value={formatClientAddress(client)} />
+          <DetailItem label={t("detail.address")} value={formatClientAddress(client)} />
           <DetailItem
-            label={client.publicSector ? "Leitweg-ID" : "Buyer reference"}
+            label={client.publicSector ? t("detail.leitwegId") : t("detail.buyerReference")}
             value={
               client.publicSector
-                ? (client.defaultBuyerReference ?? "Missing. Needed on every invoice.")
+                ? (client.defaultBuyerReference ?? t("detail.missingReference"))
                 : client.defaultBuyerReference
             }
           />
           <DetailItem
-            label="Tax identifier"
-            value={formatTaxIdentifier(taxIdentifierFromColumns(client))}
+            label={t("detail.taxIdentifier")}
+            value={formatTaxIdentifier(
+              taxIdentifierFromColumns(client),
+              locale === "de-DE" ? "de" : "en",
+            )}
           />
-          <DetailItem label="Currency" value={client.defaultCurrency ?? "EUR"} />
-          <DetailItem label="Notes" value={client.notes} />
+          <DetailItem label={t("detail.currency")} value={client.defaultCurrency ?? "EUR"} />
+          <DetailItem label={t("detail.notes")} value={client.notes} />
           {bankAccounts.length >= 2 && (
             <DetailItem
-              label="Bank Account"
+              label={t("detail.bankAccount")}
               value={
                 client.bankAccountId
                   ? (bankAccounts.find((ba) => ba.id === client.bankAccountId)?.name ?? null)
-                  : (bankAccounts.find((ba) => ba.isDefault)?.name ?? "") + " (default)"
+                  : `${bankAccounts.find((ba) => ba.isDefault)?.name ?? ""} ${t("form.default")}`
               }
             />
           )}
@@ -173,9 +178,11 @@ export function ClientDetailView({
       )}
 
       <div>
-        <h2 className="mb-4 text-sm font-semibold">Invoices ({invoices.length})</h2>
+        <h2 className="mb-4 text-sm font-semibold">
+          {t("detail.invoices", { count: invoices.length })}
+        </h2>
         {invoices.length === 0 ? (
-          <p className="text-sm text-zinc-400">No invoices for this client.</p>
+          <p className="text-sm text-zinc-400">{t("detail.noInvoices")}</p>
         ) : (
           <div className="divide-y divide-zinc-100">
             {invoices.map((inv) => (
@@ -192,7 +199,9 @@ export function ClientDetailView({
                   <span className="text-sm font-medium">
                     {formatCurrency(Number(inv.total ?? 0), inv.currency ?? "EUR", locale)}
                   </span>
-                  <p className="text-xs text-zinc-500">Due {formatDate(inv.dueAt, locale)}</p>
+                  <p className="text-xs text-zinc-500">
+                    {t("detail.due", { date: formatDate(inv.dueAt, locale) })}
+                  </p>
                 </div>
               </Link>
             ))}
@@ -203,17 +212,17 @@ export function ClientDetailView({
       <Dialog onOpenChange={setDeleteOpen} open={deleteOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Delete client</DialogTitle>
+            <DialogTitle>{t("detail.deleteTitle")}</DialogTitle>
             <DialogDescription>
-              Are you sure you want to delete {client.name}? This action cannot be undone.
+              {t("detail.deleteDescription", { name: client.name })}
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
             <Button disabled={deleting} onClick={() => setDeleteOpen(false)} variant="outline">
-              Cancel
+              {t("detail.cancel")}
             </Button>
             <Button disabled={deleting} onClick={handleDelete} variant="destructive">
-              {deleting ? "Deleting..." : "Delete"}
+              {deleting ? t("detail.deleting") : t("detail.delete")}
             </Button>
           </DialogFooter>
         </DialogContent>

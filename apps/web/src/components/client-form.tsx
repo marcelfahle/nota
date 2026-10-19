@@ -1,5 +1,6 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import { useRouter } from "next/navigation";
 import { useActionState, useEffect, useState } from "react";
 
@@ -13,11 +14,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import {
-  taxIdentifierFromColumns,
-  taxIdentifierLabel,
-  type TaxIdentifierType,
-} from "@/lib/tax-identifier";
+import { taxIdentifierFromColumns, type TaxIdentifierType } from "@/lib/tax-identifier";
 
 type ActionState = { error?: string; success?: boolean } | null;
 
@@ -62,8 +59,9 @@ export function ClientForm({
   onCancel,
   onSuccess,
   redirectTo,
-  submitLabel = "Save Client",
+  submitLabel,
 }: ClientFormProps) {
+  const t = useTranslations("clients.form");
   const [state, formAction, pending] = useActionState(action, null);
   const router = useRouter();
   const identifier = taxIdentifierFromColumns(defaultValues ?? {});
@@ -88,7 +86,7 @@ export function ClientForm({
     <form action={formAction} className="space-y-4" data-testid="client-form">
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="space-y-2">
-          <Label htmlFor="name">Name *</Label>
+          <Label htmlFor="name">{t("name")}</Label>
           <Input
             data-testid="client-name"
             defaultValue={defaultValues?.name ?? ""}
@@ -98,7 +96,7 @@ export function ClientForm({
           />
         </div>
         <div className="space-y-2">
-          <Label htmlFor="email">Email *</Label>
+          <Label htmlFor="email">{t("email")}</Label>
           <Input
             data-testid="client-email"
             defaultValue={defaultValues?.email ?? ""}
@@ -112,7 +110,7 @@ export function ClientForm({
 
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="space-y-2">
-          <Label htmlFor="company">Company</Label>
+          <Label htmlFor="company">{t("company")}</Label>
           <Input
             data-testid="client-company"
             defaultValue={defaultValues?.company ?? ""}
@@ -121,7 +119,7 @@ export function ClientForm({
           />
         </div>
         <div className="space-y-2">
-          <Label htmlFor="taxIdentifierType">Tax identifier type</Label>
+          <Label htmlFor="taxIdentifierType">{t("taxIdType")}</Label>
           <Select
             name="taxIdentifierType"
             onValueChange={(value) => setIdentifierType(value as TaxIdentifierType)}
@@ -131,14 +129,20 @@ export function ClientForm({
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="eu_vat">EU VAT ID</SelectItem>
-              <SelectItem value="us_ein">US EIN</SelectItem>
-              <SelectItem value="tax_id">Tax ID</SelectItem>
+              <SelectItem value="eu_vat">{t("euVat")}</SelectItem>
+              <SelectItem value="us_ein">{t("usEin")}</SelectItem>
+              <SelectItem value="tax_id">{t("taxId")}</SelectItem>
             </SelectContent>
           </Select>
         </div>
         <div className="space-y-2 sm:col-start-2">
-          <Label htmlFor="taxIdentifierValue">{taxIdentifierLabel({ type: identifierType })}</Label>
+          <Label htmlFor="taxIdentifierValue">
+            {identifierType === "eu_vat"
+              ? t("vatId")
+              : identifierType === "us_ein"
+                ? t("ein")
+                : t("taxId")}
+          </Label>
           <Input
             defaultValue={identifier?.value ?? ""}
             id="taxIdentifierValue"
@@ -150,10 +154,10 @@ export function ClientForm({
 
       {/* Address: structured so invoices and XRechnung can name street, city and country. */}
       <fieldset className="space-y-3">
-        <legend className="text-sm font-medium">Address</legend>
+        <legend className="text-sm font-medium">{t("address")}</legend>
         <div className="space-y-2">
           <Label className="text-xs text-muted-foreground" htmlFor="street">
-            Street and number
+            {t("street")}
           </Label>
           <Input
             data-testid="client-street"
@@ -165,7 +169,7 @@ export function ClientForm({
         <div className="grid gap-3 sm:grid-cols-[8rem_minmax(0,1fr)_6rem]">
           <div className="space-y-2">
             <Label className="text-xs text-muted-foreground" htmlFor="postalCode">
-              Postal code
+              {t("postalCode")}
             </Label>
             <Input
               data-testid="client-postal-code"
@@ -176,7 +180,7 @@ export function ClientForm({
           </div>
           <div className="space-y-2">
             <Label className="text-xs text-muted-foreground" htmlFor="city">
-              City
+              {t("city")}
             </Label>
             <Input
               data-testid="client-city"
@@ -187,7 +191,7 @@ export function ClientForm({
           </div>
           <div className="space-y-2">
             <Label className="text-xs text-muted-foreground" htmlFor="countryCode">
-              Country
+              {t("country")}
             </Label>
             <Input
               className="uppercase"
@@ -202,15 +206,11 @@ export function ClientForm({
         </div>
         <input name="address" type="hidden" value={defaultValues?.address ?? ""} />
         {!hasStructuredAddress && defaultValues?.address ? (
-          <p className="text-xs text-muted-foreground">
-            On file as free text:{" "}
-            <span className="whitespace-pre-line">{defaultValues.address}</span>. Fill in the fields
-            above so German invoices can be issued.
+          <p className="text-xs whitespace-pre-line text-muted-foreground">
+            {t("onFile", { address: defaultValues.address })}
           </p>
         ) : (
-          <p className="text-xs text-muted-foreground">
-            Two-letter country code, for example DE or AT. Needed on German invoices.
-          </p>
+          <p className="text-xs text-muted-foreground">{t("countryHint")}</p>
         )}
       </fieldset>
 
@@ -225,27 +225,25 @@ export function ClientForm({
             type="checkbox"
             value="true"
           />
-          Public-sector client (Behörde). Invoices need a Leitweg-ID.
+          {t("publicSector")}
         </label>
         <div className="space-y-2">
           <Label htmlFor="defaultBuyerReference">
-            {publicSector ? "Leitweg-ID" : "Buyer reference"}
+            {publicSector ? t("leitwegId") : t("buyerReference")}
           </Label>
           <Input
             data-testid="client-buyer-reference"
             defaultValue={defaultValues?.defaultBuyerReference ?? ""}
             id="defaultBuyerReference"
             name="defaultBuyerReference"
-            placeholder={publicSector ? "04011000-1234512345-35" : "Optional PO or reference"}
+            placeholder={publicSector ? "04011000-1234512345-35" : t("referencePlaceholder")}
           />
-          <p className="text-xs text-muted-foreground">
-            Goes on every new invoice for this client as the buyer reference.
-          </p>
+          <p className="text-xs text-muted-foreground">{t("referenceHint")}</p>
         </div>
       </div>
 
       <div className="space-y-2">
-        <Label htmlFor="notes">Notes</Label>
+        <Label htmlFor="notes">{t("notes")}</Label>
         <textarea
           className="w-full min-w-0 rounded-md border border-input bg-transparent px-3 py-2 text-base shadow-xs transition-[color,box-shadow] outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50 md:text-sm"
           defaultValue={defaultValues?.notes ?? ""}
@@ -256,7 +254,7 @@ export function ClientForm({
       </div>
 
       <div className="space-y-2">
-        <Label>Currency</Label>
+        <Label>{t("currency")}</Label>
         <Select defaultValue={defaultValues?.defaultCurrency ?? "EUR"} name="defaultCurrency">
           <SelectTrigger className="w-full" data-testid="client-currency-select">
             <SelectValue />
@@ -271,16 +269,16 @@ export function ClientForm({
 
       {bankAccounts && bankAccounts.length >= 2 && (
         <div className="space-y-2">
-          <Label>Bank Account</Label>
+          <Label>{t("bankAccount")}</Label>
           <Select defaultValue={defaultValues?.bankAccountId ?? ""} name="bankAccountId">
             <SelectTrigger className="w-full">
-              <SelectValue placeholder="Use default account" />
+              <SelectValue placeholder={t("useDefault")} />
             </SelectTrigger>
             <SelectContent>
               {bankAccounts.map((ba) => (
                 <SelectItem key={ba.id} value={ba.id}>
                   {ba.name}
-                  {ba.isDefault ? " (default)" : ""}
+                  {ba.isDefault ? ` ${t("default")}` : ""}
                 </SelectItem>
               ))}
             </SelectContent>
@@ -293,11 +291,11 @@ export function ClientForm({
       <div className="flex justify-end gap-2">
         {onCancel && (
           <Button onClick={onCancel} type="button" variant="outline">
-            Cancel
+            {t("cancel")}
           </Button>
         )}
         <Button disabled={pending} type="submit">
-          {pending ? "Saving..." : submitLabel}
+          {pending ? t("saving") : (submitLabel ?? t("saveClient"))}
         </Button>
       </div>
     </form>

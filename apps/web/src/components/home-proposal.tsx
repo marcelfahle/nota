@@ -1,11 +1,13 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import { useState, useTransition } from "react";
 
 import { approveProposalAction } from "@/actions/proposals";
 import { Button } from "@/components/ui/button";
 
 export function HomeProposal({ children, id }: { children: React.ReactNode; id: string }) {
+  const t = useTranslations("home");
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
@@ -25,7 +27,7 @@ export function HomeProposal({ children, id }: { children: React.ReactNode; id: 
         }}
         type="button"
       >
-        {pending ? "Sending…" : "Send reminder"}
+        {pending ? t("sending") : t("sendReminder")}
       </Button>
       {error ? (
         <p className="w-full text-sm text-destructive" role="alert">

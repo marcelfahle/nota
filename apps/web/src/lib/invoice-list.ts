@@ -35,7 +35,7 @@ export function formatInvoiceDueDate(
     const todayUtc = Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate());
     const days = Math.floor((todayUtc - due) / 86_400_000);
     if (days > 0) {
-      return `${days} day${days === 1 ? "" : "s"} ago`;
+      return new Intl.RelativeTimeFormat(locale, { numeric: "always" }).format(-days, "day");
     }
   }
 

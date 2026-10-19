@@ -1,6 +1,7 @@
 "use client";
 
 import { ChevronDown, Download } from "lucide-react";
+import { useTranslations } from "next-intl";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -13,31 +14,40 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { buildInvoiceArchiveUrl, type InvoicePeriodKey } from "@/lib/invoice-period";
 
-const ARCHIVE_PERIODS: Array<{ key: InvoicePeriodKey; label: string }> = [
-  { key: "last_quarter", label: "Last quarter" },
-  { key: "this_quarter", label: "This quarter" },
-  { key: "year_to_date", label: "Year to date" },
-  { key: "all", label: "All invoices" },
-];
+const ARCHIVE_PERIODS = [
+  "last_quarter",
+  "this_quarter",
+  "year_to_date",
+  "all",
+] as const satisfies ReadonlyArray<InvoicePeriodKey>;
 
 export function InvoiceArchiveMenu({ status }: { status?: string }) {
+  const t = useTranslations("invoices");
+  const statusLabel =
+    status === "draft" || status === "overdue" || status === "paid"
+      ? t(`filters.${status}`)
+      : status === "sent"
+        ? t("filters.open")
+        : null;
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <Button className="min-h-11 sm:min-h-8" size="sm" variant="outline">
           <Download />
-          Export
+          {t("export")}
           <ChevronDown className="ml-0.5 size-3.5 text-zinc-400" />
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-56">
         <DropdownMenuLabel className="text-xs text-zinc-500">
-          {status ? `${status[0].toUpperCase()}${status.slice(1)} invoices` : "All statuses"}
+          {statusLabel
+            ? t("archive.statusInvoices", { status: statusLabel })
+            : t("archive.allStatuses")}
         </DropdownMenuLabel>
         {ARCHIVE_PERIODS.map((period) => (
-          <DropdownMenuItem asChild key={period.key}>
-            <a href={buildInvoiceArchiveUrl({ period: period.key, status })}>
-              {period.label}
+          <DropdownMenuItem asChild key={period}>
+            <a href={buildInvoiceArchiveUrl({ period, status })}>
+              {t(`archive.periods.${period}`)}
               <DropdownMenuShortcut>ZIP</DropdownMenuShortcut>
             </a>
           </DropdownMenuItem>

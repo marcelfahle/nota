@@ -6,8 +6,9 @@ import { z } from "zod";
 
 import { getCurrentUser } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { invoiceNumberEvents, orgs } from "@/lib/db/schema";
+import { invoiceNumberEvents, orgs, users } from "@/lib/db/schema";
 import { E_INVOICE_DELIVERIES } from "@/lib/e-invoice-delivery";
+import { APP_LOCALES } from "@/lib/i18n";
 import { deleteManagedLogo, uploadOrgFavicon, uploadOrgLogo } from "@/lib/logo-storage";
 import { canManageSettings, getInsufficientPermissionsError } from "@/lib/roles";
 import {
@@ -298,6 +299,37 @@ export async function updateSettings(
 
   revalidatePath("/settings");
   revalidatePath("/");
+  return { success: true };
+}
+
+/** The language Nota speaks to this member. Documents keep their own setting. */
+export async function updateUserLocale(value: string) {
+  const parsed = z.enum(APP_LOCALES).safeParse(value);
+  if (!parsed.success) {
+    return { error: "Choose English or German" };
+  }
+  const { user } = await getCurrentUser();
+  await db.update(users).set({ locale: parsed.data }).where(eq(users.id, user.id));
+  revalidatePath("/", "layout");
+  return { success: true };
+}
+
+/** The language of invoices, the public invoice page and customer emails. Issued documents keep theirs. */
+export async function updateDocumentLocale(value: string) {
+  const parsed = z.enum(APP_LOCALES).safeParse(value);
+  if (!parsed.success) {
+    return { error: "Choose English or German" };
+  }
+  const { org, role } = await getCurrentUser();
+  if (!canManageSettings(role)) {
+    return { error: getInsufficientPermissionsError() };
+  }
+  try {
+    await db.update(orgs).set({ documentLocale: parsed.data }).where(eq(orgs.id, org.id));
+  } catch {
+    return { error: "Could not save the document language right now" };
+  }
+  revalidatePath("/settings");
   return { success: true };
 }
 

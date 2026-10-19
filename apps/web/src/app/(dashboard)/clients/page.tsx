@@ -1,12 +1,14 @@
 import { and, asc, eq, sql } from "drizzle-orm";
 import { Plus, Users } from "lucide-react";
+import { getTranslations } from "next-intl/server";
 import Link from "next/link";
 
 import { Button } from "@/components/ui/button";
 import { getCurrentUser } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { clients, invoices } from "@/lib/db/schema";
-import { formatCurrency, orgLocale } from "@/lib/utils";
+import { toIntlLocale } from "@/lib/i18n";
+import { formatCurrency } from "@/lib/utils";
 
 function getInitials(name: string): string {
   return name
@@ -18,7 +20,9 @@ function getInitials(name: string): string {
 }
 
 export default async function ClientsPage() {
-  const { org } = await getCurrentUser();
+  const { org, user } = await getCurrentUser();
+  const locale = toIntlLocale(user.locale);
+  const t = await getTranslations("clients");
 
   const clientList = await db
     .select({
@@ -38,11 +42,11 @@ export default async function ClientsPage() {
   return (
     <div>
       <div className="mb-8 flex items-center justify-between">
-        <h1 className="text-lg font-semibold">Clients</h1>
+        <h1 className="text-lg font-semibold">{t("title")}</h1>
         <Button asChild size="sm">
           <Link href="/clients/new">
             <Plus />
-            New Client
+            {t("newClient")}
           </Link>
         </Button>
       </div>
@@ -52,12 +56,12 @@ export default async function ClientsPage() {
           <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-zinc-100">
             <Users className="h-6 w-6 text-zinc-400" />
           </div>
-          <p className="mb-1 text-sm font-medium text-zinc-900">No clients yet</p>
-          <p className="mb-4 text-sm text-zinc-500">Add your first client to start invoicing.</p>
+          <p className="mb-1 text-sm font-medium text-zinc-900">{t("none")}</p>
+          <p className="mb-4 text-sm text-zinc-500">{t("addFirst")}</p>
           <Button asChild size="sm">
             <Link href="/clients/new">
               <Plus />
-              Add Client
+              {t("addClient")}
             </Link>
           </Button>
         </div>
@@ -80,10 +84,10 @@ export default async function ClientsPage() {
               </div>
               <div className="max-w-[38%] shrink-0 text-right">
                 <p className="truncate text-sm font-medium text-zinc-900">
-                  {formatCurrency(Number(client.totalInvoiced), "EUR", orgLocale(org))}
+                  {formatCurrency(Number(client.totalInvoiced), "EUR", locale)}
                 </p>
                 <p className="text-sm text-zinc-500">
-                  {client.invoiceCount} {client.invoiceCount === 1 ? "invoice" : "invoices"}
+                  {t("invoiceCount", { count: client.invoiceCount })}
                 </p>
               </div>
             </Link>

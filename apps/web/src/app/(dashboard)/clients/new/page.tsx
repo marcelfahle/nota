@@ -1,5 +1,6 @@
 import { asc, eq } from "drizzle-orm";
 import { ArrowLeft } from "lucide-react";
+import { getTranslations } from "next-intl/server";
 import Link from "next/link";
 
 import { createClient } from "@/actions/clients";
@@ -10,6 +11,7 @@ import { bankAccounts } from "@/lib/db/schema";
 
 export default async function NewClientPage() {
   const { org } = await getCurrentUser();
+  const t = await getTranslations("clients");
 
   const organizationBankAccounts = await db
     .select({
@@ -28,17 +30,17 @@ export default async function NewClientPage() {
         href="/clients"
       >
         <ArrowLeft className="size-4" />
-        Back to clients
+        {t("backToClients")}
       </Link>
 
-      <h1 className="mb-6 text-lg font-semibold">New Client</h1>
+      <h1 className="mb-6 text-lg font-semibold">{t("newClient")}</h1>
 
       <div className="max-w-2xl">
         <ClientForm
           action={createClient}
           bankAccounts={organizationBankAccounts}
           redirectTo="/clients"
-          submitLabel="Create Client"
+          submitLabel={t("createClient")}
         />
       </div>
     </div>
