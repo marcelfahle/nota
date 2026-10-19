@@ -6,10 +6,10 @@ import { cache } from "react";
 import { InvoiceDetailView } from "@/components/invoice-detail";
 import { APP_NAME } from "@/lib/app-brand";
 import { getCurrentUser } from "@/lib/auth";
-import { formatOrgAddress } from "@/lib/branding";
 import { db } from "@/lib/db";
 import { clients, invoices } from "@/lib/db/schema";
 import { getInvoiceDetail } from "@/lib/invoice-service";
+import { displayedSellerAddress } from "@/lib/issued-snapshot";
 import { formatClientAddress } from "@/lib/postal-address";
 
 const loadInvoiceWithClient = cache(async (orgId: string, invoiceId: string) => {
@@ -69,7 +69,7 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
         sourceClient: a.sourceClient,
       }))}
       business={{
-        address: formatOrgAddress(org),
+        address: displayedSellerAddress(invoice, org),
         brandColor: org.brandColor,
         logoUrl: org.logoUrl,
         name: org.businessName || org.name,

@@ -1,7 +1,13 @@
 import { expect, test } from "bun:test";
 
 import { validateForXRechnung } from "@/lib/invoice-compliance";
-import { buildIssuedSnapshot, complianceFromSnapshot } from "@/lib/issued-snapshot";
+import {
+  buildIssuedSnapshot,
+  complianceFromSnapshot,
+  displayedBuyer,
+  displayedSellerAddress,
+} from "@/lib/issued-snapshot";
+import { formatClientAddress } from "@/lib/postal-address";
 
 const org = {
   brandColor: "#112233",
@@ -153,4 +159,40 @@ test("compliance on an issued document is judged from the snapshot alone", () =>
   expect(validateForXRechnung(withoutPhone)).toContain(
     "Add a contact phone number for your business in Settings.",
   );
+});
+
+test("screens show the issued buyer and seller address, and the live ones on a draft", () => {
+  const snapshot = buildIssuedSnapshot({
+    bankAccount: null,
+    client,
+    clientTaxIdentifier: null,
+    invoice,
+    org,
+    sellerTaxIdentifier,
+  });
+  const movedClient = {
+    ...client,
+    city: "München",
+    name: "Max Umgezogen",
+    postalCode: "80331",
+    street: "Neue Straße 99",
+  };
+  const movedOrg = { ...org, street: "Andere Allee 7" };
+
+  const issued = { issuedSnapshot: snapshot, status: "sent" };
+  const shown = displayedBuyer(issued, movedClient);
+  expect(shown.name).toBe("Max Kunde");
+  expect(formatClientAddress(shown)).toBe("Hafenweg 2\n20095 Hamburg\nDE");
+  expect(displayedSellerAddress(issued, movedOrg)).toBe("Musterstraße 1\n10115 Berlin\nGermany");
+
+  const draft = { issuedSnapshot: null, status: "draft" };
+  expect(displayedBuyer(draft, movedClient)).toBe(movedClient);
+  expect(formatClientAddress(displayedBuyer(draft, movedClient))).toBe(
+    "Neue Straße 99\n80331 München\nDE",
+  );
+  expect(displayedSellerAddress(draft, movedOrg)).toBe("Andere Allee 7\n10115 Berlin\nGermany");
+
+  // Issued before snapshots existed: nothing to freeze, the rows are shown.
+  const legacy = { issuedSnapshot: null, status: "paid" };
+  expect(displayedBuyer(legacy, movedClient)).toBe(movedClient);
 });

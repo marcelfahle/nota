@@ -5,6 +5,7 @@ import { activityLog, bankAccounts, clients, invoices, orgs } from "@/lib/db/sch
 import { attachesXRechnung } from "@/lib/e-invoice-delivery";
 import { complianceInput, validateForXRechnung } from "@/lib/invoice-compliance";
 import { getInvoiceDetail } from "@/lib/invoice-service";
+import { displayedBuyer, frozenSnapshot } from "@/lib/issued-snapshot";
 
 const VIEW_DEDUPE_MS = 30 * 60 * 1000;
 
@@ -86,26 +87,13 @@ export async function getPublicInvoice(token: string, recordView = false) {
   // The page shows what the stored documents say: an issued invoice keeps the
   // addresses, the buyer and the bank details frozen at issuance. Branding
   // (name shown in the header, logo, colour) stays live; it is not document content.
-  const frozen = invoice.status !== "draft" ? invoice.issuedSnapshot : null;
+  const frozen = frozenSnapshot(invoice);
   return {
     ...invoice,
     bankAccount: frozen
       ? frozen.bank && { ...(bankAccount ?? {}), ...frozen.bank }
       : (bankAccount ?? null),
-    client: frozen
-      ? {
-          ...context.client,
-          // The frozen lines as one block, as on the PDF; `formatClientAddress` reads structured columns first.
-          address: frozen.buyer.address,
-          city: null,
-          company: frozen.buyer.company,
-          countryCode: null,
-          email: frozen.buyer.email,
-          name: frozen.buyer.name,
-          postalCode: null,
-          street: null,
-        }
-      : context.client,
+    client: displayedBuyer(invoice, context.client),
     organization: frozen
       ? {
           ...context.organization,

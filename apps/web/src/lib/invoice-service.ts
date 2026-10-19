@@ -45,7 +45,7 @@ import {
   normalizeInvoiceStatus,
 } from "@/lib/invoice-lifecycle";
 import { formatInvoiceNumber } from "@/lib/invoice-number";
-import { buildIssuedSnapshot } from "@/lib/issued-snapshot";
+import { buildIssuedSnapshot, displayedBuyer } from "@/lib/issued-snapshot";
 import { processPendingEmailJobs } from "@/lib/jobs";
 import {
   absoluteDecimal,
@@ -550,9 +550,10 @@ export async function getInvoiceDetail(orgId: string, invoiceId: string) {
     ...invoice,
     activityLog: activities,
     balance: settlement.balance,
+    // An issued invoice shows the buyer as it was issued to; a draft shows the client as they are.
     client: client
       ? {
-          ...client,
+          ...displayedBuyer(invoice, client),
           taxIdentifier: invoiceTaxIdentifier(invoice.status, invoice.clientTaxIdentifier, client),
         }
       : null,

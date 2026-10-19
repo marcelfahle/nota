@@ -197,3 +197,38 @@ export function complianceFromSnapshot(
     },
   };
 }
+
+type FrozenInvoice = { issuedSnapshot?: IssuedSnapshot | null; status: string | null };
+
+/** The snapshot an issued invoice renders from; null for drafts and for invoices issued before it existed. */
+export function frozenSnapshot(invoice: FrozenInvoice) {
+  return invoice.status !== "draft" ? (invoice.issuedSnapshot ?? null) : null;
+}
+
+/**
+ * The buyer as every screen should show it: frozen on an issued invoice, live
+ * on a draft. The frozen address lines are kept as one block and the structured
+ * columns cleared, so `formatClientAddress` prints exactly what the PDF did.
+ */
+export function displayedBuyer<T extends SnapshotClient>(invoice: FrozenInvoice, client: T): T {
+  const frozen = frozenSnapshot(invoice);
+  if (!frozen) {
+    return client;
+  }
+  return {
+    ...client,
+    address: frozen.buyer.address,
+    city: null,
+    company: frozen.buyer.company,
+    countryCode: null,
+    email: frozen.buyer.email,
+    name: frozen.buyer.name,
+    postalCode: null,
+    street: null,
+  };
+}
+
+/** The seller's address lines as the screen should show them; branding (name, logo, colour) stays live. */
+export function displayedSellerAddress(invoice: FrozenInvoice, org: SnapshotOrg) {
+  return frozenSnapshot(invoice)?.seller.address ?? formatOrgAddress(org);
+}
