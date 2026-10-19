@@ -189,7 +189,7 @@
     "empty": {
       "noMatch": "No matching invoices",
       "none": "No invoices yet",
-      "noneStatus": "No {status} invoices",
+      "noneStatus": "No invoices under “{status}”",
       "tryDifferent": "Try a different client, number, or amount.",
       "createFirst": "Create your first invoice to get started.",
       "tryAnother": "Try another status or return to all invoices."

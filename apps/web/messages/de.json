@@ -189,7 +189,7 @@
     "empty": {
       "noMatch": "Keine passenden Rechnungen",
       "none": "Noch keine Rechnungen",
-      "noneStatus": "Keine Rechnungen: {status}",
+      "noneStatus": "Keine Rechnungen unter „{status}“",
       "tryDifferent": "Probier einen anderen Kunden, eine andere Nummer oder einen anderen Betrag.",
       "createFirst": "Leg deine erste Rechnung an.",
       "tryAnother": "Wähle einen anderen Status oder zeig alle Rechnungen."
@@ -274,7 +274,7 @@
     "labels": {
       "exempt_small_business": "Kleinunternehmer (§ 19 UStG)",
       "reverse_charge": "Reverse Charge (§ 13b UStG)",
-      "standard": "Umsatzsteuer",
+      "standard": "Regelbesteuerung",
       "zero_rated": "Steuerfrei (0 %)"
     },
     "hints": {
@@ -439,7 +439,7 @@
     "amount": "Betrag",
     "qty": "Menge",
     "addLineItem": "Position hinzufügen",
-    "vatTreatment": "Umsatzsteuer",
+    "vatTreatment": "Steuerregel",
     "oneRate": "Ein Steuersatz pro Rechnung. Für gemischte Sätze brauchst du getrennte Rechnungen.",
     "subtotal": "Nettobetrag",
     "vat": "USt.",
@@ -535,7 +535,7 @@
       "billingSuccess": "Deine Zahlung wird bestätigt. Lade die Seite gleich neu, dann siehst du deinen neuen Tarif.",
       "connectCancelled": "Die Verbindung mit Stripe wurde abgebrochen.",
       "connectExpired": "Der Stripe-Link ist abgelaufen. Setz die Einrichtung fort, dann bekommst du einen neuen.",
-      "connectFailed": "Stripe konnte nicht verbunden werden. Versuch es als Inhaber des Workspace noch einmal.",
+      "connectFailed": "Stripe konnte nicht verbunden werden. Versuch es als Inhaber noch einmal.",
       "connectReturned": "Willkommen zurück. Aktualisiere den Stripe-Status, um zu sehen, ob die Einrichtung fertig ist.",
       "connectSuccess": "Dein Stripe-Konto ist verbunden.",
       "googleFailed": "Google konnte nicht verbunden werden. Nimm dieselbe E-Mail-Adresse wie bei Nota und versuch es noch einmal."
@@ -721,7 +721,7 @@
   },
   "auth": {
     "tagline": "Rechnungen schreiben, ohne Umwege.",
-    "home": "Nota Startseite",
+    "home": "Zur Startseite von Nota",
     "login": {
       "title": "Willkommen <highlight>zurück.</highlight>",
       "lead": "Deine Rechnungen sind genau da, wo du sie gelassen hast.",
@@ -820,9 +820,9 @@
     },
     "save": {
       "title": "Rechnung <highlight>sichern.</highlight>",
-      "lead": "Leg dein Konto an, dann gehört die Rechnung {owner} und kann raus. Danach sagst du Nota, an wen die erste geht.",
-      "ownerNamed": "von {name} dir",
-      "ownerYour": "dir",
+      "lead": "Leg dein Konto an, dann ist die Rechnung {owner} und kann raus. Danach sagst du Nota, an wen die erste geht.",
+      "ownerNamed": "für {name} gesichert",
+      "ownerYour": "gesichert",
       "name": "Dein Name",
       "email": "E-Mail",
       "password": "Passwort",
@@ -1042,7 +1042,7 @@
       "downloadArchive": "Archiv herunterladen",
       "history": "Rechnungsverlauf",
       "invoiceCount": "{count, plural, one {# Rechnung} other {# Rechnungen}}",
-      "paidIn": "Bezahlt nach im Schnitt {days} Tagen",
+      "paidIn": "Im Schnitt nach {days} Tagen bezahlt",
       "issued": "Gestellt",
       "collected": "Eingegangen",
       "outstanding": "Offen",
@@ -1080,7 +1080,7 @@
     "putToWork": "Lass Nota arbeiten",
     "clientsInvoices": "Kunden, Rechnungen und bezahlt werden.",
     "importPrompt": "Meine Kunden-CSV importieren.",
-    "imported": "**{added, plural, one {# Kunde} other {# Kunden}}** aus deiner CSV hinzugefügt. Übersprungen: {duplicate} Duplikate und {invalid} Zeilen, die Aufmerksamkeit brauchen. Keine Rechnungen angelegt oder gesendet.",
+    "imported": "**{added, plural, one {# Kunde} other {# Kunden}}** aus deiner CSV hinzugefügt. Übersprungen: {duplicate} Duplikate und {invalid} unvollständige Zeilen. Keine Rechnungen angelegt oder gesendet.",
     "thinking": "Einen Moment…",
     "conversation": "Gespräch mit Nota",
     "showConversation": "Gespräch anzeigen",
@@ -1093,7 +1093,7 @@
       "dismiss": "CSV-Import verwerfen",
       "reading": "Deine Kundenliste wird gelesen…",
       "ready": "{count, plural, one {# neuer Kunde} other {# neue Kunden}} bereit.",
-      "skipped": "{duplicate} schon vorhanden · {invalid, plural, one {# Zeile braucht} other {# Zeilen brauchen}} Aufmerksamkeit. Diese Zeilen werden übersprungen.",
+      "skipped": "{duplicate} schon vorhanden · {invalid, plural, one {# Zeile ist unvollständig} other {# Zeilen sind unvollständig}}. Diese Zeilen werden übersprungen.",
       "adding": "Kunden werden hinzugefügt…",
       "add": "{count, plural, one {# Kunden} other {# Kunden}} hinzufügen",
       "intact": "Bestehende Kunden bleiben, wie sie sind. Keine Rechnungen oder E-Mails werden angelegt.",

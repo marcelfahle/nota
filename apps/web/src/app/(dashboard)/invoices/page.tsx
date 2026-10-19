@@ -182,7 +182,7 @@ export default async function InvoicesPage({
               ? t("empty.noMatch")
               : activeFilter === "all"
                 ? t("empty.none")
-                : t("empty.noneStatus", { status: t(`filters.${activeFilter}`).toLowerCase() })}
+                : t("empty.noneStatus", { status: t(`filters.${activeFilter}`) })}
           </p>
           <p className="mb-4 text-sm text-muted-foreground">
             {query

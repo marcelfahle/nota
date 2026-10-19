@@ -52,7 +52,14 @@ import {
   canSendInvoiceReminder,
 } from "@/lib/roles";
 import { type TaxTreatment, taxTreatmentNote } from "@/lib/tax-treatment";
-import { formatCurrency, formatDate, formatNumber, formatQuantity, type Locale } from "@/lib/utils";
+import {
+  cn,
+  formatCurrency,
+  formatDate,
+  formatNumber,
+  formatQuantity,
+  type Locale,
+} from "@/lib/utils";
 
 type ActivityEntry = {
   action: string;
@@ -485,7 +492,13 @@ export function InvoiceDetailView({
             backgroundSize: "8px 8px",
           }}
         >
-          <div className="invoice-paper relative mx-auto min-h-[720px] max-w-[720px] border p-7 shadow-sm sm:p-12">
+          <div
+            className={cn(
+              "invoice-paper relative mx-auto min-h-[720px] max-w-[720px] border p-7 shadow-sm sm:p-12",
+              // The pay bar sits at the foot of the paper; long notes must not run under it.
+              invoice.kind === "invoice" && "pb-28 sm:pb-32",
+            )}
+          >
             <div className="flex items-start justify-between gap-8 border-b pb-8">
               <div className="flex items-start gap-3">
                 {business.logoUrl ? (
@@ -555,7 +568,7 @@ export function InvoiceDetailView({
                 <thead>
                   <tr className="nota-label border-b text-left text-zinc-500">
                     <th className="pb-3 font-medium">{t("description")}</th>
-                    <th className="w-12 pb-3 text-right font-medium">{t("quantity")}</th>
+                    <th className="w-16 pb-3 text-right font-medium">{t("quantity")}</th>
                     <th className="w-28 pb-3 text-right font-medium">{t("amount")}</th>
                   </tr>
                 </thead>
