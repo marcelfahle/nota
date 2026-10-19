@@ -253,7 +253,7 @@ export function PublicInvoiceView({ invoice, token }: { invoice: PublicInvoice; 
               </h2>
               <dl className="mt-3 grid gap-2 text-xs sm:grid-cols-[9rem_1fr]">
                 <dt className="text-[#6b655c]">{t("reference")}</dt>
-                <dd className="font-mono">{invoice.number}</dd>
+                <dd className="font-mono">{t("referenceValue", { number: invoice.number })}</dd>
                 {invoice.bankAccount.iban ? (
                   <>
                     <dt className="text-[#6b655c]">{t("iban")}</dt>

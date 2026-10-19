@@ -139,7 +139,8 @@ const styles = StyleSheet.create({
   dateLabel: {
     color: c.tertiary,
     fontSize: 9,
-    width: 64,
+    marginRight: 10,
+    width: 92,
   },
   dateRow: {
     flexDirection: "row" as const,
@@ -176,7 +177,7 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: 600,
     textAlign: "right" as const,
-    width: 80,
+    width: 120,
   },
   grandTotalValue: {
     color: c.black,
@@ -258,7 +259,8 @@ const styles = StyleSheet.create({
   paymentLabel: {
     color: c.tertiary,
     fontSize: 9,
-    width: 72,
+    marginRight: 10,
+    width: 100,
   },
   paymentLink: {
     color: c.text,
@@ -332,7 +334,7 @@ const styles = StyleSheet.create({
     color: c.tertiary,
     fontSize: 9,
     textAlign: "right" as const,
-    width: 80,
+    width: 120,
   },
   totalRow: {
     flexDirection: "row" as const,
@@ -348,7 +350,7 @@ const styles = StyleSheet.create({
     marginBottom: 8,
     marginLeft: "auto" as const,
     marginTop: 4,
-    width: 170,
+    width: 210,
   },
   totalValue: {
     color: c.text,

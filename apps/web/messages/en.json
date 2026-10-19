@@ -68,7 +68,8 @@
     "downloadPdf": "Download PDF",
     "downloadXml": "Download XRechnung XML",
     "thanks": "Thank you for your business.",
-    "sentWith": "Sent with"
+    "sentWith": "Sent with",
+    "referenceValue": "Invoice {number}"
   },
   "emails": {
     "invoiceSent": {
@@ -616,6 +617,106 @@
       "editTitle": "Edit bank account",
       "editDescription": "Update the payout instructions shown on your invoices.",
       "updateAccount": "Update account"
+    },
+    "google": {
+      "heading": "Google sign-in",
+      "linked": "Google is connected. You can use it to sign in to Nota.",
+      "connectFor": "Connect the Google account for {email} to sign in without your Nota password.",
+      "opening": "Opening Google…",
+      "connect": "Connect Google",
+      "failed": "Could not connect Google. Use the Google account with the same email as your Nota account."
+    },
+    "brand": {
+      "taxIdType": "Tax identifier type",
+      "euVat": "EU VAT ID",
+      "usEin": "US EIN",
+      "taxId": "Tax ID",
+      "readOnly": "Only organization owners can update these settings.",
+      "from": "Who the invoice is from",
+      "fields": {
+        "businessName": "Name",
+        "name": "Shown as",
+        "contactName": "Contact",
+        "contactEmail": "Email",
+        "contactPhone": "Phone",
+        "legalName": "Legal name",
+        "street": "Street",
+        "city": "City"
+      },
+      "placeholders": {
+        "businessName": "Your business name",
+        "name": "Short display name",
+        "contactName": "Who to reach about invoices",
+        "contactEmail": "billing@example.com",
+        "contactPhone": "+49 30 1234567",
+        "ein": "e.g. 12-3456789",
+        "vat": "e.g. DE123456789",
+        "taxId": "Your tax ID",
+        "legalName": "Registered company name",
+        "street": "Street and number",
+        "city": "City, region and country"
+      },
+      "source": {
+        "notPublic": "not public",
+        "confirmed": "confirmed by you",
+        "registry": "public registry",
+        "search": "public search",
+        "site": "your website",
+        "withConfirmed": "{source}, confirmed by you"
+      },
+      "edit": "Edit",
+      "add": "Add",
+      "done": "Done",
+      "finishEditing": "Finish editing",
+      "editLabel": "{action} {label}",
+      "address": {
+        "postalCode": "Postal code",
+        "city": "City",
+        "region": "Region",
+        "country": "Country",
+        "countryCode": "Country code (DE, AT…)"
+      },
+      "vat": "VAT",
+      "newInvoicesStart": "New invoices start with this.",
+      "tellNota": "You can also tell Nota: “we moved”, “new tax ID”, or “make the pay button black”.",
+      "germanNeeds": "German invoices need the contact, phone, country code and a Steuernummer or VAT ID before they can be sent.",
+      "looks": "How it looks",
+      "logo": "Logo",
+      "currentLogo": "Current logo",
+      "currentFavicon": "Current favicon",
+      "logoAndFavicon": "logo and favicon",
+      "replace": "Replace",
+      "favicon": "Favicon",
+      "removeLogo": "Remove logo",
+      "removeFavicon": "Remove favicon",
+      "payButton": "Pay button",
+      "brandColour": "{color} brand colour",
+      "customColour": "Custom brand colour",
+      "stylesheet": "stylesheet",
+      "layout": "Layout",
+      "classic": "Classic",
+      "livePreview": "Live preview",
+      "streetAddress": "street address",
+      "taxIdMissing": "Tax ID missing",
+      "preview": {
+        "invoice": "Invoice",
+        "billedTo": "Billed to",
+        "issued": "Issued",
+        "due": "Due",
+        "description": "Description",
+        "qty": "Qty",
+        "amount": "Amount",
+        "item": "Platform, annual plan",
+        "subtotal": "Subtotal",
+        "vat": "VAT 0%",
+        "totalDue": "Total due",
+        "pay": "Pay {amount}"
+      },
+      "testInvoice": "Send me a test invoice",
+      "testInvoiceUnavailable": "Test invoice sending will be enabled with the email settings flow",
+      "saving": "Saving…",
+      "save": "Save brand",
+      "saved": "Brand updated."
     }
   },
   "auth": {
@@ -677,6 +778,15 @@
       "continueWith": "Continue with Google",
       "orEmail": "or use email",
       "unavailable": "Google sign-in is unavailable. Please try again, or use email and password."
+    },
+    "playground": {
+      "invoice": "Invoice",
+      "totalDue": "Total due",
+      "pay": "Pay {amount}",
+      "paid": "Paid",
+      "paidToday": "Paid today",
+      "clickAnywhere": "Click anywhere to get paid.",
+      "feelsGood": "Feels good. Now do it for real."
     }
   },
   "onboarding": {

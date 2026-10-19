@@ -139,7 +139,9 @@ export function InvoiceSentEmail({
             </Text>
           )}
 
-          {reminder ? null : <Text style={styles.text}>{t("thanks")}</Text>}
+          {reminder ? null : (
+            <Text style={{ ...styles.text, marginTop: "24px" }}>{t("thanks")}</Text>
+          )}
 
           <Hr style={styles.hr} />
 

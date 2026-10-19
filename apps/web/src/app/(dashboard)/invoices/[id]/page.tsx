@@ -10,8 +10,10 @@ import { getCurrentUser } from "@/lib/auth";
 import { formatOrgAddress } from "@/lib/branding";
 import { db } from "@/lib/db";
 import { clients, invoices } from "@/lib/db/schema";
+import { documentLocaleOf } from "@/lib/i18n";
+import { orgCountryCode } from "@/lib/invoice-compliance";
 import { getInvoiceDetail } from "@/lib/invoice-service";
-import { formatClientAddress } from "@/lib/postal-address";
+import { formatClientAddress, isDomestic } from "@/lib/postal-address";
 
 const loadInvoiceWithClient = cache(async (orgId: string, invoiceId: string) => {
   const [record] = await db
@@ -66,6 +68,13 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
     notFound();
   }
 
+  // The preview prints addresses the way the document does: country named in
+  // the document language, and left out when both parties are in one country.
+  const address = {
+    locale: documentLocaleOf(invoice, org),
+    omitCountry: isDomestic({ countryCode: orgCountryCode(org) }, invoice.client ?? {}),
+  };
+
   return (
     <InvoiceDetailView
       activities={invoice.activityLog.map((a) => ({
@@ -77,7 +86,7 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
         sourceClient: a.sourceClient,
       }))}
       business={{
-        address: formatOrgAddress(org),
+        address: formatOrgAddress(org, address),
         brandColor: org.brandColor,
         logoUrl: org.logoUrl,
         name: org.businessName || org.name,
@@ -85,7 +94,7 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
       invoice={{
         ...invoice,
         client: invoice.client
-          ? { ...invoice.client, address: formatClientAddress(invoice.client) }
+          ? { ...invoice.client, address: formatClientAddress(invoice.client, address) }
           : { email: "", name: "Unknown" },
       }}
       locale={user.locale}

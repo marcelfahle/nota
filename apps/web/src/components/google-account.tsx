@@ -1,11 +1,13 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { authClient } from "@/lib/auth-client";
 
 export function GoogleAccount({ email, linked }: { email: string; linked: boolean }) {
+  const t = useTranslations("settings.google");
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   async function connect() {
@@ -20,23 +22,19 @@ export function GoogleAccount({ email, linked }: { email: string; linked: boolea
         throw new Error("Unable to connect Google");
       }
     } catch {
-      setError(
-        "Could not connect Google. Use the Google account with the same email as your Nota account.",
-      );
+      setError(t("failed"));
       setPending(false);
     }
   }
   return (
     <section className="space-y-3">
-      <h2 className="text-lg font-semibold">Google sign-in</h2>
+      <h2 className="text-lg font-semibold">{t("heading")}</h2>
       <p className="text-sm text-muted-foreground">
-        {linked
-          ? "Google is connected. You can use it to sign in to Nota."
-          : `Connect the Google account for ${email} to sign in without your Nota password.`}
+        {linked ? t("linked") : t("connectFor", { email })}
       </p>
       {!linked && (
         <Button disabled={pending} onClick={connect} variant="outline">
-          {pending ? "Opening Google…" : "Connect Google"}
+          {pending ? t("opening") : t("connect")}
         </Button>
       )}
       {error && (

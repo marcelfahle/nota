@@ -68,7 +68,8 @@
     "downloadPdf": "PDF herunterladen",
     "downloadXml": "XRechnung-XML herunterladen",
     "thanks": "Vielen Dank für den Auftrag.",
-    "sentWith": "Gesendet mit"
+    "sentWith": "Gesendet mit",
+    "referenceValue": "Rechnung Nr. {number}"
   },
   "emails": {
     "invoiceSent": {
@@ -129,7 +130,7 @@
       "selfHosted": "Selbst gehostet",
       "pro": "Pro-Tarif",
       "unlimited": "Unbegrenzt",
-      "free": "Kostenloser Tarif"
+      "free": "Kostenlos"
     },
     "sent": "{count} gesendet",
     "sentOf": "{count} / {limit}",
@@ -330,8 +331,8 @@
     "confirmCancel": "{number} stornieren?",
     "fixBefore": "Bevor die Rechnung raus kann, fehlt noch:",
     "preview": "Rechnungsvorschau",
-    "billedTo": "Rechnungsempfänger",
-    "issued": "Rechnungsdatum",
+    "billedTo": "Empfänger",
+    "issued": "Datum",
     "due": "Fällig am",
     "serviceDate": "Leistungsdatum",
     "servicePeriod": "Leistungszeitraum",
@@ -433,8 +434,8 @@
     "referenceHint": "Eine Bestellnummer oder Referenz, die der Kunde wünscht. Leer lassen, dann gilt die Rechnungsnummer.",
     "lineItems": "Positionen",
     "description": "Beschreibung",
-    "qtyHours": "Menge/Std.",
-    "rate": "Einzelpreis",
+    "qtyHours": "Menge",
+    "rate": "Preis",
     "amount": "Betrag",
     "qty": "Menge",
     "addLineItem": "Position hinzufügen",
@@ -616,6 +617,106 @@
       "editTitle": "Bankkonto bearbeiten",
       "editDescription": "Die Zahlungsinformationen auf deinen Rechnungen ändern.",
       "updateAccount": "Konto aktualisieren"
+    },
+    "google": {
+      "heading": "Anmeldung mit Google",
+      "linked": "Google ist verbunden. Du kannst dich damit bei Nota anmelden.",
+      "connectFor": "Verbinde das Google-Konto für {email}, dann geht die Anmeldung ohne Nota-Passwort.",
+      "opening": "Google wird geöffnet…",
+      "connect": "Google verbinden",
+      "failed": "Google konnte nicht verbunden werden. Nimm das Google-Konto mit derselben E-Mail-Adresse wie bei Nota."
+    },
+    "brand": {
+      "taxIdType": "Art der Steuer-ID",
+      "euVat": "USt-IdNr. (EU)",
+      "usEin": "EIN (USA)",
+      "taxId": "Steuernummer",
+      "readOnly": "Nur Inhaber können diese Einstellungen ändern.",
+      "from": "Von wem die Rechnung kommt",
+      "fields": {
+        "businessName": "Name",
+        "name": "Anzeigename",
+        "contactName": "Kontakt",
+        "contactEmail": "E-Mail",
+        "contactPhone": "Telefon",
+        "legalName": "Firmenname",
+        "street": "Straße",
+        "city": "Ort"
+      },
+      "placeholders": {
+        "businessName": "Name deines Unternehmens",
+        "name": "Kurzer Anzeigename",
+        "contactName": "Ansprechpartner für Rechnungen",
+        "contactEmail": "rechnung@beispiel.de",
+        "contactPhone": "+49 30 1234567",
+        "ein": "z. B. 12-3456789",
+        "vat": "z. B. DE123456789",
+        "taxId": "Deine Steuernummer",
+        "legalName": "Eingetragener Firmenname",
+        "street": "Straße und Hausnummer",
+        "city": "Ort, Region und Land"
+      },
+      "source": {
+        "notPublic": "nicht öffentlich",
+        "confirmed": "von dir bestätigt",
+        "registry": "öffentliches Register",
+        "search": "öffentliche Suche",
+        "site": "deine Website",
+        "withConfirmed": "{source}, von dir bestätigt"
+      },
+      "edit": "Bearbeiten",
+      "add": "Ergänzen",
+      "done": "Fertig",
+      "finishEditing": "Bearbeiten beenden",
+      "editLabel": "{label} {action}",
+      "address": {
+        "postalCode": "Postleitzahl",
+        "city": "Ort",
+        "region": "Region",
+        "country": "Land",
+        "countryCode": "Ländercode (DE, AT…)"
+      },
+      "vat": "USt.",
+      "newInvoicesStart": "Neue Rechnungen starten damit.",
+      "tellNota": "Du kannst es auch Nota sagen: „wir sind umgezogen“, „neue Steuernummer“ oder „mach den Bezahlen-Button schwarz“.",
+      "germanNeeds": "Deutsche Rechnungen brauchen Kontakt, Telefon, Ländercode und eine Steuernummer oder USt-IdNr., bevor sie raus können.",
+      "looks": "Wie es aussieht",
+      "logo": "Logo",
+      "currentLogo": "Aktuelles Logo",
+      "currentFavicon": "Aktuelles Favicon",
+      "logoAndFavicon": "Logo und Favicon",
+      "replace": "Ersetzen",
+      "favicon": "Favicon",
+      "removeLogo": "Logo entfernen",
+      "removeFavicon": "Favicon entfernen",
+      "payButton": "Bezahlen-Button",
+      "brandColour": "Markenfarbe {color}",
+      "customColour": "Eigene Markenfarbe",
+      "stylesheet": "Stylesheet",
+      "layout": "Layout",
+      "classic": "Klassisch",
+      "livePreview": "Vorschau",
+      "streetAddress": "Straße und Hausnummer",
+      "taxIdMissing": "Steuer-ID fehlt",
+      "preview": {
+        "invoice": "Rechnung",
+        "billedTo": "Rechnungsempfänger",
+        "issued": "Rechnungsdatum",
+        "due": "Fällig am",
+        "description": "Beschreibung",
+        "qty": "Menge",
+        "amount": "Betrag",
+        "item": "Plattform, Jahrestarif",
+        "subtotal": "Nettobetrag",
+        "vat": "Umsatzsteuer 0 %",
+        "totalDue": "Gesamtbetrag",
+        "pay": "{amount} bezahlen"
+      },
+      "testInvoice": "Testrechnung an mich senden",
+      "testInvoiceUnavailable": "Testrechnungen kommen mit den E-Mail-Einstellungen",
+      "saving": "Wird gespeichert…",
+      "save": "Marke speichern",
+      "saved": "Marke gespeichert."
     }
   },
   "auth": {
@@ -677,6 +778,15 @@
       "continueWith": "Mit Google weiter",
       "orEmail": "oder mit E-Mail",
       "unavailable": "Die Anmeldung mit Google geht gerade nicht. Versuch es noch einmal oder nimm E-Mail und Passwort."
+    },
+    "playground": {
+      "invoice": "Rechnung",
+      "totalDue": "Gesamtbetrag",
+      "pay": "{amount} bezahlen",
+      "paid": "Bezahlt",
+      "paidToday": "Heute bezahlt",
+      "clickAnywhere": "Klick irgendwohin und werd bezahlt.",
+      "feelsGood": "Fühlt sich gut an. Jetzt in echt."
     }
   },
   "onboarding": {
@@ -917,10 +1027,10 @@
       "download_invoice_archive": "Archiv herunterladen",
       "duplicate_invoice": "Rechnung duplizieren",
       "get_client_billing_history": "Rechnungsverlauf des Kunden",
-      "get_client_insights": "Kundenanalyse",
+      "get_client_insights": "Kundenauswertung",
       "get_dashboard_stats": "Übersicht",
       "get_invoice": "Rechnung",
-      "get_invoice_analytics": "Rechnungsanalyse",
+      "get_invoice_analytics": "Auswertung",
       "list_clients": "Kunden",
       "list_invoices": "Rechnungen",
       "mark_invoice_paid": "Als bezahlt markieren",

@@ -240,7 +240,7 @@ function ToolResultCard({
               {output.period?.label ?? t("cards.history")}
             </p>
           </div>
-          <span className="text-xs text-zinc-500 tabular-nums">
+          <span className="shrink-0 text-xs whitespace-nowrap text-zinc-500 tabular-nums">
             {t("cards.invoiceCount", { count: output.summary.invoiceCount ?? 0 })}
           </span>
         </div>

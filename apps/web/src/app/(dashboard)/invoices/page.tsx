@@ -215,8 +215,8 @@ export default async function InvoicesPage({
                 <tr className="nota-label text-left text-muted-foreground">
                   <th className="w-[100px] px-3 py-2 font-medium">{t("columns.number")}</th>
                   <th className="min-w-[180px] px-3 py-2 font-medium">{t("columns.client")}</th>
-                  <th className="w-[90px] px-3 py-2 font-medium">{t("columns.issued")}</th>
-                  <th className="w-[105px] px-3 py-2 font-medium">{t("columns.due")}</th>
+                  <th className="w-[100px] px-3 py-2 font-medium">{t("columns.issued")}</th>
+                  <th className="w-[115px] px-3 py-2 font-medium">{t("columns.due")}</th>
                   <th className="w-[110px] px-3 py-2 font-medium">{t("columns.status")}</th>
                   <th className="w-[100px] px-3 py-2 font-medium">{t("columns.madeIn")}</th>
                   <th className="w-[280px] px-3 py-2 text-right font-medium">
