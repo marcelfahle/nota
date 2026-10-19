@@ -55,7 +55,7 @@ The remote server is deployed. Your individual Claude/ChatGPT account connection
 
 ## Requirements
 
-- Node.js 20+
+- Node.js 20.19+
 - A Nota deployment URL
 - A Nota API key created in `Settings -> API Keys`
 
@@ -67,6 +67,17 @@ The remote server is deployed. Your individual Claude/ChatGPT account connection
 export NOTA_URL="https://nota-weld.vercel.app"
 export NOTA_API_KEY="nota_..."
 ```
+
+## Install
+
+Run the published stdio server with:
+
+```bash
+NOTA_URL="https://app.withnota.com" NOTA_API_KEY="nota_..." npx -y @nota-app/mcp
+```
+
+Or install the binary globally with `npm install -g @nota-app/mcp` and run `nota-mcp`.
+The server speaks MCP on stdio and waits for a client connection.
 
 ## Local build
 
@@ -90,8 +101,8 @@ Add a local stdio server entry to `claude_desktop_config.json`.
   "mcpServers": {
     "nota": {
       "type": "stdio",
-      "command": "node",
-      "args": ["/absolute/path/to/nota/apps/mcp/dist/index.js"],
+      "command": "npx",
+      "args": ["-y", "@nota-app/mcp"],
       "env": {
         "NOTA_URL": "https://nota-weld.vercel.app",
         "NOTA_API_KEY": "nota_..."
@@ -101,7 +112,8 @@ Add a local stdio server entry to `claude_desktop_config.json`.
 }
 ```
 
-When the package is published, you can switch the command to `npx`.
+For a source checkout, use `"command": "node"` with
+`"args": ["/absolute/path/to/nota/apps/mcp/dist/index.js"]` after building locally.
 
 ```json
 {
@@ -130,8 +142,8 @@ Project config:
   "mcpServers": {
     "nota": {
       "type": "stdio",
-      "command": "node",
-      "args": ["/absolute/path/to/nota/apps/mcp/dist/index.js"],
+      "command": "npx",
+      "args": ["-y", "@nota-app/mcp"],
       "env": {
         "NOTA_URL": "https://nota-weld.vercel.app",
         "NOTA_API_KEY": "nota_..."
@@ -148,7 +160,7 @@ claude mcp add nota \
   --transport stdio \
   --env NOTA_URL=https://nota-weld.vercel.app \
   --env NOTA_API_KEY=nota_... \
-  -- node /absolute/path/to/nota/apps/mcp/dist/index.js
+  -- npx -y @nota-app/mcp
 ```
 
 ## Cursor
@@ -159,8 +171,8 @@ Cursor supports project config in `.cursor/mcp.json` and user config in `~/.curs
 {
   "mcpServers": {
     "nota": {
-      "command": "node",
-      "args": ["/absolute/path/to/nota/apps/mcp/dist/index.js"],
+      "command": "npx",
+      "args": ["-y", "@nota-app/mcp"],
       "env": {
         "NOTA_URL": "https://nota-weld.vercel.app",
         "NOTA_API_KEY": "nota_..."
@@ -242,3 +254,28 @@ bun run check
 bun run build
 bun run test
 ```
+
+## Publish
+
+From the repository root:
+
+```bash
+bun install --frozen-lockfile
+bun run check:mcp
+bun run test:mcp
+cd apps/mcp
+npm pack
+node scripts/smoke-package.mjs ./nota-app-mcp-0.1.0.tgz
+```
+
+Inspect the tarball, then install it in an empty directory outside the monorepo.
+Check an MCP initialize request, tools/resources listing, and the invoice UI resource
+using both npx and bunx. Check the exported client and server modules and TypeScript
+declarations from that installation too. These checks need no production mutations.
+
+Publish the reviewed archive with `npm publish ./nota-app-mcp-0.1.0.tgz --access public`
+after npm login and 2FA. Verify the registry archive's integrity and repeat the fresh
+install checks against `@nota-app/mcp@0.1.0`.
+
+The published binary is `nota-mcp`. The build bundles the workspace Nota SDK and
+includes its declarations; MCP, Express, and Zod remain regular npm dependencies.
