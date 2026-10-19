@@ -2,8 +2,9 @@ import { getPublicInvoice } from "@/lib/public-invoice";
 import { XRechnungValidationError } from "@/lib/xrechnung";
 import { InvoiceDocumentError, renderXRechnungForOrg } from "@/lib/xrechnung-service";
 
-// Same token as the PDF route. The XML is only offered where the workspace
-// chose to send it, so the public page and the email never disagree.
+// Same token as the PDF route. The XML is offered only while the workspace
+// setting is on and the export is complete; like the PDF it is rendered from
+// the current data, not frozen at send time (NOTA-57).
 export async function GET(_request: Request, { params }: { params: Promise<{ token: string }> }) {
   const { token } = await params;
   const invoice = await getPublicInvoice(token);

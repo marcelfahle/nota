@@ -298,4 +298,19 @@ test("org values carry each field's source; search results stay unconfirmed", ()
   expect(values.profileSources?.vatNumber?.source).toBe("user");
   // The summary is for the onboarding screen only; it is not an org column.
   expect(values).not.toHaveProperty("summary");
+  // A Spanish workspace emails the PDF only; a German one starts with the XML attached.
+  expect(values.eInvoiceDelivery).toBe("pdf_only");
+  expect(
+    orgValuesFromProfile(
+      {
+        ...profile,
+        fields: { ...profile.fields, country: { ...profile.fields.country!, value: "Germany" } },
+      },
+      now,
+    ).eInvoiceDelivery,
+  ).toBe("pdf_and_xrechnung");
+  expect(
+    orgValuesFromProfile({ ...profile, fields: { ...profile.fields, country: undefined } }, now)
+      .eInvoiceDelivery,
+  ).toBe("pdf_only");
 });
