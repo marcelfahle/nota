@@ -10,7 +10,7 @@ import {
 import { after } from "next/server";
 
 import { trackedModelCall } from "@/lib/ai-usage";
-import { getActiveUserOrNull } from "@/lib/auth";
+import { getActiveUserOrNull, getViewAs } from "@/lib/auth";
 import {
   getChatThread,
   loadChatActivity,
@@ -37,6 +37,11 @@ export async function GET() {
   const auth = await getActiveUserOrNull();
   if (!auth) {
     return Response.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  // Loading history creates the owner's thread when there is none; a support
+  // visit must not leave one behind.
+  if (await getViewAs()) {
+    return Response.json({ error: "Read-only while viewing as support." }, { status: 403 });
   }
   const thread = await getChatThread({ orgId: auth.org.id, userId: auth.user.id });
   const [activity, messages] = await Promise.all([

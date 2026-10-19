@@ -45,6 +45,7 @@ export function DashboardShell({
   stripeDockItems,
   usage,
   userId,
+  viewAs,
 }: {
   account: { email: string; name: string };
   brandName: string;
@@ -62,6 +63,8 @@ export function DashboardShell({
     sent: number;
   };
   userId: string;
+  /** Set while a super admin views this workspace for support: read-only, no chat. */
+  viewAs: { workspaceName: string } | null;
 }) {
   const navItems = [
     { href: "/home", label: "Home", meta: navCounts.proposals || null },
@@ -82,6 +85,9 @@ export function DashboardShell({
   const chatInput = useRef<HTMLTextAreaElement>(null);
 
   const focusChat = useCallback(() => {
+    if (viewAs) {
+      return;
+    }
     if (isHome) {
       window.dispatchEvent(new Event("nota:open-home-chat"));
     } else {
@@ -89,14 +95,18 @@ export function DashboardShell({
       writeChatOpen(userId, true);
     }
     requestAnimationFrame(() => chatInput.current?.focus());
-  }, [isHome, userId]);
+  }, [isHome, userId, viewAs]);
 
   useEffect(() => {
+    // A support visit must not count as the owner using the app.
+    if (viewAs) {
+      return;
+    }
     posthog.identify(userId, {
       email: account.email,
       name: account.name,
     });
-  }, [account.email, account.name, userId]);
+  }, [account.email, account.name, userId, viewAs]);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- Restore persisted browser state.
@@ -137,7 +147,7 @@ export function DashboardShell({
     writeChatOpen(userId, open);
   }
 
-  const chatOpen = panelOpen;
+  const chatOpen = panelOpen && !viewAs;
 
   return (
     <div className="app-shell min-h-dvh bg-background text-foreground md:grid md:grid-cols-[248px_minmax(0,1fr)]">
@@ -338,7 +348,7 @@ export function DashboardShell({
           tabIndex={-1}
         >
           {children}
-          {isHome ? null : (
+          {isHome || viewAs ? null : (
             <ChatPanel
               inputRef={chatInput}
               mode="panel"
@@ -350,6 +360,27 @@ export function DashboardShell({
       </div>
       {opsOpen ? (
         <StripeDevDock items={stripeDockItems} jobs={emailJobItems} jobSummary={emailJobSummary} />
+      ) : null}
+      {viewAs ? (
+        <div
+          className="fixed inset-x-0 bottom-0 z-50 flex items-center justify-between gap-4 border-t bg-foreground px-4 py-2 text-sm text-background sm:px-8"
+          data-testid="view-as-banner"
+          role="status"
+        >
+          <span className="min-w-0 truncate">
+            Viewing <strong className="font-semibold">{viewAs.workspaceName}</strong> as support.
+            Read-only.
+          </span>
+          <form action="/admin/view-as/exit" method="post">
+            <button
+              className="rounded-md border border-background/40 px-3 py-1 font-medium hover:bg-background/10"
+              data-testid="view-as-exit"
+              type="submit"
+            >
+              Exit
+            </button>
+          </form>
+        </div>
       ) : null}
     </div>
   );

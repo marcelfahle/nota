@@ -3,6 +3,8 @@ import { alias } from "drizzle-orm/pg-core";
 import { notFound } from "next/navigation";
 import { z } from "zod";
 
+import { listWorkspaceAudit } from "@/lib/admin-audit";
+import { memberMatch, searchPattern, workspaceSearch } from "@/lib/admin-search";
 import {
   estimatedCost,
   FEATURE_CONFIG,
@@ -81,47 +83,56 @@ function loadUsage(start: Date, end: Date) {
     .groupBy(aiUsage.feature, aiUsage.modelId, aiUsage.orgId);
 }
 
-export async function getAdminOverview() {
+/** The accounts table, filtered by a typed email, name or workspace name when given. */
+export async function getAdminOverview(query?: string) {
   await requireSuperAdmin();
   const month = monthRange();
   const thirtyDaysAgo = new Date(Date.now() - 30 * 86_400_000);
   const workspace = alias(orgs, "workspace");
-  const [workspaceRows, usageRows, overrides, [userTotal], [sentTotal]] = await Promise.all([
-    db
-      .select({
-        clientCount: sql<number>`(select count(*)::int from ${clients} c where c.org_id = "workspace"."id")`,
-        createdAt: workspace.createdAt,
-        deactivatedAt: workspace.deactivatedAt,
-        id: workspace.id,
-        invoiceCount: sql<number>`(select count(*)::int from ${invoices} i where i.org_id = "workspace"."id" and i.kind = 'invoice')`,
-        invoicesLast30Days: sql<number>`(select count(*)::int from ${invoices} i where i.org_id = "workspace"."id" and i.kind = 'invoice' and i.created_at >= ${thirtyDaysAgo})`,
-        lastActive:
-          sql<Date | null>`(select max(s.updated_at) from ${sessions} s inner join ${orgMembers} om on om.user_id = s.user_id where om.org_id = "workspace"."id")`.mapWith(
-            sessions.updatedAt,
+  const pattern = searchPattern(query);
+  const [workspaceRows, usageRows, overrides, [userTotal], [sentTotal], [workspaceTotal]] =
+    await Promise.all([
+      db
+        .select({
+          clientCount: sql<number>`(select count(*)::int from ${clients} c where c.org_id = "workspace"."id")`,
+          createdAt: workspace.createdAt,
+          deactivatedAt: workspace.deactivatedAt,
+          id: workspace.id,
+          invoiceCount: sql<number>`(select count(*)::int from ${invoices} i where i.org_id = "workspace"."id" and i.kind = 'invoice')`,
+          invoicesLast30Days: sql<number>`(select count(*)::int from ${invoices} i where i.org_id = "workspace"."id" and i.kind = 'invoice' and i.created_at >= ${thirtyDaysAgo})`,
+          lastActive:
+            sql<Date | null>`(select max(s.updated_at) from ${sessions} s inner join ${orgMembers} om on om.user_id = s.user_id where om.org_id = "workspace"."id")`.mapWith(
+              sessions.updatedAt,
+            ),
+          // Which member the search hit, so an email lookup shows who it found.
+          matchedEmail: pattern
+            ? sql<string | null>`(${memberMatch(workspace, pattern)})`
+            : sql<string | null>`null`,
+          memberCount: sql<number>`(select count(*)::int from ${orgMembers} om where om.org_id = "workspace"."id")`,
+          name: workspace.name,
+          ownerEmail: sql<
+            string | null
+          >`(select u.email from ${orgMembers} om inner join ${users} u on u.id = om.user_id where om.org_id = "workspace"."id" and om.role = 'owner' order by om.created_at asc limit 1)`,
+          plan: workspace.plan,
+          stripeStatus: workspace.stripeSubscriptionStatus,
+        })
+        .from(workspace)
+        .where(pattern ? workspaceSearch(workspace, pattern) : undefined)
+        .orderBy(asc(workspace.name)),
+      loadUsage(month.start, month.end),
+      db.select().from(aiWorkspaceModelOverrides),
+      db.select({ count: count() }).from(users).where(eq(users.isSuperAdmin, false)),
+      db
+        .select({ count: count() })
+        .from(invoiceSends)
+        .where(
+          and(
+            gte(invoiceSends.month, month.start.toISOString().slice(0, 10)),
+            lt(invoiceSends.month, month.end.toISOString().slice(0, 10)),
           ),
-        memberCount: sql<number>`(select count(*)::int from ${orgMembers} om where om.org_id = "workspace"."id")`,
-        name: workspace.name,
-        ownerEmail: sql<
-          string | null
-        >`(select u.email from ${orgMembers} om inner join ${users} u on u.id = om.user_id where om.org_id = "workspace"."id" and om.role = 'owner' order by om.created_at asc limit 1)`,
-        plan: workspace.plan,
-        stripeStatus: workspace.stripeSubscriptionStatus,
-      })
-      .from(workspace)
-      .orderBy(asc(workspace.name)),
-    loadUsage(month.start, month.end),
-    db.select().from(aiWorkspaceModelOverrides),
-    db.select({ count: count() }).from(users).where(eq(users.isSuperAdmin, false)),
-    db
-      .select({ count: count() })
-      .from(invoiceSends)
-      .where(
-        and(
-          gte(invoiceSends.month, month.start.toISOString().slice(0, 10)),
-          lt(invoiceSends.month, month.end.toISOString().slice(0, 10)),
         ),
-      ),
-  ]);
+      db.select({ count: count() }).from(orgs),
+    ]);
   const usage = summarizeUsage(usageRows);
   const overridesByOrg = new Map<string, Array<{ feature: string; modelId: string }>>();
   for (const override of overrides) {
@@ -135,7 +146,7 @@ export async function getAdminOverview() {
       aiRequests: usage.requests,
       invoicesSent: sentTotal?.count ?? 0,
       users: userTotal?.count ?? 0,
-      workspaces: workspaceRows.length,
+      workspaces: workspaceTotal?.count ?? 0,
     },
     workspaces: workspaceRows.map((workspace) => ({
       ...workspace,
@@ -155,7 +166,7 @@ export async function getAdminWorkspace(orgId: string) {
   if (!workspace) {
     notFound();
   }
-  const [members, activity, overrides] = await Promise.all([
+  const [members, activity, overrides, audit] = await Promise.all([
     db
       .select({
         createdAt: orgMembers.createdAt,
@@ -180,8 +191,9 @@ export async function getAdminWorkspace(orgId: string) {
       .orderBy(desc(activityLog.createdAt))
       .limit(12),
     db.select().from(aiWorkspaceModelOverrides).where(eq(aiWorkspaceModelOverrides.orgId, orgId)),
+    listWorkspaceAudit(orgId),
   ]);
-  return { activity, members, overrides, workspace };
+  return { activity, audit, members, overrides, workspace };
 }
 
 export async function getAdminAi() {

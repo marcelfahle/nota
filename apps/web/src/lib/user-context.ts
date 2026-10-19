@@ -1,4 +1,4 @@
-import { asc, eq } from "drizzle-orm";
+import { and, asc, eq } from "drizzle-orm";
 
 import { db } from "@/lib/db";
 import { orgMembers, orgRoleEnum, orgs, users } from "@/lib/db/schema";
@@ -12,8 +12,14 @@ export type AuthenticatedUserContext = UserRecord & {
   user: UserRecord;
 };
 
-/** A user's workspace: their earliest membership, as everywhere else in Nota. */
-export async function getUserContextById(userId: string): Promise<AuthenticatedUserContext | null> {
+/**
+ * A user's workspace: their earliest membership, as everywhere else in Nota.
+ * With an orgId, that one workspace of theirs instead.
+ */
+export async function getUserContextById(
+  userId: string,
+  orgId?: string,
+): Promise<AuthenticatedUserContext | null> {
   const [context] = await db
     .select({
       org: orgs,
@@ -23,7 +29,7 @@ export async function getUserContextById(userId: string): Promise<AuthenticatedU
     .from(users)
     .innerJoin(orgMembers, eq(orgMembers.userId, users.id))
     .innerJoin(orgs, eq(orgs.id, orgMembers.orgId))
-    .where(eq(users.id, userId))
+    .where(orgId ? and(eq(users.id, userId), eq(orgs.id, orgId)) : eq(users.id, userId))
     .orderBy(asc(orgMembers.createdAt))
     .limit(1);
 

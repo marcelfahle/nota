@@ -162,6 +162,13 @@
       "when": 1791203637690,
       "tag": "0022_wandering_whirlwind",
       "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1792433096626,
+      "tag": "0023_admin-audit-log",
+      "breakpoints": true
     }
   ]
 }

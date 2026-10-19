@@ -1,5 +1,6 @@
 import { and, eq, inArray, isNull, or, sql } from "drizzle-orm";
 
+import { recordAdminAction } from "@/lib/admin-audit";
 import { db } from "@/lib/db";
 import {
   activityLog,
@@ -22,9 +23,13 @@ export type WorkspaceDeletion =
  * Deletes a workspace and everything in it, for good: invoices, clients, bank
  * details, invites, API keys, chat, and every member who belongs to no other
  * workspace. Members of another workspace keep their account. Operators only;
- * the caller checks that.
+ * the caller checks that. The audit entry commits with the deletion, and keeps
+ * the workspace's id and name because its row is gone.
  */
-export async function deleteWorkspace(orgId: string): Promise<WorkspaceDeletion> {
+export async function deleteWorkspace(
+  orgId: string,
+  adminUserId: string,
+): Promise<WorkspaceDeletion> {
   const [org] = await db.select().from(orgs).where(eq(orgs.id, orgId)).limit(1);
   if (!org) {
     return { error: "Workspace not found." };
@@ -87,7 +92,20 @@ export async function deleteWorkspace(orgId: string): Promise<WorkspaceDeletion>
       // Sessions, credentials and OAuth grants cascade from the user.
       await tx.delete(users).where(inArray(users.id, userIds));
     }
-    return { clients: removedClients.length, invoices: invoiceIds.length, users: userIds.length };
+    const counts = {
+      clients: removedClients.length,
+      invoices: invoiceIds.length,
+      users: userIds.length,
+    };
+    await recordAdminAction(
+      {
+        action: "workspace.deleted",
+        adminUserId,
+        metadata: { deleted: counts, orgId, workspaceName: org.name },
+      },
+      tx,
+    );
+    return counts;
   });
 
   // Stored files are outside the transaction; a leftover file is harmless.

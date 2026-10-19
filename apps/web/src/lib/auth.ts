@@ -1,8 +1,9 @@
 import { eq } from "drizzle-orm";
-import { headers } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { notFound, redirect } from "next/navigation";
 import { cache } from "react";
 
+import { verifyViewAs, VIEW_AS_COOKIE } from "@/lib/admin-view-as";
 import { auth } from "@/lib/better-auth";
 import { db } from "@/lib/db";
 import { users } from "@/lib/db/schema";
@@ -20,12 +21,31 @@ export const getCurrentSessionUser = cache(async () => {
   return user ?? null;
 });
 
+/**
+ * The workspace owner a super admin is viewing as for support, or null. The
+ * grant only counts next to the session of the admin who started it; the
+ * proxy refuses every write while the cookie is set.
+ */
+export const getViewAs = cache(async () => {
+  const admin = await getCurrentSessionUser();
+  if (!admin?.isSuperAdmin || admin.mustChangePassword) {
+    return null;
+  }
+  const claims = verifyViewAs((await cookies()).get(VIEW_AS_COOKIE)?.value);
+  return claims && claims.adminUserId === admin.id ? claims : null;
+});
+
 // The root layout, dashboard layout and page all ask who is signed in.
 // cache() makes the workspace lookup run once per request.
 export const getCurrentUserOrNull = cache(async (): Promise<AuthenticatedUserContext | null> => {
   const user = await getCurrentSessionUser();
-  if (!user || user.isSuperAdmin) {
+  if (!user) {
     return null;
+  }
+  // Super admins are not workspace users, unless they are viewing one for support.
+  if (user.isSuperAdmin) {
+    const viewAs = await getViewAs();
+    return viewAs ? getUserContextById(viewAs.userId, viewAs.orgId) : null;
   }
 
   return getUserContextById(user.id);
@@ -36,11 +56,11 @@ export async function getCurrentUser(): Promise<AuthenticatedUserContext> {
   if (!sessionUser) {
     redirect("/login");
   }
-  if (sessionUser.isSuperAdmin) {
-    redirect(sessionUser.mustChangePassword ? "/admin/password" : "/admin");
-  }
   const user = await getCurrentUserOrNull();
   if (!user) {
+    if (sessionUser.isSuperAdmin) {
+      redirect(sessionUser.mustChangePassword ? "/admin/password" : "/admin");
+    }
     redirect("/login");
   }
   // A deactivated workspace keeps its data but its members cannot use the app.

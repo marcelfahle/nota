@@ -1,10 +1,13 @@
 import Link from "next/link";
 
-import { setWorkspaceActive, setWorkspaceModel } from "@/actions/admin";
+import { setWorkspaceActive, setWorkspaceModel, startViewAs } from "@/actions/admin";
+import { AdminAuditTable } from "@/components/admin-audit-table";
 import { AdminDeleteWorkspace } from "@/components/admin-delete-workspace";
 import { Button } from "@/components/ui/button";
 import { getAdminWorkspace } from "@/lib/admin-data";
+import { VIEW_AS_TTL_SECONDS } from "@/lib/admin-view-as";
 import { ALLOWED_MODELS, MODEL_PRICES } from "@/lib/ai-usage";
+import { getViewAs } from "@/lib/auth";
 
 function date(value: Date | null) {
   return value
@@ -14,7 +17,11 @@ function date(value: Date | null) {
 
 export default async function AdminWorkspacePage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const { activity, members, overrides, workspace } = await getAdminWorkspace(id);
+  const [{ activity, audit, members, overrides, workspace }, viewAs] = await Promise.all([
+    getAdminWorkspace(id),
+    getViewAs(),
+  ]);
+  const owner = members.find((member) => member.role === "owner");
   return (
     <div className="mx-auto max-w-4xl space-y-8">
       <div className="space-y-2">
@@ -35,6 +42,33 @@ export default async function AdminWorkspacePage({ params }: { params: Promise<{
           created {date(workspace.createdAt)}
         </p>
       </div>
+
+      <section className="space-y-3" data-testid="admin-view-as">
+        <h2 className="text-lg font-semibold">Support</h2>
+        <form action={startViewAs} className="space-y-4 rounded-md border p-4">
+          <input name="orgId" type="hidden" value={workspace.id} />
+          <p className="text-sm text-muted-foreground">
+            {owner
+              ? `Opens the workspace as ${owner.email} sees it, for ${VIEW_AS_TTL_SECONDS / 60} minutes. Nothing can be changed, chat is off, and the visit is recorded below.`
+              : "This workspace has no owner, so there is nobody to view it as."}
+          </p>
+          <Button
+            data-testid="admin-view-as-submit"
+            disabled={!owner || Boolean(workspace.deactivatedAt) || Boolean(viewAs)}
+            type="submit"
+            variant="outline"
+          >
+            Open as owner (read-only)
+          </Button>
+          {viewAs ? (
+            <p className="text-xs text-muted-foreground">
+              You are already viewing a workspace as support. Exit it first.
+            </p>
+          ) : workspace.deactivatedAt ? (
+            <p className="text-xs text-muted-foreground">Reactivate the workspace to open it.</p>
+          ) : null}
+        </form>
+      </section>
 
       <section className="space-y-3">
         <h2 className="text-lg font-semibold">Chat model override</h2>
@@ -106,6 +140,11 @@ export default async function AdminWorkspacePage({ params }: { params: Promise<{
           </ul>
         </section>
       </div>
+
+      <section className="space-y-3">
+        <h2 className="text-lg font-semibold">Admin actions</h2>
+        <AdminAuditTable entries={audit} showWorkspace={false} />
+      </section>
 
       <section className="space-y-3">
         <h2 className="text-lg font-semibold">
