@@ -1,6 +1,7 @@
+import { paymentIban } from "@/lib/iban";
 import { invoiceTaxIdentifier, isViesCountry, type TaxIdentifier } from "@/lib/tax-identifier";
 import { requiresZeroRate, TAX_TREATMENT_LABELS, type TaxTreatment } from "@/lib/tax-treatment";
-import { extractIban, toCountryCode } from "@/lib/xrechnung";
+import { toCountryCode } from "@/lib/xrechnung";
 
 /**
  * One place that says what a German invoice needs before it may be issued or
@@ -164,35 +165,21 @@ export function complianceInput(
   };
 }
 
-/** ISO 13616 mod-97 check. Spaces are ignored; anything else must already be clean. */
-export function isValidIban(value: string): boolean {
-  const iban = value.replaceAll(/\s/g, "").toUpperCase();
-  if (!/^[A-Z]{2}\d{2}[A-Z0-9]{11,30}$/.test(iban)) {
-    return false;
-  }
-  let remainder = 0;
-  for (const char of iban.slice(4) + iban.slice(0, 4)) {
-    const digits = /\d/.test(char) ? char : String(char.charCodeAt(0) - 55);
-    for (const digit of digits) {
-      remainder = (remainder * 10 + Number(digit)) % 97;
-    }
-  }
-  return remainder === 1;
-}
-
 /**
  * The XRechnung announces a SEPA transfer, so BR-61 and BR-DE-23 demand an
  * account and BR-DE-19 a correct IBAN. The IBAN is read the way the export
- * reads it: the structured column first, else the first one in the free text.
+ * reads it. A structured IBAN that fails the check is a problem; free text
+ * without a valid IBAN only matters when the export needs one, because a
+ * guess from free text is not reliable enough to block an invoice.
  */
 function bankProblems(bankAccount: ComplianceBankAccount | null, required: boolean) {
-  const iban = bankAccount?.iban?.trim() || extractIban(bankAccount?.details);
-  if (!iban) {
-    return required ? ["Add a bank account with an IBAN in Settings."] : [];
+  if (paymentIban(bankAccount)) {
+    return [];
   }
-  return isValidIban(iban)
-    ? []
-    : ["The IBAN on your bank account is not valid. Fix it in Settings."];
+  if (bankAccount?.iban?.trim()) {
+    return ["The IBAN on your bank account is not valid. Fix it in Settings."];
+  }
+  return required ? ["Add a bank account with a valid IBAN in Settings."] : [];
 }
 
 function hasStructuredAddress(party: {

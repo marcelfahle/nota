@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
-import { formatIban, formatIbanDisplay, validateIban } from "@/lib/iban";
+import { findIban, formatIban, formatIbanDisplay, paymentIban, validateIban } from "@/lib/iban";
 
 describe("formatIban", () => {
   test("uppercases and strips spaces", () => {
@@ -84,5 +84,53 @@ describe("formatIbanDisplay", () => {
 
   test("handles short IBAN", () => {
     expect(formatIbanDisplay("NL91ABNA0417164300")).toBe("NL91 ABNA 0417 1643 00");
+  });
+});
+
+describe("findIban", () => {
+  test("finds a compact or grouped IBAN in free text", () => {
+    expect(findIban("IBAN: DE89370400440532013000\nBIC: COBADEFFXXX")).toBe(
+      "DE89370400440532013000",
+    );
+    expect(findIban("IBAN: DE89 3704 0044 0532 0130 00\nBIC: COBADEFFXXX")).toBe(
+      "DE89370400440532013000",
+    );
+    expect(findIban("DE89 370400440532013000")).toBe("DE89370400440532013000");
+    expect(findIban("Pay to es91 2100 0418 4502 0005 1332 please")).toBe(
+      "ES9121000418450200051332",
+    );
+  });
+
+  test("skips look-alikes that fail the check and returns null without one", () => {
+    expect(findIban("Kunde RE20261001, IBAN DE89 3704 0044 0532 0130 00")).toBe(
+      "DE89370400440532013000",
+    );
+    expect(findIban("IBAN: DE89370400440532013001")).toBeNull();
+    expect(findIban("DE89370400440532013000BIC COBADEFFXXX")).toBe("DE89370400440532013000");
+    expect(findIban("Some random bank details")).toBeNull();
+    expect(findIban(null)).toBeNull();
+    expect(findIban(undefined)).toBeNull();
+  });
+});
+
+describe("paymentIban", () => {
+  test("prefers a valid structured IBAN and falls back to the details", () => {
+    expect(
+      paymentIban({
+        details: "IBAN: DE89370400440532013001",
+        iban: "ES91 2100 0418 4502 0005 1332",
+      }),
+    ).toBe("ES9121000418450200051332");
+    expect(paymentIban({ details: "IBAN: DE89 3704 0044 0532 0130 00", iban: null })).toBe(
+      "DE89370400440532013000",
+    );
+    expect(
+      paymentIban({
+        details: "IBAN: DE89 3704 0044 0532 0130 00",
+        iban: "DE89370400440532013000BIC",
+      }),
+    ).toBe("DE89370400440532013000");
+    expect(paymentIban({ details: "Konto 12345", iban: "DE89370400440532013001" })).toBeNull();
+    expect(paymentIban(null)).toBeNull();
   });
 });

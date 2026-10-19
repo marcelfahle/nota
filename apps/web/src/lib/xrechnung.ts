@@ -1,3 +1,4 @@
+import { paymentIban } from "@/lib/iban";
 import { absoluteDecimal, formatStoredMoney, formatVariableDecimal } from "@/lib/money";
 import type { TaxIdentifier } from "@/lib/tax-identifier";
 import { taxCategory, type TaxTreatment } from "@/lib/tax-treatment";
@@ -120,13 +121,18 @@ export function toCountryCode(country: string): string | null {
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
+/** Escapes markup and drops the control characters XML 1.0 does not allow at all. */
 export function escapeXml(value: string): string {
-  return value
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&apos;");
+  return (
+    value
+      // eslint-disable-next-line no-control-regex
+      .replaceAll(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\uFFFE\uFFFF]/g, "")
+      .replaceAll("&", "&amp;")
+      .replaceAll("<", "&lt;")
+      .replaceAll(">", "&gt;")
+      .replaceAll('"', "&quot;")
+      .replaceAll("'", "&apos;")
+  );
 }
 
 function fmt(value: string): string {
@@ -169,20 +175,6 @@ export function parseAddress(address?: string | null): XRechnungAddress {
   }
 
   return { city: cityLine, countryCode, postalCode: null, street };
-}
-
-// ---------------------------------------------------------------------------
-// Extract IBAN from free-text bank details
-// ---------------------------------------------------------------------------
-export function extractIban(bankDetails?: string | null): string | null {
-  if (!bankDetails) {
-    return null;
-  }
-  const match = bankDetails.match(/\b([A-Z]{2}\d{2}[\s]?[\dA-Z]{4,30})\b/i);
-  if (!match) {
-    return null;
-  }
-  return match[1].replaceAll(/\s/g, "").toUpperCase();
 }
 
 function buildPartyAddress(address: XRechnungAddress, countryCode: string): string {
@@ -279,7 +271,7 @@ export function generateXRechnung(data: XRechnungData): string {
   const cur = escapeXml(invoice.currency);
   const tax = taxCategory(invoice.taxTreatment, invoice.taxRate);
   const buyerName = escapeXml(client.company || client.name);
-  const iban = business.iban || extractIban(business.bankDetails);
+  const iban = paymentIban({ details: business.bankDetails, iban: business.iban });
   const bic = business.bic || null;
   const isCreditNote = invoice.kind === "credit_note";
   const documentName = isCreditNote ? "CreditNote" : "Invoice";

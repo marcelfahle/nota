@@ -52,7 +52,9 @@ At issuance, for every workspace:
 
 At issuance, for German workspaces (`countryCode` DE), following § 14 Abs. 4 UStG:
 
-- A bank account whose IBAN fails the ISO 13616 check (mod 97). A missing IBAN is allowed here.
+- A structured bank account IBAN that fails the ISO 13616 check (mod 97) with no valid IBAN in
+  the free-text details either. A missing IBAN is allowed here, and free text without a valid
+  IBAN is not held against the invoice, because a guess from free text is not reliable enough.
 - Reverse charge to a client in the seller's own country, or to an EU client without a VAT ID.
 - Missing seller name, structured address, country, or tax identifier (Nr. 1 and 2).
 - Missing seller contact name or email (needed for the XRechnung the same invoice may become).
@@ -63,10 +65,10 @@ At issuance, for German workspaces (`countryCode` DE), following § 14 Abs. 4 US
 At XRechnung export, for every workspace, in addition:
 
 - Missing seller phone (BR-DE-6).
-- No bank account with an IBAN, or an IBAN that fails the check. The XML announces a SEPA credit
-  transfer (payment means 58), so the validator demands an account (BR-61, BR-DE-23) and warns on
-  a wrong IBAN (BR-DE-19). The IBAN is read as the export reads it: the structured field first,
-  else the first IBAN in the free-text bank details.
+- No valid IBAN on the bank account. The XML announces a SEPA credit transfer (payment means
+  58), so the validator demands an account (BR-61, BR-DE-23) and warns on a wrong IBAN
+  (BR-DE-19). The IBAN is read as the export reads it: the structured field when it passes the
+  check, else the first valid IBAN in the free-text bank details, compact or in groups of four.
 - Any of the German issuance rules above, because XRechnung 3.0 is a German standard.
 
 Mixed VAT rates on one invoice are not supported. One rate per document; split the work into

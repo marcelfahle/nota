@@ -2,7 +2,6 @@ import { describe, expect, test } from "bun:test";
 
 import {
   escapeXml,
-  extractIban,
   generateXRechnung,
   parseAddress,
   toCountryCode,
@@ -30,6 +29,11 @@ describe("escapeXml", () => {
 
   test("leaves plain text unchanged", () => {
     expect(escapeXml("Hello World")).toBe("Hello World");
+  });
+
+  test("drops control characters XML cannot carry and keeps tabs and newlines", () => {
+    expect(escapeXml("Danke\u000Cfür alles\u0000\u001F")).toBe("Dankefür alles");
+    expect(escapeXml("a\tb\nc")).toBe("a\tb\nc");
   });
 });
 
@@ -84,30 +88,6 @@ describe("parseAddress", () => {
     };
     expect(parseAddress("Main St 1\n10115 Berlin\nGermany")).toEqual(expected);
     expect(parseAddress("Main St 1, 10115 Berlin, Germany")).toEqual(expected);
-  });
-});
-
-// ---------------------------------------------------------------------------
-// extractIban
-// ---------------------------------------------------------------------------
-describe("extractIban", () => {
-  test("extracts IBAN from freeform text", () => {
-    expect(extractIban("IBAN: DE89370400440532013000\nBIC: COBADEFFXXX")).toBe(
-      "DE89370400440532013000",
-    );
-  });
-
-  test("extracts IBAN with single optional space", () => {
-    expect(extractIban("DE89 370400440532013000")).toBe("DE89370400440532013000");
-  });
-
-  test("returns null for no IBAN", () => {
-    expect(extractIban("Some random bank details")).toBeNull();
-  });
-
-  test("returns null for null/undefined", () => {
-    expect(extractIban(null)).toBeNull();
-    expect(extractIban(undefined)).toBeNull();
   });
 });
 
@@ -333,6 +313,13 @@ describe("generateXRechnung", () => {
     const legacy = germanB2B();
     xml = generateXRechnung(legacy);
     expect(xml).toContain("<cbc:ID>DE89370400440532013000</cbc:ID>");
+
+    // A mangled structured IBAN loses to a valid grouped one in the details.
+    legacy.business.iban = "DE89370400440532013000BIC";
+    legacy.business.bankDetails = "IBAN: DE89 3704 0044 0532 0130 00\nBIC: COBADEFFXXX";
+    xml = generateXRechnung(legacy);
+    expect(xml).toContain("<cbc:ID>DE89370400440532013000</cbc:ID>");
+    expect(xml).not.toContain("BIC</cbc:ID>");
   });
 
   test("preserves fractional quantities, unit prices, and three-decimal money", () => {

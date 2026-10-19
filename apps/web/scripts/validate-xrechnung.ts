@@ -73,13 +73,18 @@ async function download(asset: { file: string; sha256: string; url: string }) {
 
 async function ensureConfiguration() {
   const zip = await download(CONFIGURATION);
-  if (existsSync(join(configDir, "scenarios.xml"))) {
+  // The marker ties the extracted tree to the zip it came from, so a changed
+  // pin never validates against a stale extraction restored from a cache.
+  const marker = join(configDir, ".sha256");
+  if (existsSync(marker) && (await readFile(marker, "utf8")).trim() === CONFIGURATION.sha256) {
     return;
   }
+  await rm(configDir, { force: true, recursive: true });
   const result = spawnSync("unzip", ["-q", "-o", zip, "-d", configDir], { stdio: "inherit" });
   if (result.status !== 0) {
     throw new Error(`Could not unzip ${zip} (is unzip installed?)`);
   }
+  await writeFile(marker, `${CONFIGURATION.sha256}\n`);
 }
 
 function javaBinary() {
