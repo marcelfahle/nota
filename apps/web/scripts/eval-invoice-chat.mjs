@@ -11,7 +11,7 @@ const invoiceId = "22222222-2222-4222-8222-222222222222";
 const client = {
   company: "Ranger Marketing & Vertriebs GmbH",
   defaultCurrency: "EUR",
-  email: "invoice@ranger.de",
+  email: "invoice@ranger.test",
   id: clientId,
   name: "Ranger Marketing & Vertriebs GmbH",
 };

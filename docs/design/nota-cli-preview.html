@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Nota / terminal design</title>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#edefe7;color:#282d24;font-family:ui-sans-serif,system-ui,sans-serif;padding:40px}main{max-width:980px;margin:auto}header{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:24px}h1{font-size:23px;letter-spacing:-.8px;margin:0;font-weight:650}header p{font-size:12px;color:#686f60;margin:0}nav{display:flex;gap:8px;margin-bottom:18px;flex-wrap:wrap}button{border:1px solid #cdd1c5;background:transparent;color:#58604f;padding:8px 15px;border-radius:6px;cursor:pointer;font:inherit;font-size:12px}button[aria-selected=true]{background:#252b20;border-color:#252b20;color:#edeee7}button:focus-visible{outline:3px solid #6b811a;outline-offset:3px}.terminal{background:#191c17;border:1px solid #333b2b;border-radius:12px;overflow:hidden;box-shadow:0 18px 40px #333d2218}.bar{display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #30362a;color:#959d8a;padding:14px 22px;font-size:11px;letter-spacing:.3px}.dot{display:inline-block;background:#d1fd39;width:6px;height:6px;border-radius:50%;margin-right:9px}.sample{font-size:9px;letter-spacing:1.5px;color:#a7b496}pre{margin:0;padding:8px 20px 24px;color:#edf0e7;font:14px/1.65 ui-monospace,"SFMono-Regular",Menlo,Consolas,monospace;font-variant-ligatures:none;overflow:auto;min-height:310px}.command{padding:16px 36px;background:#1e231b;border-top:1px solid #30362a;font:12px ui-monospace,monospace;color:#bdc8b2}.command span{color:#d1fd39;margin-right:12px}footer{font-size:11px;color:#6e7565;display:flex;justify-content:space-between;gap:20px;margin-top:22px;line-height:1.6}code{font-family:ui-monospace,monospace}article[hidden]{display:none}@media(max-width:700px){body{padding:20px 10px}header{display:block}header p{margin-top:8px}footer{display:block}pre{font-size:12px}}
+</style><main><header><h1>nota <span style="font-weight:400;color:#89917e">/ terminal</span></h1><p>Design study · October 2026</p></header>
+<nav aria-label="Preview screens"><button aria-selected="true" aria-controls="screen-0" onclick="show(0)">Overview</button><button aria-selected="false" aria-controls="screen-1" onclick="show(1)">Invoices</button><button aria-selected="false" aria-controls="screen-2" onclick="show(2)">Draft</button><button aria-selected="false" aria-controls="screen-3" onclick="show(3)">Delivery</button><button aria-selected="false" aria-controls="screen-4" onclick="show(4)">First run</button></nav>
+<div class="terminal"><div class="bar"><span><i class="dot"></i>nota — sample workspace</span><span class="sample">OFFLINE PREVIEW</span></div>
+<article id="screen-0" ><pre><span style="color:inherit;font-weight:400">
+  </span><span style="color:rgb(209,253,57);font-weight:400"></span><span style="color:rgb(209,253,57);font-weight:600">nota</span><span style="color:rgb(209,253,57);font-weight:400"></span><span style="color:inherit;font-weight:400"></span><span style="color:#93998e;font-weight:400"> / terminal preview</span><span style="color:inherit;font-weight:400">
+  </span><span style="color:#93998e;font-weight:400">Sample workspace · 05 Oct 2026</span><span style="color:inherit;font-weight:400">
+
+  </span><span style="color:inherit;font-weight:600">Less admin. More making.</span><span style="color:inherit;font-weight:400">
+
+  </span><span style="color:inherit;font-weight:600">At a glance</span><span style="color:inherit;font-weight:400">
+
+  </span><span style="color:#93998e;font-weight:400">Outstanding       </span><span style="color:inherit;font-weight:400">€6,800.00 · 2 invoices
+  </span><span style="color:#93998e;font-weight:400">Overdue           </span><span style="color:inherit;font-weight:400">€4,800.00 · 1 invoice
+  </span><span style="color:#93998e;font-weight:400">Drafts            </span><span style="color:inherit;font-weight:400">1 ready to review
+
+  </span><span style="color:#93998e;font-weight:400">Outstanding includes overdue balances; drafts are excluded.</span><span style="color:inherit;font-weight:400">
+
+  </span><span style="color:inherit;font-weight:600">Needs your attention</span><span style="color:inherit;font-weight:400">
+
+  </span><span style="color:inherit;font-weight:600">INV-0042 · Oxide Studio</span><span style="color:inherit;font-weight:400">
+  </span><span style="color:#e4bd72;font-weight:400">€4,800.00 · 7 days overdue</span><span style="color:inherit;font-weight:400">
+
+  </span><span style="color:#93998e;font-weight:400">Inspect  → nota invoices show INV-0042</span><span style="color:inherit;font-weight:400">
+
+  </span><span style="color:inherit;font-weight:600">Pick up where you left off</span><span style="color:inherit;font-weight:400">
+
+  </span><span style="color:#93998e;font-weight:400">Create a draft    </span><span style="color:inherit;font-weight:400">nota invoices create
+  </span><span style="color:#93998e;font-weight:400">All invoices      </span><span style="color:inherit;font-weight:400">nota invoices
+  </span><span style="color:#93998e;font-weight:400">Your clients      </span><span style="color:inherit;font-weight:400">nota clients
+  </span><span style="color:#93998e;font-weight:400">Find a command    </span><span style="color:inherit;font-weight:400">nota --help
+
+  </span><span style="color:#93998e;font-weight:400">Preview only. No network, saved changes, or email.</span></pre><div class="command"><span>❯</span>nota</div></article><article id="screen-1" hidden><pre><span style="color:inherit;font-weight:400">
+  </span><span style="color:rgb(209,253,57);font-weight:400"></span><span style="color:rgb(209,253,57);font-weight:600">nota</span><span style="color:rgb(209,253,57);font-weight:400"></span><span style="color:inherit;font-weight:400"></span><span style="color:#93998e;font-weight:400"> / terminal preview</span><span style="color:inherit;font-weight:400">
+  </span><span style="color:#93998e;font-weight:400">Sample workspace · 05 Oct 2026</span><span style="color:inherit;font-weight:400">
+
+
+  </span><span style="color:inherit;font-weight:600">Invoices</span><span style="color:inherit;font-weight:400">
+
+  </span><span style="color:#93998e;font-weight:400">INVOICE      CLIENT                                AMOUNT  STATUS     DUE</span><span style="color:inherit;font-weight:400">
+
+  </span><span style="color:inherit;font-weight:600">INV-0042   </span><span style="color:inherit;font-weight:400">  Oxide Studio                       €4,800.00  </span><span style="color:#e4bd72;font-weight:400">overdue</span><span style="color:inherit;font-weight:400">    7d overdue
+  </span><span style="color:inherit;font-weight:600">INV-0043   </span><span style="color:inherit;font-weight:400">  Linear Forms                       €3,200.00  </span><span style="color:#85c4cd;font-weight:400">sent</span><span style="color:inherit;font-weight:400">       12 Oct
+  </span><span style="color:inherit;font-weight:600">INV-0044   </span><span style="color:inherit;font-weight:400">  Good Company                       €1,500.00  </span><span style="color:#93998e;font-weight:400">draft</span><span style="color:inherit;font-weight:400">      4 Nov
+  </span><span style="color:inherit;font-weight:600">INV-0041   </span><span style="color:inherit;font-weight:400">  Oxide Studio                       €2,400.00  </span><span style="color:rgb(209,253,57);font-weight:400">paid</span><span style="color:inherit;font-weight:400">       Settled
+
+  </span><span style="color:#93998e;font-weight:400">4 invoices · all matching sample invoices shown</span><span style="color:inherit;font-weight:400">
+
+  </span><span style="color:#93998e;font-weight:400">Inspect  → nota invoices show INV-0042</span></pre><div class="command"><span>❯</span>nota invoices</div></article><article id="screen-2" hidden><pre><span style="color:inherit;font-weight:400">
+  </span><span style="color:rgb(209,253,57);font-weight:400"></span><span style="color:rgb(209,253,57);font-weight:600">nota</span><span style="color:rgb(209,253,57);font-weight:400"></span><span style="color:inherit;font-weight:400"></span><span style="color:#93998e;font-weight:400"> / terminal preview</span><span style="color:inherit;font-weight:400">
+  </span><span style="color:#93998e;font-weight:400">Sample workspace · 05 Oct 2026</span><span style="color:inherit;font-weight:400">
+
+
+  </span><span style="color:inherit;font-weight:600">INV-0044 / draft</span><span style="color:inherit;font-weight:400">
+
+  </span><span style="color:#93998e;font-weight:400">Client            </span><span style="color:inherit;font-weight:400">Good Company
+  </span><span style="color:#93998e;font-weight:400">Recipient         </span><span style="color:inherit;font-weight:400">hello@good.example
+  </span><span style="color:#93998e;font-weight:400">Due               </span><span style="color:inherit;font-weight:400">2026-11-04
+
+  </span><span style="color:#93998e;font-weight:400">────────────────────────────────────────────────────────────────────────────────────</span><span style="color:inherit;font-weight:400">
+
+  </span><span style="color:inherit;font-weight:600">Brand workshop</span><span style="color:inherit;font-weight:400">
+  </span><span style="color:#93998e;font-weight:400">1 × €1,500.00     </span><span style="color:inherit;font-weight:400">€1,500.00
+
+  </span><span style="color:#93998e;font-weight:400">────────────────────────────────────────────────────────────────────────────────────</span><span style="color:inherit;font-weight:400">
+
+  </span><span style="color:#93998e;font-weight:400">Tax               </span><span style="color:inherit;font-weight:400">€0.00 · sample uses 0% tax
+  </span><span style="color:#93998e;font-weight:400">Total             </span><span style="color:inherit;font-weight:400">€1,500.00
+
+  </span><span style="color:#93998e;font-weight:400">Draft · nothing has been sent.</span><span style="color:inherit;font-weight:400">
+
+  </span><span style="color:inherit;font-weight:600">Next step</span>
+
+  nota invoices send INV-0044 --dry-run</pre><div class="command"><span>❯</span>nota invoices show INV-0044</div></article><article id="screen-3" hidden><pre><span style="color:inherit;font-weight:400">
+  </span><span style="color:rgb(209,253,57);font-weight:400"></span><span style="color:rgb(209,253,57);font-weight:600">nota</span><span style="color:rgb(209,253,57);font-weight:400"></span><span style="color:inherit;font-weight:400"></span><span style="color:#93998e;font-weight:400"> / terminal preview</span><span style="color:inherit;font-weight:400">
+  </span><span style="color:#93998e;font-weight:400">Sample workspace · 05 Oct 2026</span><span style="color:inherit;font-weight:400">
+
+
+  </span><span style="color:inherit;font-weight:600">Review delivery</span><span style="color:inherit;font-weight:400">
+
+  </span><span style="color:#93998e;font-weight:400">Invoice           </span><span style="color:inherit;font-weight:400">INV-0044
+  </span><span style="color:#93998e;font-weight:400">To                </span><span style="color:inherit;font-weight:400">Good Company &lt;hello@good.example&gt;
+  </span><span style="color:#93998e;font-weight:400">Amount            </span><span style="color:inherit;font-weight:400">€1,500.00
+  </span><span style="color:#93998e;font-weight:400">Attachment        </span><span style="color:inherit;font-weight:400">INV-0044.pdf (sample)
+
+  </span><span style="color:#93998e;font-weight:400">In the live CLI, this would email the invoice to this recipient.</span><span style="color:inherit;font-weight:400">
+
+  </span><span style="color:#93998e;font-weight:400">This preview sends nothing.</span><span style="color:inherit;font-weight:400">
+
+  </span><span style="color:rgb(209,253,57);font-weight:400">Dry run complete. Nothing sent.</span></pre><div class="command"><span>❯</span>nota invoices send INV-0044 --dry-run</div></article><article id="screen-4" hidden><pre><span style="color:inherit;font-weight:400">
+  </span><span style="color:rgb(209,253,57);font-weight:400"></span><span style="color:rgb(209,253,57);font-weight:600">nota</span><span style="color:rgb(209,253,57);font-weight:400"></span><span style="color:inherit;font-weight:400"></span><span style="color:#93998e;font-weight:400"> / terminal preview</span><span style="color:inherit;font-weight:400">
+  </span><span style="color:#93998e;font-weight:400">Sample workspace · 05 Oct 2026</span><span style="color:inherit;font-weight:400">
+
+  </span><span style="color:inherit;font-weight:600">Your work deserves a good invoice.</span><span style="color:inherit;font-weight:400">
+
+  </span><span style="color:#93998e;font-weight:400">Create drafts, send invoices, and keep track of what is owed.</span><span style="color:inherit;font-weight:400">
+
+  </span><span style="color:inherit;font-weight:600">Start here</span><span style="color:inherit;font-weight:400">
+
+  </span><span style="color:rgb(209,253,57);font-weight:400">nota login</span><span style="color:inherit;font-weight:400">
+
+  </span><span style="color:#93998e;font-weight:400">The existing CLI signs in with an API key. Browser sign-in is a future design direct</span><span style="color:inherit;font-weight:400">
+  </span><span style="color:#93998e;font-weight:400">ion.</span></pre><div class="command"><span>❯</span>nota welcome</div></article></div>
+<footer><span>Captured from the runnable CLI. Sample data; no account or network required.</span><code>bun run --cwd apps/cli preview</code></footer></main>
+<script>function show(index){document.querySelectorAll('article').forEach((el,i)=>el.hidden=i!==index);document.querySelectorAll('nav button').forEach((el,i)=>el.setAttribute('aria-selected',String(i===index)))}</script></html>

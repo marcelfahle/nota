@@ -33,7 +33,11 @@ const PUBLIC_PATHS = [
 export function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
-  if (PUBLIC_PATHS.some((path) => pathname.startsWith(path))) {
+  // Email clients fetch this brand asset without a Nota session.
+  if (
+    pathname === "/email/nota-mark.png" ||
+    PUBLIC_PATHS.some((path) => pathname.startsWith(path))
+  ) {
     return NextResponse.next();
   }
 

@@ -6,6 +6,7 @@ import posthog from "posthog-js";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { flushSync } from "react-dom";
 
+import { GoogleSignIn } from "@/components/google-sign-in";
 import { HalftoneShadow, HighlighterSwipe, NotaGlyph } from "@/components/nota-marks";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -67,8 +68,18 @@ function Trail({ step }: { step: Step }) {
   );
 }
 
-function SaveForm({ onBack, settle }: { onBack: () => void; settle: () => Promise<void> }) {
-  const [error, setError] = useState<string | null>(null);
+function SaveForm({
+  googleEnabled,
+  initialError,
+  onBack,
+  settle,
+}: {
+  googleEnabled: boolean;
+  initialError?: string | null;
+  onBack: () => void;
+  settle: () => Promise<void>;
+}) {
+  const [error, setError] = useState<string | null>(initialError ?? null);
   const [pending, setPending] = useState(false);
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
@@ -109,6 +120,7 @@ function SaveForm({ onBack, settle }: { onBack: () => void; settle: () => Promis
 
   return (
     <form className="space-y-4" data-testid="onboarding-save-form" onSubmit={onSubmit}>
+      {googleEnabled && <GoogleSignIn beforeSignIn={settle} disabled={pending} />}
       <div className="space-y-1.5">
         <Label htmlFor="onboarding-name">Your name</Label>
         <Input
@@ -179,9 +191,17 @@ function SaveForm({ onBack, settle }: { onBack: () => void; settle: () => Promis
   );
 }
 
-export function Onboarding({ initialProfile }: { initialProfile: SiteProfile | null }) {
+export function Onboarding({
+  googleEnabled = false,
+  initialError,
+  initialProfile,
+}: {
+  googleEnabled?: boolean;
+  initialError?: string | null;
+  initialProfile: SiteProfile | null;
+}) {
   const read = useSiteRead(initialProfile);
-  const [step, setStep] = useState<Step>(initialProfile ? "meet" : "ask");
+  const [step, setStep] = useState<Step>(initialError ? "save" : initialProfile ? "meet" : "ask");
   const [website, setWebsite] = useState("");
   const typedIcon = useTypedFavicon(step === "ask" ? website : "");
   const heading = useRef<HTMLHeadingElement>(null);
@@ -456,7 +476,12 @@ export function Onboarding({ initialProfile }: { initialProfile: SiteProfile | n
           </section>
           <section className="min-w-0 lg:pt-3">
             <div className="rounded-xl border border-border bg-card p-6 sm:p-8">
-              <SaveForm onBack={() => transition(() => setStep("meet"))} settle={read.settle} />
+              <SaveForm
+                googleEnabled={googleEnabled}
+                initialError={initialError}
+                onBack={() => transition(() => setStep("meet"))}
+                settle={read.settle}
+              />
             </div>
             <p className="mt-4 text-sm text-muted-foreground">
               Your website was only read, never changed. Details found elsewhere stay marked as

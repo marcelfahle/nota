@@ -11,3 +11,8 @@ export function getAuthIssuer() {
 export function getMcpResource() {
   return getBetterAuthEnv().MCP_RESOURCE_URL ?? `${getAuthIssuer()}/mcp`;
 }
+
+/** CLI access tokens have a separate audience from MCP tokens. */
+export function getApiResource() {
+  return `${getAuthIssuer()}/api/v1`;
+}

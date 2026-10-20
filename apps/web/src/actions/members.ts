@@ -6,12 +6,10 @@ import { and, eq, isNull } from "drizzle-orm";
 import { z } from "zod";
 
 import { InviteEmail } from "@/emails/invite";
-import { DEFAULT_FROM_EMAIL } from "@/lib/app-brand";
 import { getCurrentUser } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { invites, orgMembers, orgRoleEnum, orgs, users } from "@/lib/db/schema";
 import { sendEmail } from "@/lib/email";
-import { getEmailEnv } from "@/lib/env";
 import { getInviteLink } from "@/lib/invites";
 import { canManageMembers, getInsufficientPermissionsError } from "@/lib/roles";
 
@@ -122,7 +120,6 @@ export async function inviteMember(_prevState: InviteMemberState, formData: Form
     }
 
     await sendEmail({
-      from: getEmailEnv().EMAIL_FROM ?? DEFAULT_FROM_EMAIL,
       react: InviteEmail({
         inviteUrl,
         orgName: org.businessName ?? org.name,

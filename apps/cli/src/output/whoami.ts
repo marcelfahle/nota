@@ -1,9 +1,7 @@
-import chalk from "chalk";
-
 import type { MeResponse } from "@nota-app/sdk";
-
+import { createUI } from "./shared.js";
 export function printWhoAmI(me: MeResponse) {
-  console.log(chalk.bold(me.user.name));
-  console.log(me.user.email);
-  console.log(`${me.org.businessName ?? me.org.name} (${me.role})`);
+  const u = createUI();
+  u.brand(`${me.org.businessName || me.org.name} · ${me.role}`);
+  u.text(`${me.user.name} · ${me.user.email}`);
 }

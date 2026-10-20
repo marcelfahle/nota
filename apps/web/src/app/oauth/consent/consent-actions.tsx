@@ -17,7 +17,7 @@ export function ConsentActions() {
     const { data, error: consentError } = await authClient.oauth2.consent({ accept });
     if (consentError) {
       setPending(null);
-      setError("This request expired. Start the connection again from your assistant.");
+      setError("This request expired. Start the connection again from the app or CLI.");
       return;
     }
     continueAfterAuth(data, "/invoices");

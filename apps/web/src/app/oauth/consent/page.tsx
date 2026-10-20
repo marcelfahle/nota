@@ -38,7 +38,7 @@ export default async function ConsentPage({ searchParams }: { searchParams: Sear
     return (
       <AuthShell title="Link expired">
         <p className="text-sm text-zinc-600">
-          This connection request is invalid or has expired. Start again from your assistant.
+          This connection request is invalid or has expired. Start again from the app or CLI.
         </p>
       </AuthShell>
     );
@@ -52,7 +52,7 @@ export default async function ConsentPage({ searchParams }: { searchParams: Sear
   const client = await auth.api
     .getOAuthClientPublic({ headers: await headers(), query: { client_id: clientId } })
     .catch(() => null);
-  const clientName = client?.client_name || "An AI assistant";
+  const clientName = client?.client_name || "An application";
 
   return (
     <AuthShell

@@ -3,6 +3,7 @@
 import posthog from "posthog-js";
 import { useState, type FormEvent } from "react";
 
+import { GoogleSignIn } from "@/components/google-sign-in";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -16,7 +17,13 @@ type RegisterInvite = {
   token: string;
 };
 
-export function RegisterForm({ invite }: { invite?: RegisterInvite | null }) {
+export function RegisterForm({
+  googleEnabled = false,
+  invite,
+}: {
+  googleEnabled?: boolean;
+  invite?: RegisterInvite | null;
+}) {
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
   const isInviteFlow = Boolean(invite);
@@ -79,6 +86,7 @@ export function RegisterForm({ invite }: { invite?: RegisterInvite | null }) {
         </div>
       ) : null}
 
+      {googleEnabled && <GoogleSignIn disabled={pending} inviteToken={invite?.token} />}
       <div className="space-y-2">
         <Label htmlFor="name">Name</Label>
         <Input

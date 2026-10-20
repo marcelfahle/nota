@@ -7,12 +7,12 @@ date: 2026-03-06
 
 # nota Deploy Smoke Checklist
 
-Use this after a production deploy, after rotating Stripe/Resend credentials, or before trusting the app for real invoicing.
+Use this after a production deploy, after rotating Stripe/Helo credentials, or before trusting the app for real invoicing.
 
 ## Preflight
 
 - Confirm the deploy is on the expected commit.
-- Confirm `DATABASE_URL`, `SESSION_SECRET`, `RESEND_API_KEY`, `RESEND_FROM_EMAIL`, `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, and `CRON_SECRET` are set.
+- Confirm `DATABASE_URL`, `SESSION_SECRET`, `HELO_API_KEY`, `HELO_CHANNEL_ID`, `EMAIL_FROM_ADDRESS`, `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, and `CRON_SECRET` are set.
 - Confirm Drizzle migrations have been applied.
 - Confirm the owner account can sign in.
 
@@ -77,5 +77,5 @@ Use this after a production deploy, after rotating Stripe/Resend credentials, or
 
 - Check Vercel function logs for the failing route.
 - Check Stripe event delivery logs for webhook failures.
-- Check Resend activity for outbound email failures.
+- Check Helo activity for outbound email failures.
 - Confirm the Stripe dock matches the invoice state in the database.

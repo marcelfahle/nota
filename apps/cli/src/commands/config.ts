@@ -1,15 +1,19 @@
+import { emit } from "../output/shared.js";
 import type { Command } from "commander";
 
 import { getResolvedConfig, maskApiKey, updateConfig } from "../config.js";
 import { printConfig } from "../output/config.js";
+import { normalizeIssuer } from "../oauth.js";
 
 async function printResolvedConfig() {
   const config = await getResolvedConfig();
-  printConfig({
+  const display = {
     apiKey: maskApiKey(config.apiKey),
     path: config.path,
     url: config.url,
-  });
+    auth: config.auth,
+  };
+  emit(display, () => printConfig(display));
 }
 
 export function registerConfigCommands(program: Command) {
@@ -20,7 +24,7 @@ export function registerConfigCommands(program: Command) {
     .argument("<url>")
     .description("Persist the Nota base URL")
     .action(async (url: string) => {
-      await updateConfig({ url: url.trim() });
+      await updateConfig({ url: normalizeIssuer(url.trim()) });
       await printResolvedConfig();
     });
 

@@ -4,6 +4,8 @@ import { listMembers } from "@/actions/members";
 import { ApiKeysSettings } from "@/components/api-keys-settings";
 import { BillingSettings } from "@/components/billing-settings";
 import { BrandSettings } from "@/components/brand-settings";
+import { ConnectedApps } from "@/components/connected-apps";
+import { GoogleAccount } from "@/components/google-account";
 import { BankAccountsSettings, NumberingSettings } from "@/components/settings-form";
 import { SettingsTabs } from "@/components/settings-tabs";
 import { TeamSettings } from "@/components/team-settings";
@@ -11,8 +13,9 @@ import { ThemeSettings } from "@/components/theme-settings";
 import { Button } from "@/components/ui/button";
 import { getCurrentUser } from "@/lib/auth";
 import { billingStatus } from "@/lib/billing";
+import { listConnectedApps } from "@/lib/connected-apps";
 import { db } from "@/lib/db";
-import { apiKeys, bankAccounts, invoices } from "@/lib/db/schema";
+import { accounts, apiKeys, bankAccounts, invoices } from "@/lib/db/schema";
 import { getInviteLink } from "@/lib/invites";
 import {
   canManageApiKeys,
@@ -20,14 +23,22 @@ import {
   canManageMembers,
   canManageSettings,
 } from "@/lib/roles";
+import { googleCredentials } from "@/lib/social-auth";
 
 export default async function SettingsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ billing?: string; connect?: string }>;
+  searchParams: Promise<{ billing?: string; connect?: string; google?: string }>;
 }) {
   const { org, role, user } = await getCurrentUser();
   const [billing, params] = await Promise.all([billingStatus(org.id), searchParams]);
+  const [connections, userAccounts] = await Promise.all([
+    listConnectedApps(user.id),
+    db
+      .select({ providerId: accounts.providerId })
+      .from(accounts)
+      .where(eq(accounts.userId, user.id)),
+  ]);
   const connectNotices: Record<string, string> = {
     cancelled: "Stripe connection was cancelled.",
     expired: "The Stripe link expired. Continue Stripe setup to get a fresh link.",
@@ -131,14 +142,31 @@ export default async function SettingsPage({
           account: (
             <div className="space-y-8">
               <ThemeSettings theme={user.theme} />
+              {params.google === "failed" && (
+                <p className="text-sm text-destructive" role="alert">
+                  Google could not be connected. Use the same email as your Nota account and try
+                  again.
+                </p>
+              )}
+              {googleCredentials() && (
+                <GoogleAccount
+                  email={user.email}
+                  linked={userAccounts.some((account) => account.providerId === "google")}
+                />
+              )}
             </div>
           ),
-          api: canManageApiKeys(role) ? (
-            <ApiKeysSettings apiKeys={apiKeyRecords} />
-          ) : (
-            <p className="text-sm text-muted-foreground">
-              Only organization owners can manage API keys.
-            </p>
+          api: (
+            <div className="space-y-8">
+              <ConnectedApps connections={connections} />
+              {canManageApiKeys(role) ? (
+                <ApiKeysSettings apiKeys={apiKeyRecords} />
+              ) : (
+                <p className="text-sm text-muted-foreground">
+                  Only organization owners can manage API keys.
+                </p>
+              )}
+            </div>
           ),
           brand: <BrandSettings canManage={canManage} settings={brandSettings} />,
           email: (

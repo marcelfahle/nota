@@ -1,12 +1,20 @@
-import { input } from "@inquirer/prompts";
 import { readFile } from "node:fs/promises";
 import type { Command } from "commander";
 
 import type { ClientCreateInput, TaxIdentifierInput } from "@nota-app/sdk";
 
+import {
+  interactive,
+  requireInput,
+  promptContext,
+  promptTheme,
+  collectPages,
+  paginationOptions,
+  type ListOptions,
+} from "../interaction.js";
 import { requireClient, resolveClientReference } from "../helpers.js";
 import { printClientDetail, printClientList } from "../output/clients.js";
-import { printSuccess, printTable } from "../output/shared.js";
+import { emit, printPagination, printSuccess, printTable } from "../output/shared.js";
 
 async function buildClientInput(options: {
   address?: string;
@@ -19,9 +27,15 @@ async function buildClientInput(options: {
   taxIdType?: TaxIdentifierInput["type"];
   vatNumber?: string;
 }): Promise<ClientCreateInput> {
-  const isFullyInteractive = Object.values(options).every((value) => value === undefined);
-  const name = options.name?.trim() || (await input({ message: "Client name" })).trim();
-  const email = options.email?.trim() || (await input({ message: "Client email" })).trim();
+  if (!options.name?.trim() || !options.email?.trim()) requireInput("--name and --email");
+  const { input } = await import("@inquirer/prompts");
+  const isFullyInteractive = interactive() && !options.name && !options.email;
+  const name =
+    options.name?.trim() ||
+    (await input({ message: "Client name", theme: promptTheme() }, promptContext)).trim();
+  const email =
+    options.email?.trim() ||
+    (await input({ message: "Client email", theme: promptTheme() }, promptContext)).trim();
 
   if (!name || !email) {
     throw new Error("Client name and email are required.");
@@ -29,20 +43,28 @@ async function buildClientInput(options: {
 
   const company =
     options.company?.trim() ||
-    (isFullyInteractive ? (await input({ message: "Company (optional)" })).trim() : "");
+    (isFullyInteractive
+      ? (await input({ message: "Company (optional)", theme: promptTheme() }, promptContext)).trim()
+      : "");
   const address =
     options.address?.trim() ||
-    (isFullyInteractive ? (await input({ message: "Address (optional)" })).trim() : "");
+    (isFullyInteractive
+      ? (await input({ message: "Address (optional)", theme: promptTheme() }, promptContext)).trim()
+      : "");
   const defaultCurrency =
     options.currency?.trim() ||
-    (isFullyInteractive ? (await input({ default: "EUR", message: "Currency" })).trim() : "EUR");
+    (isFullyInteractive
+      ? (
+          await input({ default: "EUR", message: "Currency", theme: promptTheme() }, promptContext)
+        ).trim()
+      : "EUR");
   const notes =
     options.notes?.trim() ||
-    (isFullyInteractive ? (await input({ message: "Notes (optional)" })).trim() : "");
+    (isFullyInteractive ? (await input({ message: "Notes (optional)", theme: promptTheme() }, promptContext)).trim() : "");
   const taxId =
     options.taxId?.trim() ||
     options.vatNumber?.trim() ||
-    (isFullyInteractive ? (await input({ message: "Tax identifier (optional)" })).trim() : "");
+    (isFullyInteractive ? (await input({ message: "Tax identifier (optional)", theme: promptTheme() }, promptContext)).trim() : "");
   const taxIdType =
     options.taxIdType ??
     (options.vatNumber
@@ -51,7 +73,8 @@ async function buildClientInput(options: {
         ? ((await input({
             default: "tax_id",
             message: "Tax identifier type (eu_vat, us_ein, tax_id)",
-          })) as TaxIdentifierInput["type"])
+            theme: promptTheme(),
+          }, promptContext)) as TaxIdentifierInput["type"])
         : "tax_id");
 
   return {
@@ -67,21 +90,29 @@ async function buildClientInput(options: {
 
 function getCommandOptions(args: Array<unknown>) {
   const command = args.at(-1);
-  if (!command || typeof command !== "object" || !("opts" in command)) {
+  if (!command || typeof command !== "object" || !("optsWithGlobals" in command)) {
     return {};
   }
 
-  return typeof command.opts === "function" ? command.opts() : {};
+  return typeof command.optsWithGlobals === "function" ? command.optsWithGlobals() : {};
 }
 
-async function listClientsCommand(options: { search?: string }) {
+async function listClientsCommand(options: ListOptions & { search?: string }) {
   const client = await requireClient();
-  const result = await client.listClients({ search: options.search });
-  printClientList(result.data);
+  const result = await collectPages(
+    (page, perPage) => client.listClients({ search: options.search, page, perPage }),
+    options,
+  );
+  emit(result, () => {
+    printClientList(result.data);
+    printPagination(result.pagination, result.data.length, "nota clients", options.all);
+  });
 }
 
 export function registerClientCommands(program: Command) {
-  const clients = program.command("clients").description("Manage clients");
+  const clients = paginationOptions(
+    program.command("clients").alias("client").description("Manage clients"),
+  );
 
   clients
     .command("import")
@@ -93,26 +124,30 @@ export function registerClientCommands(program: Command) {
       const csv = await readFile(file, "utf8");
       if (options.confirm) {
         const result = await client.importClientsCsv(csv, options.confirm);
-        printSuccess(
-          `Added ${result.added} clients; skipped ${result.counts.duplicate} duplicates and ${result.counts.invalid} invalid rows.`,
+        emit(result, () =>
+          printSuccess(
+            `Added ${result.added} clients; skipped ${result.counts.duplicate} duplicates and ${result.counts.invalid} invalid rows.`,
+          ),
         );
         return;
       }
       const preview = await client.previewClientsCsv(csv);
-      printTable(
-        ["Line", "Name", "Email", "Action", "Reason"],
-        preview.rows.map((row) => [
-          String(row.line),
-          row.client.name ?? "",
-          row.client.email ?? "",
-          row.status,
-          row.reason ?? "",
-        ]),
-      );
-      printSuccess(`${preview.counts.ready} clients ready. Preview hash: ${preview.hash}`);
-      printSuccess(
-        "After reviewing, rerun with --confirm <hash> to add them. Existing clients stay intact.",
-      );
+      emit(preview, () => {
+        printTable(
+          ["Line", "Name", "Email", "Action", "Reason"],
+          preview.rows.map((row) => [
+            String(row.line),
+            row.client.name ?? "",
+            row.client.email ?? "",
+            row.status,
+            row.reason ?? "",
+          ]),
+        );
+        printSuccess(`${preview.counts.ready} clients ready. Preview hash: ${preview.hash}`);
+        printSuccess(
+          "After reviewing, rerun with --confirm <hash> to add them. Existing clients stay intact.",
+        );
+      });
     });
 
   clients
@@ -121,8 +156,7 @@ export function registerClientCommands(program: Command) {
       await listClientsCommand(getCommandOptions(args));
     });
 
-  clients
-    .command("list")
+  paginationOptions(clients.command("list"))
     .alias("ls")
     .description("List clients")
     .option("--search <query>", "Filter by name, email, or company")
@@ -138,11 +172,14 @@ export function registerClientCommands(program: Command) {
       const client = await requireClient();
       const record = await resolveClientReference(client, reference);
       const recentInvoices = await client.listInvoices({ clientId: record.id, perPage: 5 });
-      printClientDetail(record, recentInvoices.data);
+      emit({ client: record, recentInvoices }, () =>
+        printClientDetail(record, recentInvoices.data),
+      );
     });
 
   clients
     .command("create")
+    .alias("new")
     .description("Create a client")
     .option("--name <name>")
     .option("--email <email>")
@@ -157,6 +194,8 @@ export function registerClientCommands(program: Command) {
       const client = await requireClient();
       const payload = await buildClientInput(getCommandOptions(args));
       const createdClient = await client.createClient(payload);
-      printSuccess(`Created client ${createdClient.name} (${createdClient.email}).`);
+      emit(createdClient, () =>
+        printSuccess(`Created ${createdClient.name} · ${createdClient.email}`),
+      );
     });
 }

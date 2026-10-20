@@ -116,11 +116,11 @@ jobs:
           curl --fail --silent --header 'Authorization: Bearer ci-cron-secret' \
             http://127.0.0.1:3000/api/doctor | grep '"status":"ok"'
           create_output="$(bun run --cwd apps/cli dev -- invoices create --client 'Alice Example' \
-            --item 'Self-host smoke | 1 | 125' --tax-rate 21)"
+            --item 'Self-host smoke | 1 | 125' --tax-rate 21 --json)"
           printf '%s\n' "$create_output"
-          draft_number="$(printf '%s\n' "$create_output" | sed -n 's/^Created \(DRAFT-[^ ]*\).*/\1/p')"
+          draft_number="$(printf '%s\n' "$create_output" | bun -e 'console.log((await Bun.stdin.json()).invoice.number)')"
           test -n "$draft_number"
-          bun run --cwd apps/cli dev -- invoices send "$draft_number"
+          bun run --cwd apps/cli dev -- invoices send "$draft_number" --yes
           bun run --cwd apps/cli dev -- invoices pdf INV-0004 --output /tmp/INV-0004.pdf
           test "$(head -c 4 /tmp/INV-0004.pdf)" = '%PDF'
           docker compose --env-file .env.self-hosted exec -T web grep 'INV-0004' /data/mail/sends.jsonl

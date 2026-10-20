@@ -4,14 +4,14 @@ import { previewClientImport } from "./client-import";
 
 test("FreshBooks client exports preserve billing details and explain skipped rows", () => {
   const csv =
-    '\uFEFFOrganization,First Name,Last Name,Email,Address 1,City,Postal Code,Country,Currency,VAT Number\r\n"Ranger, GmbH",Max,Muster,INVOICE@RANGER.DE,"Main St 1",Berlin,10115,Germany,eur,DE123\r\nAcme,,,billing@acme.test,,,,,,\r\nMissing Email,Ada,Lovelace,,,,,,,\r\nDuplicate,,,invoice@ranger.de,,,,,,\r\n';
+    '\uFEFFOrganization,First Name,Last Name,Email,Address 1,City,Postal Code,Country,Currency,VAT Number\r\n"Ranger, GmbH",Max,Muster,INVOICE@RANGER.TEST,"Main St 1",Berlin,10115,Germany,eur,DE123\r\nAcme,,,billing@acme.test,,,,,,\r\nMissing Email,Ada,Lovelace,,,,,,,\r\nDuplicate,,,invoice@ranger.test,,,,,,\r\n';
   const preview = previewClientImport(csv, [{ email: "billing@acme.test", name: "Acme" }], "USD");
   expect(preview.counts).toEqual({ duplicate: 2, invalid: 1, ready: 1, total: 4 });
   expect(preview.rows[0].client).toMatchObject({
     address: "Main St 1\n10115 Berlin\nGermany",
     company: "Ranger, GmbH",
     defaultCurrency: "EUR",
-    email: "invoice@ranger.de",
+    email: "invoice@ranger.test",
     name: "Ranger, GmbH",
     notes: "Contact: Max Muster",
     vatNumber: "DE123",

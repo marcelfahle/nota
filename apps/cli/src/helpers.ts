@@ -1,13 +1,11 @@
-import { input, select } from "@inquirer/prompts";
-
 import type { ClientRecord, InvoiceDetail, NotaApiError, NotaClient } from "@nota-app/sdk";
 
+import { requireInput, promptContext, promptTheme } from "./interaction.js";
+import { clean } from "./output/shared.js";
 import { createConfiguredClient } from "./config.js";
 
 export function isUuid(value: string) {
-  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
-    value,
-  );
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
 }
 
 export function formatDateInput(date: Date) {
@@ -79,7 +77,13 @@ export async function resolveInvoiceReference(client: NotaClient, reference: str
 }
 
 export async function promptForClient(client: NotaClient, seed?: string): Promise<ClientRecord> {
-  const query = seed?.trim() || (await input({ message: "Client name or email" })).trim();
+  if (!seed?.trim()) requireInput("--client");
+  const { input, select } = await import("@inquirer/prompts");
+  const query =
+    seed?.trim() ||
+    (
+      await input({ message: "Who is the invoice for?", theme: promptTheme() }, promptContext)
+    ).trim();
   if (!query) {
     throw new Error("Client is required.");
   }
@@ -98,13 +102,17 @@ export async function promptForClient(client: NotaClient, seed?: string): Promis
     return searchResult.data[0];
   }
 
-  return select({
-    choices: searchResult.data.map((entry) => ({
-      name: `${entry.name} (${entry.email})${entry.company ? ` — ${entry.company}` : ""}`,
-      value: entry,
-    })),
-    message: "Select a client",
-  });
+  return select(
+    {
+      choices: searchResult.data.map((entry) => ({
+        name: clean(`${entry.name} (${entry.email})${entry.company ? ` — ${entry.company}` : ""}`),
+        value: entry,
+      })),
+      message: "Select a client",
+      theme: promptTheme(),
+    },
+    promptContext,
+  );
 }
 
 export function getCliErrorMessage(error: unknown) {
