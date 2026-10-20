@@ -254,6 +254,8 @@ export const auth = betterAuth({
     updateAge: 60 * 60 * 24,
   },
   socialProviders: google ? { google: { ...google, prompt: "select_account" } } : {},
+  // An unpromoted Vercel build answers on its own URL; trust it so the build can be exercised before promote.
+  trustedOrigins: process.env.VERCEL_URL ? [`https://${process.env.VERCEL_URL}`] : [],
   user: {
     // Runs before creation, linking, and returning OAuth sign-ins. The invite
     // token is untrusted input; check its email/expiry against our own records.
