@@ -1,6 +1,7 @@
 "use client";
 
 import { Copy, KeyRound, Trash2 } from "lucide-react";
+import { useLocale, useTranslations } from "next-intl";
 import { useRouter } from "next/navigation";
 import { useActionState, useEffect, useRef, useState } from "react";
 
@@ -17,6 +18,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { isAppLocale, toIntlLocale } from "@/lib/i18n";
 
 type ApiKeyListItem = {
   createdAt: Date;
@@ -31,12 +33,12 @@ type Feedback = {
   success?: string;
 } | null;
 
-function formatDate(value: Date | null) {
+function formatDate(value: Date | null, locale: string, never: string) {
   if (!value) {
-    return "Never";
+    return never;
   }
 
-  return new Intl.DateTimeFormat("en", {
+  return new Intl.DateTimeFormat(locale, {
     day: "numeric",
     month: "short",
     year: "numeric",
@@ -60,6 +62,9 @@ function FeedbackBanner({ feedback }: { feedback: Feedback }) {
 }
 
 export function ApiKeysSettings({ apiKeys }: { apiKeys: Array<ApiKeyListItem> }) {
+  const t = useTranslations("settings.apiKeys");
+  const appLocale = useLocale();
+  const locale = toIntlLocale(isAppLocale(appLocale) ? appLocale : "en");
   const [feedback, setFeedback] = useState<Feedback>(null);
   const [createState, createAction, createPending] = useActionState<CreateApiKeyState, FormData>(
     createApiKeyAction,
@@ -82,7 +87,7 @@ export function ApiKeysSettings({ apiKeys }: { apiKeys: Array<ApiKeyListItem> })
       await navigator.clipboard.writeText(value);
       setFeedback({ success: successMessage });
     } catch {
-      setFeedback({ error: "Clipboard access is unavailable in this browser" });
+      setFeedback({ error: t("clipboardUnavailable") });
     }
   }
 
@@ -94,38 +99,38 @@ export function ApiKeysSettings({ apiKeys }: { apiKeys: Array<ApiKeyListItem> })
       return;
     }
 
-    setFeedback({ success: "API key deleted" });
+    setFeedback({ success: t("deleted") });
     router.refresh();
   }
 
   return (
     <Card data-testid="api-keys-settings">
       <CardHeader>
-        <CardTitle>API Keys</CardTitle>
-        <CardDescription>
-          Create bearer tokens for scripts and integrations. Each key is shown in full only once.
-        </CardDescription>
+        <CardTitle>{t("heading")}</CardTitle>
+        <CardDescription>{t("description")}</CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
         <FeedbackBanner feedback={feedback} />
         {createState?.error ? <FeedbackBanner feedback={{ error: createState.error }} /> : null}
         {createState?.success && createState.key ? (
           <div className="rounded-xl border border-zinc-200 bg-zinc-50 px-4 py-3 text-sm text-zinc-700">
-            <p className="font-medium text-zinc-950">{createState.keyName} is ready</p>
-            <p className="mt-1 text-zinc-500">Copy this key now. It will not be shown again.</p>
+            <p className="font-medium text-zinc-950">
+              {t("ready", { name: createState.keyName ?? "" })}
+            </p>
+            <p className="mt-1 text-zinc-500">{t("copyNow")}</p>
             <div className="mt-3 rounded-lg border border-zinc-200 bg-white px-3 py-2 font-mono text-xs break-all text-zinc-950">
               {createState.key}
             </div>
             <div className="mt-3 flex flex-wrap gap-2">
               <Button
                 data-testid="api-key-copy-created"
-                onClick={() => void copyKey(createState.key!, "API key copied")}
+                onClick={() => void copyKey(createState.key!, t("copied"))}
                 size="sm"
                 type="button"
                 variant="outline"
               >
                 <Copy className="size-4" />
-                Copy key
+                {t("copyKey")}
               </Button>
             </div>
           </div>
@@ -138,37 +143,37 @@ export function ApiKeysSettings({ apiKeys }: { apiKeys: Array<ApiKeyListItem> })
           ref={formRef}
         >
           <div className="space-y-2">
-            <Label htmlFor="apiKeyName">Name</Label>
+            <Label htmlFor="apiKeyName">{t("name")}</Label>
             <Input
               data-testid="api-keys-name"
               id="apiKeyName"
               name="name"
-              placeholder="e.g. Local MCP server"
+              placeholder={t("namePlaceholder")}
               required
             />
           </div>
           <div className="flex items-end">
             <Button data-testid="api-keys-submit" disabled={createPending} type="submit">
               <KeyRound className="size-4" />
-              {createPending ? "Creating..." : "Create API key"}
+              {createPending ? t("creating") : t("create")}
             </Button>
           </div>
         </form>
 
         {apiKeys.length === 0 ? (
           <div className="rounded-xl border border-dashed border-zinc-200 px-4 py-8 text-sm text-zinc-500">
-            No API keys yet.
+            {t("none")}
           </div>
         ) : (
           <div className="overflow-hidden rounded-xl border border-zinc-200">
             <Table data-testid="api-keys-table">
               <TableHeader>
                 <TableRow>
-                  <TableHead>Name</TableHead>
-                  <TableHead>Prefix</TableHead>
-                  <TableHead>Created</TableHead>
-                  <TableHead>Last used</TableHead>
-                  <TableHead className="text-right">Actions</TableHead>
+                  <TableHead>{t("columns.name")}</TableHead>
+                  <TableHead>{t("columns.prefix")}</TableHead>
+                  <TableHead>{t("columns.created")}</TableHead>
+                  <TableHead>{t("columns.lastUsed")}</TableHead>
+                  <TableHead className="text-right">{t("columns.actions")}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -178,8 +183,12 @@ export function ApiKeysSettings({ apiKeys }: { apiKeys: Array<ApiKeyListItem> })
                     <TableCell className="font-mono text-xs text-zinc-500">
                       {apiKey.keyPrefix}
                     </TableCell>
-                    <TableCell className="text-zinc-500">{formatDate(apiKey.createdAt)}</TableCell>
-                    <TableCell className="text-zinc-500">{formatDate(apiKey.lastUsedAt)}</TableCell>
+                    <TableCell className="text-zinc-500">
+                      {formatDate(apiKey.createdAt, locale, t("never"))}
+                    </TableCell>
+                    <TableCell className="text-zinc-500">
+                      {formatDate(apiKey.lastUsedAt, locale, t("never"))}
+                    </TableCell>
                     <TableCell className="text-right">
                       <Button
                         className="text-red-600 hover:bg-red-50 hover:text-red-700"
@@ -190,7 +199,7 @@ export function ApiKeysSettings({ apiKeys }: { apiKeys: Array<ApiKeyListItem> })
                         variant="outline"
                       >
                         <Trash2 className="size-4" />
-                        Delete
+                        {t("delete")}
                       </Button>
                     </TableCell>
                   </TableRow>

@@ -12,50 +12,57 @@ import {
 } from "@react-email/components";
 
 import { APP_NAME } from "@/lib/app-brand";
+import { getTranslator, type AppLocale } from "@/lib/i18n";
 
 type InviteEmailProps = {
   inviteUrl: string;
+  /** The language of the person who invited; the invitee has no account yet. */
+  locale?: AppLocale;
   orgName: string;
   role: "owner" | "admin" | "member";
 };
 
-function formatRole(role: InviteEmailProps["role"]) {
-  return role.charAt(0).toUpperCase() + role.slice(1);
+export function inviteSubject({
+  locale = "en",
+  orgName,
+}: Pick<InviteEmailProps, "locale" | "orgName">) {
+  return getTranslator(locale, "emails.invite")("subject", { app: APP_NAME, org: orgName });
 }
 
-export function InviteEmail({ inviteUrl, orgName, role }: InviteEmailProps) {
+export function InviteEmail({ inviteUrl, locale = "en", orgName, role }: InviteEmailProps) {
+  const t = getTranslator(locale, "emails.invite");
   return (
     <Html>
       <Head />
-      <Preview>
-        You&apos;ve been invited to join {orgName} on {APP_NAME}
-      </Preview>
+      <Preview>{inviteSubject({ locale, orgName })}</Preview>
       <Body style={styles.body}>
         <Container style={styles.container}>
           <Section style={styles.logoSection}>
             <Text style={styles.logo}>{APP_NAME}</Text>
           </Section>
 
-          <Heading style={styles.heading}>Join {orgName}</Heading>
+          <Heading style={styles.heading}>{t("heading", { org: orgName })}</Heading>
 
           <Text style={styles.text}>
-            You&apos;ve been invited to join <strong>{orgName}</strong> on {APP_NAME} as a{" "}
-            {formatRole(role).toLowerCase()}.
+            {t.rich("body", {
+              app: APP_NAME,
+              org: orgName,
+              role: t(`roles.${role}`),
+              strong: (chunks) => <strong>{chunks}</strong>,
+            })}
           </Text>
 
           <Section style={styles.buttonSection}>
             <Button href={inviteUrl} style={styles.button}>
-              Accept Invite
+              {t("accept")}
             </Button>
           </Section>
 
-          <Text style={styles.helpText}>
-            If the button doesn&apos;t work, open this link in your browser:
-          </Text>
+          <Text style={styles.helpText}>{t("help")}</Text>
           <Text style={styles.link}>{inviteUrl}</Text>
 
           <Hr style={styles.hr} />
-          <Text style={styles.footer}>This invite expires in 7 days.</Text>
+          <Text style={styles.footer}>{t("expires")}</Text>
         </Container>
       </Body>
     </Html>

@@ -4,6 +4,7 @@ import { eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
+import { localizeError } from "@/lib/action-errors";
 import { getCurrentUser } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { invoiceNumberEvents, orgs, users } from "@/lib/db/schema";
@@ -114,12 +115,12 @@ export async function updateBrandSettings(
     website: formData.get("website"),
   });
   if (!parsed.success) {
-    return { error: parsed.error.issues[0].message };
+    return { error: await localizeError(parsed.error.issues[0].message) };
   }
 
   const { org, role } = await getCurrentUser();
   if (!canManageSettings(role)) {
-    return { error: getInsufficientPermissionsError() };
+    return { error: await localizeError(getInsufficientPermissionsError()) };
   }
 
   const logoFile = formData.get("logoFile");
@@ -134,7 +135,7 @@ export async function updateBrandSettings(
   if (hasLogoFile) {
     const result = await uploadOrgLogo(org.id, logoFile);
     if ("error" in result) {
-      return { error: result.error };
+      return { error: await localizeError(result.error) };
     }
     logoUrl = result.url;
     uploaded.push(result.url);
@@ -143,7 +144,7 @@ export async function updateBrandSettings(
     const result = await uploadOrgFavicon(org.id, faviconFile);
     if ("error" in result) {
       await Promise.all(uploaded.map(deleteManagedLogo));
-      return { error: result.error.replace("Logo", "Favicon") };
+      return { error: await localizeError(result.error.replace("Logo", "Favicon")) };
     }
     faviconUrl = result.url;
     uploaded.push(result.url);
@@ -175,10 +176,11 @@ export async function updateBrandSettings(
       Object.assign(update, await clientTaxIdentifierFields(identifier));
     } catch (error) {
       return {
-        error:
+        error: await localizeError(
           error instanceof TaxIdentifierValidationError
             ? error.message
             : "Enter a valid tax identifier",
+        ),
       };
     }
   }
@@ -195,7 +197,7 @@ export async function updateBrandSettings(
       .where(eq(orgs.id, org.id));
   } catch {
     await Promise.all(uploaded.map(deleteManagedLogo));
-    return { error: "Could not update brand settings right now" };
+    return { error: await localizeError("Could not update brand settings right now") };
   }
 
   if (logoUrl !== org.logoUrl) {
@@ -228,13 +230,13 @@ export async function updateSettings(
 
   const result = settingsSchema.safeParse(raw);
   if (!result.success) {
-    return { error: result.error.issues[0].message };
+    return { error: await localizeError(result.error.issues[0].message) };
   }
 
   const { org, role, user } = await getCurrentUser();
 
   if (!canManageSettings(role)) {
-    return { error: getInsufficientPermissionsError() };
+    return { error: await localizeError(getInsufficientPermissionsError()) };
   }
 
   try {
@@ -294,7 +296,7 @@ export async function updateSettings(
       }
     });
   } catch {
-    return { error: "Could not update settings right now" };
+    return { error: await localizeError("Could not update settings right now") };
   }
 
   revalidatePath("/settings");
@@ -306,7 +308,7 @@ export async function updateSettings(
 export async function updateUserLocale(value: string) {
   const parsed = z.enum(APP_LOCALES).safeParse(value);
   if (!parsed.success) {
-    return { error: "Choose English or German" };
+    return { error: await localizeError("Choose English or German") };
   }
   const { user } = await getCurrentUser();
   await db.update(users).set({ locale: parsed.data }).where(eq(users.id, user.id));
@@ -318,16 +320,16 @@ export async function updateUserLocale(value: string) {
 export async function updateDocumentLocale(value: string) {
   const parsed = z.enum(APP_LOCALES).safeParse(value);
   if (!parsed.success) {
-    return { error: "Choose English or German" };
+    return { error: await localizeError("Choose English or German") };
   }
   const { org, role } = await getCurrentUser();
   if (!canManageSettings(role)) {
-    return { error: getInsufficientPermissionsError() };
+    return { error: await localizeError(getInsufficientPermissionsError()) };
   }
   try {
     await db.update(orgs).set({ documentLocale: parsed.data }).where(eq(orgs.id, org.id));
   } catch {
-    return { error: "Could not save the document language right now" };
+    return { error: await localizeError("Could not save the document language right now") };
   }
   revalidatePath("/settings");
   return { success: true };
@@ -336,16 +338,16 @@ export async function updateDocumentLocale(value: string) {
 export async function updateEInvoiceDelivery(value: string) {
   const parsed = z.enum(E_INVOICE_DELIVERIES).safeParse(value);
   if (!parsed.success) {
-    return { error: "Choose whether to attach the XRechnung XML" };
+    return { error: await localizeError("Choose whether to attach the XRechnung XML") };
   }
   const { org, role } = await getCurrentUser();
   if (!canManageSettings(role)) {
-    return { error: getInsufficientPermissionsError() };
+    return { error: await localizeError(getInsufficientPermissionsError()) };
   }
   try {
     await db.update(orgs).set({ eInvoiceDelivery: parsed.data }).where(eq(orgs.id, org.id));
   } catch {
-    return { error: "Could not save the email setting right now" };
+    return { error: await localizeError("Could not save the email setting right now") };
   }
   revalidatePath("/settings");
   return { success: true };

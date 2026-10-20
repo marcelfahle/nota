@@ -1,11 +1,13 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import posthog from "posthog-js";
 
 import { Button } from "@/components/ui/button";
 import { authClient } from "@/lib/auth-client";
 
 export function DeactivatedSignOut() {
+  const t = useTranslations("deactivated");
   return (
     <Button
       onClick={async () => {
@@ -19,7 +21,7 @@ export function DeactivatedSignOut() {
       type="button"
       variant="outline"
     >
-      Sign out
+      {t("signOut")}
     </Button>
   );
 }

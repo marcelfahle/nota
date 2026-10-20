@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 
+import { localizeError } from "@/lib/action-errors";
 import { getCurrentUser } from "@/lib/auth";
 import { approveProposal } from "@/lib/proposal-service";
 
@@ -13,7 +14,7 @@ export async function approveProposalAction(proposalId: string) {
   );
 
   if ("error" in result) {
-    return { error: result.error };
+    return { error: await localizeError(result.error) };
   }
 
   revalidatePath("/home");

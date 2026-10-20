@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
+import { localizeError, localizeMutationError } from "@/lib/action-errors";
 import { getCurrentUser } from "@/lib/auth";
 import {
   cancelInvoice as cancelInvoiceService,
@@ -83,13 +84,13 @@ export async function createInvoice(
 ) {
   const result = invoiceSchema.safeParse(parseInvoiceFormData(formData));
   if (!result.success) {
-    return { error: result.error.issues[0].message };
+    return { error: await localizeError(result.error.issues[0].message) };
   }
 
   const currentUser = await getCurrentUser();
   const serviceResult = await createInvoiceService(buildServiceContext(currentUser), result.data);
   if ("error" in serviceResult) {
-    return { error: serviceResult.error };
+    return { error: await localizeMutationError(serviceResult) };
   }
 
   revalidatePath("/invoices");
@@ -103,7 +104,7 @@ export async function updateInvoice(
 ) {
   const result = invoiceSchema.safeParse(parseInvoiceFormData(formData));
   if (!result.success) {
-    return { error: result.error.issues[0].message };
+    return { error: await localizeError(result.error.issues[0].message) };
   }
 
   const currentUser = await getCurrentUser();
@@ -113,7 +114,7 @@ export async function updateInvoice(
     result.data,
   );
   if ("error" in serviceResult) {
-    return { error: serviceResult.error };
+    return { error: await localizeMutationError(serviceResult) };
   }
 
   revalidatePath("/invoices");
@@ -126,7 +127,7 @@ export async function deleteInvoice(invoiceId: string) {
   const currentUser = await getCurrentUser();
   const serviceResult = await deleteInvoiceService(buildServiceContext(currentUser), invoiceId);
   if ("error" in serviceResult) {
-    return { error: serviceResult.error };
+    return { error: await localizeMutationError(serviceResult) };
   }
 
   revalidatePath("/invoices");
@@ -137,7 +138,7 @@ export async function sendInvoice(invoiceId: string) {
   const currentUser = await getCurrentUser();
   const serviceResult = await sendInvoiceService(buildServiceContext(currentUser), invoiceId);
   if ("error" in serviceResult) {
-    return { error: serviceResult.error };
+    return { error: await localizeMutationError(serviceResult) };
   }
 
   revalidatePath("/invoices");
@@ -149,7 +150,7 @@ export async function sendReminder(invoiceId: string) {
   const currentUser = await getCurrentUser();
   const serviceResult = await sendReminderService(buildServiceContext(currentUser), invoiceId);
   if ("error" in serviceResult) {
-    return { error: serviceResult.error };
+    return { error: await localizeMutationError(serviceResult) };
   }
 
   revalidatePath("/invoices");
@@ -163,7 +164,7 @@ export async function duplicateInvoice(
   const currentUser = await getCurrentUser();
   const serviceResult = await duplicateInvoiceService(buildServiceContext(currentUser), invoiceId);
   if ("error" in serviceResult) {
-    return { error: serviceResult.error };
+    return { error: await localizeMutationError(serviceResult) };
   }
 
   revalidatePath("/invoices");
@@ -174,7 +175,7 @@ export async function markInvoiceSent(invoiceId: string) {
   const currentUser = await getCurrentUser();
   const serviceResult = await markInvoiceSentService(buildServiceContext(currentUser), invoiceId);
   if ("error" in serviceResult) {
-    return { error: serviceResult.error };
+    return { error: await localizeMutationError(serviceResult) };
   }
 
   revalidatePath("/invoices");
@@ -187,7 +188,7 @@ export async function markInvoicePaid(invoiceId: string) {
   const currentUser = await getCurrentUser();
   const serviceResult = await markInvoicePaidService(buildServiceContext(currentUser), invoiceId);
   if ("error" in serviceResult) {
-    return { error: serviceResult.error };
+    return { error: await localizeMutationError(serviceResult) };
   }
 
   revalidatePath("/invoices");
@@ -201,7 +202,7 @@ export async function recordInvoicePayment(
 ) {
   const parsed = paymentSchema.safeParse({ invoiceId, ...input });
   if (!parsed.success) {
-    return { error: parsed.error.issues[0].message };
+    return { error: await localizeError(parsed.error.issues[0].message) };
   }
   const currentUser = await getCurrentUser();
   const { invoiceId: validatedInvoiceId, ...payment } = parsed.data;
@@ -211,19 +212,22 @@ export async function recordInvoicePayment(
     payment,
   );
   if ("error" in serviceResult) {
-    return { error: serviceResult.error };
+    return { error: await localizeMutationError(serviceResult) };
   }
 
   revalidatePath("/invoices");
   revalidatePath(`/invoices/${invoiceId}`);
-  return { success: true, warning: serviceResult.warning };
+  return {
+    success: true,
+    warning: serviceResult.warning && (await localizeError(serviceResult.warning)),
+  };
 }
 
 export async function createCreditNote(invoiceId: string) {
   const currentUser = await getCurrentUser();
   const serviceResult = await createCreditNoteService(buildServiceContext(currentUser), invoiceId);
   if ("error" in serviceResult) {
-    return { error: serviceResult.error };
+    return { error: await localizeMutationError(serviceResult) };
   }
 
   revalidatePath("/invoices");
@@ -235,10 +239,13 @@ export async function cancelInvoice(invoiceId: string) {
   const currentUser = await getCurrentUser();
   const serviceResult = await cancelInvoiceService(buildServiceContext(currentUser), invoiceId);
   if ("error" in serviceResult) {
-    return { error: serviceResult.error };
+    return { error: await localizeMutationError(serviceResult) };
   }
 
   revalidatePath("/invoices");
   revalidatePath(`/invoices/${invoiceId}`);
-  return { success: true, warning: serviceResult.warning };
+  return {
+    success: true,
+    warning: serviceResult.warning && (await localizeError(serviceResult.warning)),
+  };
 }

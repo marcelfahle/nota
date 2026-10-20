@@ -347,7 +347,7 @@ export function DashboardShell({
         <main
           className={cn(
             "mx-auto max-w-6xl pr-[max(1rem,env(safe-area-inset-right))] pb-[max(5rem,env(safe-area-inset-bottom))] pl-[max(1rem,env(safe-area-inset-left))] sm:px-8 sm:pb-20",
-            isHome ? "py-12 sm:py-[72px]" : "py-6 sm:py-8",
+            isHome ? "pt-12 sm:pt-[72px]" : "pt-6 sm:pt-8",
           )}
           id="main-content"
           tabIndex={-1}

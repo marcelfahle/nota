@@ -16,7 +16,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { addDecimals, currencyExponent, multiplyAndRound, percentageAndRound } from "@/lib/money";
+import {
+  addDecimals,
+  currencyExponent,
+  formatVariableDecimal,
+  multiplyAndRound,
+  percentageAndRound,
+} from "@/lib/money";
 import { defaultServicePeriod } from "@/lib/service-period";
 import { requiresZeroRate, TAX_TREATMENTS, type TaxTreatment } from "@/lib/tax-treatment";
 import { formatCurrency, type Locale } from "@/lib/utils";
@@ -69,6 +75,23 @@ function emptyLineItem(): LineItem {
   return { description: "", quantity: "1", unitPrice: "" };
 }
 
+/** Stored amounts carry six decimals; the form shows them the way a person would type them. */
+function presentDecimal(value: string, minimumScale: number) {
+  try {
+    return formatVariableDecimal(value, 6, minimumScale);
+  } catch {
+    return value;
+  }
+}
+
+function presentLineItem(item: LineItem): LineItem {
+  return {
+    ...item,
+    quantity: presentDecimal(item.quantity, 0),
+    unitPrice: presentDecimal(item.unitPrice, 2),
+  };
+}
+
 function previewDecimal(value: string) {
   return /^\d+(?:\.\d*)?$/.test(value) ? value : "0";
 }
@@ -98,7 +121,9 @@ export function InvoiceForm({
   const router = useRouter();
 
   const [items, setItems] = useState<Array<LineItem>>(
-    defaultValues?.lineItems?.length ? defaultValues.lineItems : [emptyLineItem()],
+    defaultValues?.lineItems?.length
+      ? defaultValues.lineItems.map(presentLineItem)
+      : [emptyLineItem()],
   );
   const [clientId, setClientId] = useState(defaultValues?.clientId ?? "");
   const [currency, setCurrency] = useState(defaultValues?.currency ?? "EUR");
@@ -106,7 +131,7 @@ export function InvoiceForm({
   const [taxTreatment, setTaxTreatment] = useState<TaxTreatment>(
     defaultValues?.taxTreatment ?? org.defaultTaxTreatment,
   );
-  const [taxRate, setTaxRate] = useState(defaultValues?.taxRate ?? "0");
+  const [taxRate, setTaxRate] = useState(presentDecimal(defaultValues?.taxRate ?? "0", 0));
   // Until someone edits the period it follows the line items and the issue date,
   // shown as a visible default so nobody has to guess what gets saved.
   const [editedPeriod, setEditedPeriod] = useState<{ end: string; start: string } | null>(

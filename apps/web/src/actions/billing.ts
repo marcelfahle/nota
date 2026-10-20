@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 
+import { localizeError } from "@/lib/action-errors";
 import { getCurrentUser } from "@/lib/auth";
 import { performBillingAction } from "@/lib/billing-actions";
 
@@ -18,7 +19,9 @@ export async function updateBilling(
     return result;
   } catch (error) {
     return {
-      error: error instanceof Error ? error.message : "Billing action failed. Please try again.",
+      error: await localizeError(
+        error instanceof Error ? error.message : "Billing action failed. Please try again.",
+      ),
     };
   }
 }

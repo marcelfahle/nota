@@ -8,8 +8,8 @@ import { nextCookies } from "better-auth/next-js";
 import { jwt } from "better-auth/plugins";
 import { and, eq, gt, isNull } from "drizzle-orm";
 
-import { PasswordResetEmail } from "@/emails/password-reset";
-import { VerificationEmail } from "@/emails/verification";
+import { PasswordResetEmail, passwordResetSubject } from "@/emails/password-reset";
+import { VerificationEmail, verificationSubject } from "@/emails/verification";
 import { getApiResource, getAuthIssuer, getMcpResource } from "@/lib/auth-config";
 import { db } from "@/lib/db";
 import {
@@ -31,7 +31,12 @@ import {
 } from "@/lib/db/schema";
 import { sendEmail } from "@/lib/email";
 import { getBetterAuthEnv } from "@/lib/env";
-import { defaultDocumentLocale, localeFromAcceptLanguage } from "@/lib/i18n";
+import {
+  type AppLocale,
+  defaultDocumentLocale,
+  isAppLocale,
+  localeFromAcceptLanguage,
+} from "@/lib/i18n";
 import {
   cookieValueFromHeader,
   finishOnboarding,
@@ -88,6 +93,16 @@ function acceptLanguageFrom(context: unknown) {
   } | null;
   const headers = candidate?.headers ?? candidate?.request?.headers;
   return headers?.get?.("accept-language") ?? null;
+}
+
+/** The language Nota writes to a member in; Better Auth's user record does not carry it. */
+async function userLocale(userId: string): Promise<AppLocale> {
+  const [row] = await db
+    .select({ locale: users.locale })
+    .from(users)
+    .where(eq(users.id, userId))
+    .limit(1);
+  return isAppLocale(row?.locale) ? row.locale : "en";
 }
 
 async function joinOrCreateWorkspace(
@@ -214,9 +229,10 @@ export const auth = betterAuth({
     resetPasswordTokenExpiresIn: 60 * 60,
     revokeSessionsOnPasswordReset: true,
     sendResetPassword: async ({ url, user }) => {
+      const locale = await userLocale(user.id);
       await sendEmail({
-        react: PasswordResetEmail({ name: user.name, resetUrl: url }),
-        subject: "Reset your nota password",
+        react: PasswordResetEmail({ locale, name: user.name, resetUrl: url }),
+        subject: passwordResetSubject(locale),
         to: [user.email],
       });
     },
@@ -225,9 +241,10 @@ export const auth = betterAuth({
     expiresIn: 60 * 60,
     sendOnSignUp: false,
     sendVerificationEmail: async ({ url, user }) => {
+      const locale = await userLocale(user.id);
       await sendEmail({
-        react: VerificationEmail({ name: user.name, verificationUrl: url }),
-        subject: "Confirm your email to send invoices",
+        react: VerificationEmail({ locale, name: user.name, verificationUrl: url }),
+        subject: verificationSubject(locale),
         to: [user.email],
       });
     },
