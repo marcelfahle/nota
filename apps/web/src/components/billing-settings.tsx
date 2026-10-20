@@ -1,11 +1,13 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import posthog from "posthog-js";
 import { useState, useTransition } from "react";
 
 import { updateBilling } from "@/actions/billing";
 import { Button } from "@/components/ui/button";
 import type { billingStatus } from "@/lib/billing";
+import { FREE_INVOICE_LIMIT } from "@/lib/billing-policy";
 
 type Status = Awaited<ReturnType<typeof billingStatus>>;
 export function BillingSettings({
@@ -17,6 +19,7 @@ export function BillingSettings({
   notice?: string;
   status: Status;
 }) {
+  const t = useTranslations("settings.billing");
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [confirmDisconnect, setConfirmDisconnect] = useState(false);
@@ -46,76 +49,62 @@ export function BillingSettings({
         </p>
       ) : null}
       <div className="space-y-3">
-        <h2 className="text-lg font-semibold">Payments from your clients</h2>
+        <h2 className="text-lg font-semibold">{t("paymentsHeading")}</h2>
         {status.paymentMode === "bank-transfer" ? (
-          <p className="text-sm text-muted-foreground">
-            Invoices use your bank details. Stripe payment links are disabled for this installation.
-          </p>
+          <p className="text-sm text-muted-foreground">{t("bankTransferOnly")}</p>
         ) : status.mode === "direct" ? (
-          <p className="text-sm text-muted-foreground">
-            Payments use this installation’s Stripe account.
-          </p>
+          <p className="text-sm text-muted-foreground">{t("directMode")}</p>
         ) : (
           <>
-            <p className="text-sm text-muted-foreground">
-              Connect your Stripe account to accept payment on your invoices. Money goes directly to
-              your account. You pay Stripe’s processing fees; Nota adds no fee.
-            </p>
+            <p className="text-sm text-muted-foreground">{t("connectIntro")}</p>
             <p className="text-sm">
               {status.stripeAccountId
                 ? status.chargesEnabled
-                  ? "Stripe connected · Payments enabled"
-                  : "Stripe connected · Setup needs attention"
-                : "Stripe is not connected. Invoices use your bank details without a Pay button."}
+                  ? t("connectedEnabled")
+                  : t("connectedAttention")
+                : t("notConnected")}
             </p>
             {status.stripeAccountId && !status.payoutsEnabled ? (
-              <p className="text-sm text-muted-foreground">
-                Stripe has not enabled bank payouts yet. Complete your account details in Stripe.
-              </p>
+              <p className="text-sm text-muted-foreground">{t("payoutsPending")}</p>
             ) : null}
             {canManage ? (
               <div className="flex flex-wrap gap-2">
                 {!status.chargesEnabled ? (
                   <Button disabled={pending} onClick={() => act("connect")}>
-                    {status.stripeAccountId ? "Continue Stripe setup" : "Connect Stripe"}
+                    {status.stripeAccountId ? t("continueSetup") : t("connect")}
                   </Button>
                 ) : null}
                 {status.stripeAccountId ? (
                   <>
                     <Button disabled={pending} onClick={() => act("refresh")} variant="outline">
-                      Refresh status
+                      {t("refresh")}
                     </Button>
                     <Button
                       disabled={pending}
                       onClick={() => setConfirmDisconnect(true)}
                       variant="ghost"
                     >
-                      Disconnect
+                      {t("disconnect")}
                     </Button>
                   </>
                 ) : null}
               </div>
             ) : (
-              <p className="text-sm text-muted-foreground">
-                The workspace owner can manage Stripe.
-              </p>
+              <p className="text-sm text-muted-foreground">{t("ownerOnly")}</p>
             )}
             {confirmDisconnect ? (
               <div className="space-y-2 rounded-md border p-3">
-                <p className="text-sm">
-                  Disconnect Stripe? New invoices will use bank details only. Existing payment links
-                  remain in your Stripe account; Nota may no longer receive their payment updates.
-                </p>
+                <p className="text-sm">{t("disconnectConfirm")}</p>
                 <div className="flex flex-wrap gap-2">
                   <Button
                     disabled={pending}
                     onClick={() => act("disconnect")}
                     variant="destructive"
                   >
-                    Disconnect Stripe
+                    {t("disconnectStripe")}
                   </Button>
                   <Button onClick={() => setConfirmDisconnect(false)} variant="outline">
-                    Keep connected
+                    {t("keepConnected")}
                   </Button>
                 </div>
               </div>
@@ -124,36 +113,32 @@ export function BillingSettings({
         )}
       </div>
       <div className="space-y-3 border-t pt-6">
-        <h2 className="text-lg font-semibold">Your Nota plan</h2>
+        <h2 className="text-lg font-semibold">{t("planHeading")}</h2>
         <p className="text-sm">
           {status.deploymentMode === "self-hosted"
-            ? "Self-hosted · Unlimited invoices · Free"
+            ? t("planSelfHosted")
             : status.plan === "pro"
-              ? "Nota Pro · Unlimited invoices"
-              : `Nota Free · ${status.sent} of 5 invoices sent this month`}
+              ? t("planPro")
+              : t("planFree", { limit: FREE_INVOICE_LIMIT, sent: status.sent })}
         </p>
         {status.deploymentMode === "hosted" ? (
-          <p className="text-sm text-muted-foreground">
-            Prices are in USD, plus applicable tax calculated at checkout. Every feature is
-            included. Free sends reset on the first day of each month (UTC). Your Nota subscription
-            is separate from your clients’ invoice payments.
-          </p>
+          <p className="text-sm text-muted-foreground">{t("pricingNote")}</p>
         ) : null}
         {canManage && status.deploymentMode === "hosted" ? (
           <div className="flex flex-wrap gap-2">
             {status.plan !== "pro" ? (
               <>
                 <Button disabled={pending} onClick={() => act("month")}>
-                  Upgrade · $9/month
+                  {t("upgradeMonth")}
                 </Button>
                 <Button disabled={pending} onClick={() => act("year")} variant="outline">
-                  Upgrade · $90/year
+                  {t("upgradeYear")}
                 </Button>
               </>
             ) : null}
             {status.hasBillingAccount ? (
               <Button disabled={pending} onClick={() => act("portal")} variant="outline">
-                Manage billing
+                {t("manageBilling")}
               </Button>
             ) : null}
           </div>

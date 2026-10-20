@@ -1,6 +1,7 @@
 "use client";
 
 import { Copy, ExternalLink, MailPlus, Trash2, UserRoundMinus } from "lucide-react";
+import { useLocale, useTranslations } from "next-intl";
 import { useRouter } from "next/navigation";
 import { useActionState, useEffect, useRef, useState } from "react";
 
@@ -32,6 +33,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import type { AuthenticatedRole } from "@/lib/auth";
+import { isAppLocale, toIntlLocale } from "@/lib/i18n";
 
 type Member = {
   createdAt: Date;
@@ -56,16 +58,12 @@ type ActionFeedback = {
   success?: string;
 } | null;
 
-function formatDate(value: Date) {
-  return new Intl.DateTimeFormat("en", {
+function formatDate(value: Date, locale: string) {
+  return new Intl.DateTimeFormat(locale, {
     day: "numeric",
     month: "short",
     year: "numeric",
   }).format(value);
-}
-
-function formatRole(role: AuthenticatedRole) {
-  return role.charAt(0).toUpperCase() + role.slice(1);
 }
 
 function FeedbackBanner({ feedback }: { feedback: ActionFeedback }) {
@@ -95,6 +93,10 @@ export function TeamSettings({
   organizationName: string;
   pendingInvites: Array<PendingInvite>;
 }) {
+  const t = useTranslations("settings.team");
+  const tRoles = useTranslations("common.roles");
+  const appLocale = useLocale();
+  const locale = toIntlLocale(isAppLocale(appLocale) ? appLocale : "en");
   const [feedback, setFeedback] = useState<ActionFeedback>(null);
   const [inviteState, inviteAction, invitePending] = useActionState<InviteMemberState, FormData>(
     inviteMember,
@@ -115,9 +117,9 @@ export function TeamSettings({
   async function handleCopyInvite(inviteUrl: string) {
     try {
       await navigator.clipboard.writeText(inviteUrl);
-      setFeedback({ success: "Invite link copied" });
+      setFeedback({ success: t("inviteLinkCopied") });
     } catch {
-      setFeedback({ error: "Clipboard access is unavailable in this browser" });
+      setFeedback({ error: t("clipboardUnavailable") });
     }
   }
 
@@ -129,7 +131,7 @@ export function TeamSettings({
       return;
     }
 
-    setFeedback({ success: "Member removed" });
+    setFeedback({ success: t("memberRemoved") });
     router.refresh();
   }
 
@@ -141,24 +143,22 @@ export function TeamSettings({
       return;
     }
 
-    setFeedback({ success: "Invite revoked" });
+    setFeedback({ success: t("inviteRevoked") });
     router.refresh();
   }
 
   return (
     <Card data-testid="team-settings">
       <CardHeader>
-        <CardTitle>Team</CardTitle>
-        <CardDescription>
-          Invite teammates to {organizationName} and manage who can access the workspace.
-        </CardDescription>
+        <CardTitle>{t("heading")}</CardTitle>
+        <CardDescription>{t("description", { org: organizationName })}</CardDescription>
       </CardHeader>
       <CardContent className="space-y-8">
         <FeedbackBanner feedback={feedback} />
         {inviteState?.error ? <FeedbackBanner feedback={{ error: inviteState.error }} /> : null}
         {inviteState?.success ? (
           <div className="rounded-xl border border-zinc-200 bg-zinc-50 px-4 py-3 text-sm text-zinc-700">
-            <p>{inviteState.warning ?? "Invite sent"}.</p>
+            <p>{inviteState.warning ?? t("inviteSent")}.</p>
             {inviteState.inviteUrl ? (
               <div className="mt-3 flex flex-wrap gap-2">
                 <Button
@@ -169,12 +169,12 @@ export function TeamSettings({
                   variant="outline"
                 >
                   <Copy className="size-4" />
-                  Copy invite link
+                  {t("copyInviteLink")}
                 </Button>
                 <a href={inviteState.inviteUrl} rel="noreferrer" target="_blank">
                   <Button size="sm" type="button" variant="outline">
                     <ExternalLink className="size-4" />
-                    Open invite
+                    {t("openInvite")}
                   </Button>
                 </a>
               </div>
@@ -184,11 +184,8 @@ export function TeamSettings({
 
         <section className="space-y-4">
           <div>
-            <h2 className="text-sm font-semibold text-zinc-950">Invite teammate</h2>
-            <p className="mt-1 text-sm text-zinc-500">
-              New users can join directly from the invite link and will land inside this
-              organization.
-            </p>
+            <h2 className="text-sm font-semibold text-zinc-950">{t("inviteHeading")}</h2>
+            <p className="mt-1 text-sm text-zinc-500">{t("inviteHint")}</p>
           </div>
 
           <form
@@ -198,18 +195,18 @@ export function TeamSettings({
             ref={formRef}
           >
             <div className="space-y-2">
-              <Label htmlFor="teamInviteEmail">Email</Label>
+              <Label htmlFor="teamInviteEmail">{t("email")}</Label>
               <Input
                 data-testid="team-invite-email"
                 id="teamInviteEmail"
                 name="email"
-                placeholder="teammate@example.com"
+                placeholder={t("emailPlaceholder")}
                 required
                 type="email"
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="teamInviteRole">Role</Label>
+              <Label htmlFor="teamInviteRole">{t("role")}</Label>
               <Select defaultValue="member" name="role">
                 <SelectTrigger
                   className="w-full"
@@ -219,16 +216,16 @@ export function TeamSettings({
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="member">Member</SelectItem>
-                  <SelectItem value="admin">Admin</SelectItem>
-                  <SelectItem value="owner">Owner</SelectItem>
+                  <SelectItem value="member">{tRoles("member")}</SelectItem>
+                  <SelectItem value="admin">{tRoles("admin")}</SelectItem>
+                  <SelectItem value="owner">{tRoles("owner")}</SelectItem>
                 </SelectContent>
               </Select>
             </div>
             <div className="flex items-end">
               <Button data-testid="team-invite-submit" disabled={invitePending} type="submit">
                 <MailPlus className="size-4" />
-                {invitePending ? "Creating..." : "Create invite"}
+                {invitePending ? t("creating") : t("createInvite")}
               </Button>
             </div>
           </form>
@@ -236,20 +233,18 @@ export function TeamSettings({
 
         <section className="space-y-4">
           <div>
-            <h2 className="text-sm font-semibold text-zinc-950">Members</h2>
-            <p className="mt-1 text-sm text-zinc-500">
-              Owners can adjust roles or remove access at any time.
-            </p>
+            <h2 className="text-sm font-semibold text-zinc-950">{t("membersHeading")}</h2>
+            <p className="mt-1 text-sm text-zinc-500">{t("membersHint")}</p>
           </div>
 
           <div className="overflow-hidden rounded-xl border border-zinc-200">
             <Table data-testid="team-members-table">
               <TableHeader>
                 <TableRow>
-                  <TableHead>Member</TableHead>
-                  <TableHead>Role</TableHead>
-                  <TableHead>Joined</TableHead>
-                  <TableHead className="text-right">Actions</TableHead>
+                  <TableHead>{t("columns.member")}</TableHead>
+                  <TableHead>{t("columns.role")}</TableHead>
+                  <TableHead>{t("columns.joined")}</TableHead>
+                  <TableHead className="text-right">{t("columns.actions")}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -260,7 +255,7 @@ export function TeamSettings({
                         <div className="flex items-center gap-2">
                           <span className="font-medium text-zinc-950">{member.name}</span>
                           {member.userId === currentUserId ? (
-                            <Badge variant="outline">You</Badge>
+                            <Badge variant="outline">{t("you")}</Badge>
                           ) : null}
                         </div>
                         <p className="truncate text-sm text-zinc-500">{member.email}</p>
@@ -271,13 +266,15 @@ export function TeamSettings({
                         memberId={member.id}
                         onError={(error) => setFeedback({ error })}
                         onSuccess={() => {
-                          setFeedback({ success: "Member role updated" });
+                          setFeedback({ success: t("roleUpdated") });
                           router.refresh();
                         }}
                         role={member.role}
                       />
                     </TableCell>
-                    <TableCell className="text-zinc-500">{formatDate(member.createdAt)}</TableCell>
+                    <TableCell className="text-zinc-500">
+                      {formatDate(member.createdAt, locale)}
+                    </TableCell>
                     <TableCell className="text-right">
                       <Button
                         className="text-red-600 hover:bg-red-50 hover:text-red-700"
@@ -288,7 +285,7 @@ export function TeamSettings({
                         variant="outline"
                       >
                         <UserRoundMinus className="size-4" />
-                        Remove
+                        {t("remove")}
                       </Button>
                     </TableCell>
                   </TableRow>
@@ -300,25 +297,23 @@ export function TeamSettings({
 
         <section className="space-y-4">
           <div>
-            <h2 className="text-sm font-semibold text-zinc-950">Pending invites</h2>
-            <p className="mt-1 text-sm text-zinc-500">
-              Pending links stay active for seven days unless they are revoked.
-            </p>
+            <h2 className="text-sm font-semibold text-zinc-950">{t("pendingHeading")}</h2>
+            <p className="mt-1 text-sm text-zinc-500">{t("pendingHint")}</p>
           </div>
 
           {pendingInvites.length === 0 ? (
             <div className="rounded-xl border border-dashed border-zinc-200 px-4 py-8 text-sm text-zinc-500">
-              No pending invites.
+              {t("noPending")}
             </div>
           ) : (
             <div className="overflow-hidden rounded-xl border border-zinc-200">
               <Table data-testid="team-pending-invites-table">
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Email</TableHead>
-                    <TableHead>Role</TableHead>
-                    <TableHead>Expires</TableHead>
-                    <TableHead className="text-right">Actions</TableHead>
+                    <TableHead>{t("columns.email")}</TableHead>
+                    <TableHead>{t("columns.role")}</TableHead>
+                    <TableHead>{t("columns.expires")}</TableHead>
+                    <TableHead className="text-right">{t("columns.actions")}</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -328,15 +323,15 @@ export function TeamSettings({
                         <div>
                           <p className="font-medium text-zinc-950">{invite.email}</p>
                           <p className="text-sm text-zinc-500">
-                            Created {formatDate(invite.createdAt)}
+                            {t("created", { date: formatDate(invite.createdAt, locale) })}
                           </p>
                         </div>
                       </TableCell>
                       <TableCell>
-                        <Badge variant="outline">{formatRole(invite.role)}</Badge>
+                        <Badge variant="outline">{tRoles(invite.role)}</Badge>
                       </TableCell>
                       <TableCell className="text-zinc-500">
-                        {formatDate(invite.expiresAt)}
+                        {formatDate(invite.expiresAt, locale)}
                       </TableCell>
                       <TableCell>
                         <div className="flex justify-end gap-2">
@@ -348,7 +343,7 @@ export function TeamSettings({
                             variant="outline"
                           >
                             <Copy className="size-4" />
-                            Copy link
+                            {t("copyLink")}
                           </Button>
                           <a
                             data-testid={`team-open-invite-${invite.id}`}
@@ -358,7 +353,7 @@ export function TeamSettings({
                           >
                             <Button size="sm" type="button" variant="outline">
                               <ExternalLink className="size-4" />
-                              Open
+                              {t("open")}
                             </Button>
                           </a>
                           <Button
@@ -370,7 +365,7 @@ export function TeamSettings({
                             variant="outline"
                           >
                             <Trash2 className="size-4" />
-                            Revoke
+                            {t("revoke")}
                           </Button>
                         </div>
                       </TableCell>
@@ -397,6 +392,7 @@ function MemberRoleControl({
   onSuccess: () => void;
   role: AuthenticatedRole;
 }) {
+  const tRoles = useTranslations("common.roles");
   const [value, setValue] = useState<AuthenticatedRole>(role);
   const [pending, setPending] = useState(false);
 
@@ -436,9 +432,9 @@ function MemberRoleControl({
         <SelectValue />
       </SelectTrigger>
       <SelectContent>
-        <SelectItem value="member">Member</SelectItem>
-        <SelectItem value="admin">Admin</SelectItem>
-        <SelectItem value="owner">Owner</SelectItem>
+        <SelectItem value="member">{tRoles("member")}</SelectItem>
+        <SelectItem value="admin">{tRoles("admin")}</SelectItem>
+        <SelectItem value="owner">{tRoles("owner")}</SelectItem>
       </SelectContent>
     </Select>
   );

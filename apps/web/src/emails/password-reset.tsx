@@ -12,35 +12,46 @@ import {
 } from "@react-email/components";
 
 import { APP_NAME } from "@/lib/app-brand";
+import { getTranslator, type AppLocale } from "@/lib/i18n";
 
-export function PasswordResetEmail({ name, resetUrl }: { name: string; resetUrl: string }) {
-  const preview = `Reset your ${APP_NAME} password`;
+export function passwordResetSubject(locale: AppLocale = "en") {
+  return getTranslator(locale, "emails.passwordReset")("subject", { app: APP_NAME });
+}
+
+export function PasswordResetEmail({
+  locale = "en",
+  name,
+  resetUrl,
+}: {
+  locale?: AppLocale;
+  name: string;
+  resetUrl: string;
+}) {
+  const t = getTranslator(locale, "emails.passwordReset");
 
   return (
     <Html>
       <Head />
-      <Preview>{preview}</Preview>
+      <Preview>{passwordResetSubject(locale)}</Preview>
       <Body style={styles.body}>
         <Container style={styles.container}>
           <Section style={styles.logoSection}>
             <Text style={styles.logo}>{APP_NAME}</Text>
           </Section>
 
-          <Heading style={styles.heading}>Reset your password</Heading>
+          <Heading style={styles.heading}>{t("heading")}</Heading>
 
-          <Text style={styles.text}>Hi {name},</Text>
+          <Text style={styles.text}>{t("greeting", { name })}</Text>
 
-          <Text style={styles.text}>
-            {`Use the button below to set a new password for your ${APP_NAME} account. This link expires in one hour.`}
-          </Text>
+          <Text style={styles.text}>{t("body", { app: APP_NAME })}</Text>
 
           <Section style={styles.buttonSection}>
             <Button href={resetUrl} style={styles.button}>
-              Reset Password
+              {t("button")}
             </Button>
           </Section>
 
-          <Text style={styles.text}>If you did not request this, you can ignore this email.</Text>
+          <Text style={styles.text}>{t("ignore")}</Text>
 
           <Hr style={styles.hr} />
 

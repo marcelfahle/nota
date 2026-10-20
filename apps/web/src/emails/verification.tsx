@@ -15,17 +15,26 @@ import {
   Text,
 } from "@react-email/components";
 
+import { getTranslator, type AppLocale } from "@/lib/i18n";
+
+export function verificationSubject(locale: AppLocale = "en") {
+  return getTranslator(locale, "emails.verification")("subject");
+}
+
 export function VerificationEmail({
+  locale = "en",
   name,
   verificationUrl,
 }: {
+  locale?: AppLocale;
   name: string;
   verificationUrl: string;
 }) {
+  const t = getTranslator(locale, "emails.verification");
   return (
     <Html>
       <Head />
-      <Preview>One quick check before your first invoice.</Preview>
+      <Preview>{t("preview")}</Preview>
       <Body style={styles.body}>
         <Container style={styles.container}>
           <Row style={styles.masthead}>
@@ -42,34 +51,31 @@ export function VerificationEmail({
             </Column>
           </Row>
           <Hr style={styles.rule} />
-          <Text style={styles.eyebrow}>ONE LAST LITTLE THING</Text>
-          <Heading style={styles.heading}>Let’s make it official.</Heading>
-          <Text style={styles.text}>Hi {name},</Text>
-          <Text style={styles.text}>
-            Your first invoice is one step closer. Confirm your email and you’re ready to send with
-            Nota.
-          </Text>
+          <Text style={styles.eyebrow}>{t("eyebrow")}</Text>
+          <Heading style={styles.heading}>{t("heading")}</Heading>
+          <Text style={styles.text}>{t("greeting", { name })}</Text>
+          <Text style={styles.text}>{t("body")}</Text>
           <Section style={styles.action}>
             <Button href={verificationUrl} style={styles.button}>
-              Confirm your email <span aria-hidden="true">→</span>
+              {t("confirm")} <span aria-hidden="true">→</span>
             </Button>
-            <Text style={styles.expiry}>Link valid for one hour.</Text>
+            <Text style={styles.expiry}>{t("expiry")}</Text>
           </Section>
           <Text style={styles.text}>
-            See you inside,
+            {t("signoff")}
             <br />
-            The Nota team
+            {t("team")}
           </Text>
           <Hr style={styles.rule} />
-          <Text style={styles.footer}>Didn’t request this? You can safely ignore this email.</Text>
+          <Text style={styles.footer}>{t("ignore")}</Text>
           <Text style={styles.footer}>
-            Need a hand?{" "}
+            {t("help")}{" "}
             <Link href="mailto:hello@withnota.com" style={styles.link}>
-              Talk to us.
+              {t("talk")}
             </Link>
           </Text>
         </Container>
-        <Text style={styles.tagline}>Less admin. More independent work.</Text>
+        <Text style={styles.tagline}>{t("tagline")}</Text>
       </Body>
     </Html>
   );

@@ -1,3 +1,4 @@
+import { getTranslations } from "next-intl/server";
 import { redirect } from "next/navigation";
 
 import { DeactivatedSignOut } from "@/components/deactivated-sign-out";
@@ -13,6 +14,7 @@ export default async function DeactivatedPage() {
   if (!context.org.deactivatedAt) {
     redirect("/home");
   }
+  const t = await getTranslations("deactivated");
   return (
     <main className="grid min-h-dvh place-items-center bg-background px-5 py-12 text-foreground">
       <div className="w-full max-w-md space-y-5">
@@ -20,11 +22,9 @@ export default async function DeactivatedPage() {
           <NotaGlyph />
           <span className="text-lg font-bold tracking-tight">Nota.</span>
         </div>
-        <h1 className="onboarding-title">This workspace is paused.</h1>
+        <h1 className="onboarding-title">{t("title")}</h1>
         <p className="font-voice text-xl text-muted-foreground">
-          {context.org.name} has been deactivated. Your invoices and clients are still here, and
-          invoices you already sent can still be opened and paid. Write to hello@withnota.com to
-          turn it back on.
+          {t("body", { org: context.org.name })}
         </p>
         <DeactivatedSignOut />
       </div>

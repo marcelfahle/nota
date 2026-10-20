@@ -4,6 +4,7 @@ import { and, eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
+import { localizeError } from "@/lib/action-errors";
 import { getCurrentUser } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { bankAccounts } from "@/lib/db/schema";
@@ -93,13 +94,13 @@ export async function createBankAccount(
 ) {
   const result = bankAccountSchema.safeParse(parseBankAccountFormData(formData));
   if (!result.success) {
-    return { error: result.error.issues[0].message };
+    return { error: await localizeError(result.error.issues[0].message) };
   }
 
   const { org, role, user } = await getCurrentUser();
 
   if (!canManageBankAccounts(role)) {
-    return { error: getInsufficientPermissionsError() };
+    return { error: await localizeError(getInsufficientPermissionsError()) };
   }
 
   const values = buildInsertValues(result.data);
@@ -135,13 +136,13 @@ export async function updateBankAccount(
 ) {
   const result = bankAccountSchema.safeParse(parseBankAccountFormData(formData));
   if (!result.success) {
-    return { error: result.error.issues[0].message };
+    return { error: await localizeError(result.error.issues[0].message) };
   }
 
   const { org, role } = await getCurrentUser();
 
   if (!canManageBankAccounts(role)) {
-    return { error: getInsufficientPermissionsError() };
+    return { error: await localizeError(getInsufficientPermissionsError()) };
   }
 
   const values = buildInsertValues(result.data);
@@ -168,7 +169,7 @@ export async function deleteBankAccount(accountId: string) {
   const { org, role } = await getCurrentUser();
 
   if (!canManageBankAccounts(role)) {
-    return { error: getInsufficientPermissionsError() };
+    return { error: await localizeError(getInsufficientPermissionsError()) };
   }
 
   const [account] = await db
@@ -178,11 +179,15 @@ export async function deleteBankAccount(accountId: string) {
     .limit(1);
 
   if (!account) {
-    return { error: "Account not found" };
+    return { error: await localizeError("Account not found") };
   }
 
   if (account.isDefault) {
-    return { error: "Cannot delete the default account. Set another account as default first." };
+    return {
+      error: await localizeError(
+        "Cannot delete the default account. Set another account as default first.",
+      ),
+    };
   }
 
   await db

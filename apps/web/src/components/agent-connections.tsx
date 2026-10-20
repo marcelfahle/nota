@@ -1,12 +1,14 @@
 "use client";
 
 import { Check, CheckIcon, Copy, ExternalLink } from "lucide-react";
+import { useLocale, useTranslations } from "next-intl";
 import Link from "next/link";
 import posthog from "posthog-js";
 import { useEffect, useState, useTransition, type ReactNode } from "react";
 
 import { disconnectAppAction } from "@/actions/connected-apps";
 import { Button } from "@/components/ui/button";
+import { isAppLocale, toIntlLocale, type AppLocale } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
 const MCP_URL = "https://mcp.withnota.com/mcp";
@@ -23,7 +25,8 @@ type ConnectedApp = {
 const tabs = ["claude", "chatgpt", "terminal"] as const;
 type Tab = (typeof tabs)[number];
 
-function CopyButton({ label = "Copy", value }: { label?: string; value: string }) {
+function CopyButton({ value }: { value: string }) {
+  const t = useTranslations("agents");
   const [status, setStatus] = useState<"idle" | "copied" | "error">("idle");
 
   async function copy() {
@@ -43,7 +46,7 @@ function CopyButton({ label = "Copy", value }: { label?: string; value: string }
       type="button"
     >
       {status === "copied" ? <CheckIcon aria-hidden="true" /> : <Copy aria-hidden="true" />}
-      {status === "copied" ? "Copied" : status === "error" ? "Copy manually" : label}
+      {status === "copied" ? t("copied") : status === "error" ? t("copyManually") : t("copy")}
     </button>
   );
 }
@@ -68,6 +71,7 @@ function Step({
   complete?: boolean;
   number: number;
 }) {
+  const t = useTranslations("agents");
   return (
     <li className="flex gap-3 pb-6 sm:gap-4">
       <span
@@ -77,7 +81,7 @@ function Step({
         )}
       >
         {complete ? <Check aria-hidden="true" className="size-4" /> : number}
-        {complete ? <span className="sr-only">Complete</span> : null}
+        {complete ? <span className="sr-only">{t("complete")}</span> : null}
       </span>
       <div className="min-w-0 flex-1 space-y-2">{children}</div>
     </li>
@@ -95,36 +99,42 @@ function provider(app: ConnectedApp) {
   return null;
 }
 
-function formatConnected(value: string) {
-  return new Intl.DateTimeFormat("en", { day: "numeric", month: "short", year: "numeric" }).format(
-    new Date(value),
-  );
+function useAppLocale(): AppLocale {
+  const locale = useLocale();
+  return isAppLocale(locale) ? locale : "en";
 }
 
-function formatLastUsed(app: ConnectedApp) {
-  const connectedAt = new Date(app.connectedAt).getTime();
-  const lastUsedAt = new Date(app.lastUsedAt).getTime();
-  if (lastUsedAt - connectedAt < 1000) {
-    return "not used yet";
-  }
+function formatConnected(value: string, locale: AppLocale) {
+  return new Intl.DateTimeFormat(toIntlLocale(locale), {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  }).format(new Date(value));
+}
 
-  return `last used ${new Intl.DateTimeFormat("en", {
+function formatLastUsed(app: ConnectedApp, locale: AppLocale) {
+  const lastUsedAt = new Date(app.lastUsedAt).getTime();
+  return new Intl.DateTimeFormat(toIntlLocale(locale), {
     day: "numeric",
     hour: "2-digit",
     minute: "2-digit",
     month: "short",
-  }).format(lastUsedAt)}`;
+  }).format(lastUsedAt);
 }
 
 function ConnectionStatus({ app, onRemoved }: { app: ConnectedApp; onRemoved: () => void }) {
+  const t = useTranslations("agents");
+  const locale = useAppLocale();
   const [pending, startTransition] = useTransition();
+  const unused = new Date(app.lastUsedAt).getTime() - new Date(app.connectedAt).getTime() < 1000;
 
   return (
     <div className="flex flex-wrap items-center justify-between gap-3 border-t py-3.5">
       <div>
-        <p className="font-semibold">{app.name ?? "Connected client"}</p>
+        <p className="font-semibold">{app.name ?? t("connectedClient")}</p>
         <p className="font-mono text-xs">
-          Connected {formatConnected(app.connectedAt)} · {formatLastUsed(app)}
+          {t("connectedOn", { date: formatConnected(app.connectedAt, locale) })} ·{" "}
+          {unused ? t("notUsedYet") : t("lastUsed", { date: formatLastUsed(app, locale) })}
         </p>
       </div>
       <Button
@@ -140,7 +150,7 @@ function ConnectionStatus({ app, onRemoved }: { app: ConnectedApp; onRemoved: ()
         size="sm"
         variant="outline"
       >
-        Remove access
+        {t("removeAccess")}
       </Button>
     </div>
   );
@@ -153,11 +163,12 @@ function ConnectionStatuses({
   apps: Array<ConnectedApp>;
   onRemoved: (clientId: string) => void;
 }) {
+  const t = useTranslations("agents");
   if (apps.length === 0) {
     return (
       <div className="flex items-start gap-2 border-t py-4 font-mono text-sm text-muted-foreground sm:text-xs">
         <span aria-hidden="true" className="size-2 animate-pulse rounded-full bg-foreground" />
-        Waiting for a connection. This page updates itself when one appears.
+        {t("waiting")}
       </div>
     );
   }
@@ -168,24 +179,21 @@ function ConnectionStatuses({
 }
 
 function ExamplesAndPermissions() {
-  const prompts = [
-    "Invoice Oxide for 40 hours in September and send it.",
-    "Who still owes me money, and for how long?",
-    "Halden paid half by transfer. Record it and send a receipt.",
-  ];
+  const t = useTranslations("agents");
+  const prompts = [t("examples.invoice"), t("examples.owed"), t("examples.payment")];
   const permissions = [
-    ["Read invoices, clients and VAT", "allowed"],
-    ["Draft invoices and quotes", "allowed"],
-    ["Send to a client", "asks first"],
-    ["Record payments", "allowed"],
-    ["Delete records", "never"],
-  ];
+    [t("permissions.read"), "allowed"],
+    [t("permissions.draft"), "allowed"],
+    [t("permissions.send"), "asksFirst"],
+    [t("permissions.record"), "allowed"],
+    [t("permissions.delete"), "never"],
+  ] as const;
 
   return (
     <aside className="space-y-7">
       <section aria-labelledby="agent-examples">
         <h2 className="nota-label border-b pb-2.5 text-foreground" id="agent-examples">
-          Then just say
+          {t("examplesHeading")}
         </h2>
         {prompts.map((prompt) => (
           <p className="border-b py-3 font-voice text-lg leading-snug italic" key={prompt}>
@@ -195,7 +203,7 @@ function ExamplesAndPermissions() {
       </section>
       <section aria-labelledby="agent-permissions">
         <h2 className="nota-label border-b pb-2.5 text-foreground" id="agent-permissions">
-          What an agent may do
+          {t("permissionsHeading")}
         </h2>
         <dl>
           {permissions.map(([action, access]) => (
@@ -207,7 +215,7 @@ function ExamplesAndPermissions() {
                   access === "never" && "text-destructive",
                 )}
               >
-                {access}
+                {t(`access.${access}`)}
               </dd>
             </div>
           ))}
@@ -218,6 +226,7 @@ function ExamplesAndPermissions() {
 }
 
 export function AgentConnections({ initialApps }: { initialApps: Array<ConnectedApp> }) {
+  const t = useTranslations("agents");
   const [activeTab, setActiveTab] = useState<Tab>("claude");
   const [apps, setApps] = useState(initialApps);
   const claude = apps.filter((app) => provider(app) === "claude");
@@ -258,23 +267,22 @@ export function AgentConnections({ initialApps }: { initialApps: Array<Connected
     <div className="space-y-7">
       <header className="space-y-3.5">
         <p className="nota-label">
-          Agents <span className="opacity-40">/</span> {apps.length} connected
+          {t("label")} <span className="opacity-40">/</span>{" "}
+          {t("connectedCount", { count: apps.length })}
         </p>
         <h1>
-          Run Nota from <span className="highlighter-swipe">Claude</span>
-          {" or "}
-          <span className="highlighter-swipe">ChatGPT.</span>
+          {t.rich("title", {
+            chatgpt: (chunks) => <span className="highlighter-swipe">{chunks}</span>,
+            claude: (chunks) => <span className="highlighter-swipe">{chunks}</span>,
+          })}
         </h1>
-        <p className="max-w-[38em] font-voice text-xl leading-relaxed">
-          Draft, send, chase and check what you are owed from the chat you already use. It signs in
-          as you, and you can take its access away here at any time.
-        </p>
+        <p className="max-w-[38em] font-voice text-xl leading-relaxed">{t("lead")}</p>
       </header>
 
       <div className="grid items-start gap-10 lg:grid-cols-[minmax(0,3fr)_minmax(240px,2fr)]">
         <section className="min-w-0 rounded-lg border px-4 pt-4 sm:px-6">
           <div
-            aria-label="Choose an assistant"
+            aria-label={t("chooseAssistant")}
             className="mb-6 grid w-full grid-cols-3 gap-1 rounded-lg bg-muted p-1"
             role="tablist"
           >
@@ -311,7 +319,7 @@ export function AgentConnections({ initialApps }: { initialApps: Array<Connected
                 tabIndex={activeTab === tab ? 0 : -1}
                 type="button"
               >
-                {tab === "chatgpt" ? "ChatGPT" : `${tab.slice(0, 1).toUpperCase()}${tab.slice(1)}`}
+                {t(`tabs.${tab}`)}
               </button>
             ))}
           </div>
@@ -324,29 +332,24 @@ export function AgentConnections({ initialApps }: { initialApps: Array<Connected
           >
             <ol>
               <Step complete={claude.length > 0} number={1}>
-                <h2 className="font-semibold">Add Nota to Claude</h2>
-                <p className="text-muted-foreground">
-                  Copy Nota’s server address, open Claude’s custom connector form, and paste it with
-                  the name Nota.
-                </p>
+                <h2 className="font-semibold">{t("claude.step1Title")}</h2>
+                <p className="text-muted-foreground">{t("claude.step1Body")}</p>
                 <Code copy={MCP_URL}>{MCP_URL}</Code>
                 <Button asChild variant="outline">
                   <a href={CLAUDE_URL} rel="noreferrer" target="_blank">
-                    Open Claude <ExternalLink aria-hidden="true" />
+                    {t("claude.open")} <ExternalLink aria-hidden="true" />
                   </a>
                 </Button>
               </Step>
               <Step complete={claude.length > 0} number={2}>
-                <h2 className="font-semibold">Sign in when Claude asks</h2>
-                <p className="text-muted-foreground">
-                  Use your Nota account. Nothing else to copy and no API key to share.
-                </p>
+                <h2 className="font-semibold">{t("claude.step2Title")}</h2>
+                <p className="text-muted-foreground">{t("claude.step2Body")}</p>
               </Step>
             </ol>
             <ConnectionStatuses apps={claude} onRemoved={remove} />
             <details className="border-t py-3.5">
               <summary className="min-h-7 cursor-pointer font-semibold">
-                Using Claude Code or Claude Desktop?
+                {t("claude.desktop")}
               </summary>
               <div className="mt-2.5">
                 <Code copy={`claude mcp add --transport http nota ${MCP_URL}`}>
@@ -364,26 +367,22 @@ export function AgentConnections({ initialApps }: { initialApps: Array<Connected
           >
             <ol>
               <Step complete={chatgpt.length > 0} number={1}>
-                <h2 className="font-semibold">Turn on Developer mode in ChatGPT</h2>
-                <p className="text-muted-foreground">
-                  Open Settings → Security and login, then turn on Developer mode.
-                </p>
+                <h2 className="font-semibold">{t("chatgpt.step1Title")}</h2>
+                <p className="text-muted-foreground">{t("chatgpt.step1Body")}</p>
               </Step>
               <Step complete={chatgpt.length > 0} number={2}>
-                <h2 className="font-semibold">Create an app with this address</h2>
-                <p className="text-muted-foreground">
-                  Name it Nota, use OAuth, and enter Nota’s MCP server URL.
-                </p>
+                <h2 className="font-semibold">{t("chatgpt.step2Title")}</h2>
+                <p className="text-muted-foreground">{t("chatgpt.step2Body")}</p>
                 <Code copy={MCP_URL}>{MCP_URL}</Code>
                 <Button asChild variant="outline">
                   <a href={CHATGPT_URL} rel="noreferrer" target="_blank">
-                    Open ChatGPT plugins <ExternalLink aria-hidden="true" />
+                    {t("chatgpt.open")} <ExternalLink aria-hidden="true" />
                   </a>
                 </Button>
               </Step>
               <Step complete={chatgpt.length > 0} number={3}>
-                <h2 className="font-semibold">Sign in when ChatGPT asks</h2>
-                <p className="text-muted-foreground">Use your Nota account.</p>
+                <h2 className="font-semibold">{t("chatgpt.step3Title")}</h2>
+                <p className="text-muted-foreground">{t("chatgpt.step3Body")}</p>
               </Step>
             </ol>
             <ConnectionStatuses apps={chatgpt} onRemoved={remove} />
@@ -397,33 +396,34 @@ export function AgentConnections({ initialApps }: { initialApps: Array<Connected
           >
             <ol>
               <Step number={1}>
-                <h2 className="font-semibold">Install the CLI from source</h2>
-                <p className="text-muted-foreground">
-                  The package is not published yet. Build the current CLI from the Nota repository.
-                </p>
+                <h2 className="font-semibold">{t("terminal.step1Title")}</h2>
+                <p className="text-muted-foreground">{t("terminal.step1Body")}</p>
                 <Code>{`git clone https://github.com/marcelfahle/nota.git\ncd nota && bun install && bun run build:cli\ncd apps/cli && bun link`}</Code>
               </Step>
               <Step number={2}>
-                <h2 className="font-semibold">Sign in, then bill someone</h2>
-                <p className="text-muted-foreground">
-                  Create an API key in Settings, then enter it privately when the CLI asks.
-                </p>
+                <h2 className="font-semibold">{t("terminal.step2Title")}</h2>
+                <p className="text-muted-foreground">{t("terminal.step2Body")}</p>
                 <Code>{`$ nota login\n$ nota invoices create --client oxide --item "Consulting, 40h @ 120"`}</Code>
               </Step>
             </ol>
             <p className="border-t py-4 text-muted-foreground">
-              Building something? The REST API also uses keys from{" "}
-              <Link className="text-foreground underline underline-offset-4" href="/settings#api">
-                Settings
-              </Link>
-              .
+              {t.rich("terminal.restApi", {
+                link: (chunks) => (
+                  <Link
+                    className="text-foreground underline underline-offset-4"
+                    href="/settings#api"
+                  >
+                    {chunks}
+                  </Link>
+                ),
+              })}
             </p>
           </div>
 
           {other.length > 0 ? (
             <section aria-labelledby="other-connections" className="border-t py-4">
               <h2 className="nota-label pb-2" id="other-connections">
-                Other connections
+                {t("otherConnections")}
               </h2>
               {other.map((app) => (
                 <ConnectionStatus

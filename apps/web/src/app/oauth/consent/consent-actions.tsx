@@ -1,5 +1,6 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -7,6 +8,7 @@ import { authClient } from "@/lib/auth-client";
 import { continueAfterAuth } from "@/lib/auth-redirect";
 
 export function ConsentActions() {
+  const t = useTranslations("consent");
   const [pending, setPending] = useState<"accept" | "deny" | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -17,7 +19,7 @@ export function ConsentActions() {
     const { data, error: consentError } = await authClient.oauth2.consent({ accept });
     if (consentError) {
       setPending(null);
-      setError("This request expired. Start the connection again from the app or CLI.");
+      setError(t("expiredError"));
       return;
     }
     continueAfterAuth(data, "/invoices");
@@ -35,7 +37,7 @@ export function ConsentActions() {
           type="button"
           variant="outline"
         >
-          {pending === "deny" ? "Cancelling..." : "Cancel"}
+          {pending === "deny" ? t("cancelling") : t("cancel")}
         </Button>
         <Button
           className="flex-1"
@@ -44,7 +46,7 @@ export function ConsentActions() {
           onClick={() => decide(true)}
           type="button"
         >
-          {pending === "accept" ? "Connecting..." : "Allow"}
+          {pending === "accept" ? t("connecting") : t("allow")}
         </Button>
       </div>
     </div>

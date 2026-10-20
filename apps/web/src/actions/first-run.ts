@@ -4,6 +4,7 @@ import { and, count, eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
+import { localizeError, localizeMutationError } from "@/lib/action-errors";
 import { getCurrentUser } from "@/lib/auth";
 import { auth } from "@/lib/better-auth";
 import { formatOrgAddress } from "@/lib/branding";
@@ -68,12 +69,12 @@ export async function saveFirstRunProfile(
     taxIdentifierValue: formData.get("taxIdentifierValue"),
   });
   if (!parsed.success) {
-    return { error: parsed.error.issues[0].message };
+    return { error: await localizeError(parsed.error.issues[0].message) };
   }
 
   const { org, role } = await getCurrentUser();
   if (!canManageSettings(role)) {
-    return { error: getInsufficientPermissionsError() };
+    return { error: await localizeError(getInsufficientPermissionsError()) };
   }
 
   const profileSources = { ...(org.profileSources ?? {}) };
@@ -105,10 +106,11 @@ export async function saveFirstRunProfile(
       .where(eq(orgs.id, org.id));
   } catch (error) {
     return {
-      error:
+      error: await localizeError(
         error instanceof TaxIdentifierValidationError
           ? error.message
           : "Could not save legal details",
+      ),
     };
   }
   revalidatePath("/home");
@@ -125,12 +127,12 @@ export async function saveFirstRunBankDetails(
     iban: formData.get("iban"),
   });
   if (!parsed.success) {
-    return { error: parsed.error.issues[0].message };
+    return { error: await localizeError(parsed.error.issues[0].message) };
   }
 
   const { org, role, user } = await getCurrentUser();
   if (!canManageBankAccounts(role)) {
-    return { error: getInsufficientPermissionsError() };
+    return { error: await localizeError(getInsufficientPermissionsError()) };
   }
 
   const iban = formatIban(parsed.data.iban);
@@ -163,14 +165,14 @@ export async function saveFirstRunBankDetails(
 export async function sendFirstRunTestInvoice(invoiceId: string) {
   const currentUser = await getCurrentUser();
   if (!canSendInvoice(currentUser.role)) {
-    return { error: getInsufficientPermissionsError() };
+    return { error: await localizeError(getInsufficientPermissionsError()) };
   }
   const invoice = await getOwnedInvoice(currentUser.org.id, invoiceId);
   if (!invoice || invoice.kind !== "invoice") {
-    return { error: "Invoice not found" };
+    return { error: await localizeError("Invoice not found") };
   }
   if (!currentUser.org.legalName || !formatOrgAddress(currentUser.org)) {
-    return { error: "Add your legal name and address first." };
+    return { error: await localizeError("Add your legal name and address first.") };
   }
   const [bank] = await db
     .select({ id: bankAccounts.id })
@@ -178,7 +180,7 @@ export async function sendFirstRunTestInvoice(invoiceId: string) {
     .where(and(eq(bankAccounts.orgId, currentUser.org.id), eq(bankAccounts.isDefault, true)))
     .limit(1);
   if (!bank) {
-    return { error: "Add your bank details first." };
+    return { error: await localizeError("Add your bank details first.") };
   }
 
   // Until the address is confirmed it could be someone else's, so an
@@ -190,7 +192,7 @@ export async function sendFirstRunTestInvoice(invoiceId: string) {
       .innerJoin(invoices, eq(invoices.id, jobs.invoiceId))
       .where(and(eq(invoices.orgId, currentUser.org.id), eq(jobs.type, "send_invoice_test_email")));
     if (sent >= MAX_UNCONFIRMED_TEST_COPIES) {
-      return { error: "Confirm your email address to send more test copies." };
+      return { error: await localizeError("Confirm your email address to send more test copies.") };
     }
   }
 
@@ -215,7 +217,9 @@ export async function requestFirstSendVerification() {
     });
     return { success: true };
   } catch {
-    return { error: "Could not send the confirmation email. Try again shortly." };
+    return {
+      error: await localizeError("Could not send the confirmation email. Try again shortly."),
+    };
   }
 }
 
@@ -227,12 +231,12 @@ export async function sendFirstInvoice(invoiceId: string) {
     .where(and(eq(invoices.id, invoiceId), eq(invoices.orgId, currentUser.org.id)))
     .limit(1);
   if (!invoice[0]) {
-    return { error: "Invoice not found" };
+    return { error: await localizeError("Invoice not found") };
   }
   const result = await sendInvoice(serviceContext(currentUser), invoiceId);
   if ("error" in result) {
     return {
-      error: result.error,
+      error: await localizeMutationError(result),
       verificationRequired: result.error === EMAIL_VERIFICATION_REQUIRED,
     };
   }

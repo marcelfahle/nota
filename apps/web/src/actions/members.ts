@@ -5,7 +5,8 @@ import { randomBytes } from "node:crypto";
 import { and, eq, isNull } from "drizzle-orm";
 import { z } from "zod";
 
-import { InviteEmail } from "@/emails/invite";
+import { InviteEmail, inviteSubject } from "@/emails/invite";
+import { localizeError } from "@/lib/action-errors";
 import { getCurrentUser } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { invites, orgMembers, orgRoleEnum, orgs, users } from "@/lib/db/schema";
@@ -37,7 +38,7 @@ async function requireOwnerContext() {
   const context = await getCurrentUser();
 
   if (!canManageMembers(context.role)) {
-    return { error: getInsufficientPermissionsError() };
+    return { error: await localizeError(getInsufficientPermissionsError()) };
   }
 
   return { context };
@@ -55,7 +56,7 @@ async function countOwners(tx: Parameters<Parameters<typeof db.transaction>[0]>[
 export async function inviteMember(_prevState: InviteMemberState, formData: FormData) {
   const ownerResult = await requireOwnerContext();
   if ("error" in ownerResult) {
-    return { error: ownerResult.error };
+    return { error: await localizeError(ownerResult.error) };
   }
 
   const result = inviteSchema.safeParse({
@@ -64,7 +65,7 @@ export async function inviteMember(_prevState: InviteMemberState, formData: Form
   });
 
   if (!result.success) {
-    return { error: result.error.issues[0].message };
+    return { error: await localizeError(result.error.issues[0].message) };
   }
 
   const {
@@ -79,7 +80,7 @@ export async function inviteMember(_prevState: InviteMemberState, formData: Form
     .limit(1);
 
   if (existingMember) {
-    return { error: "That user is already a member of this organization" };
+    return { error: await localizeError("That user is already a member of this organization") };
   }
 
   const [existingInvite] = await db
@@ -119,20 +120,20 @@ export async function inviteMember(_prevState: InviteMemberState, formData: Form
       throw new Error("APP_URL must be configured for invite emails");
     }
 
+    // The invitee has no account yet, so the invite speaks the inviter's language.
+    const orgName = org.businessName ?? org.name;
     await sendEmail({
-      react: InviteEmail({
-        inviteUrl,
-        orgName: org.businessName ?? org.name,
-        role: result.data.role,
-      }),
-      subject: `You've been invited to join ${org.businessName ?? org.name} on Nota`,
+      react: InviteEmail({ inviteUrl, locale: user.locale, orgName, role: result.data.role }),
+      subject: inviteSubject({ locale: user.locale, orgName }),
       to: [result.data.email],
     });
   } catch {
     return {
       inviteUrl,
       success: true,
-      warning: "Invite created, but the email could not be sent. Share the link manually.",
+      warning: await localizeError(
+        "Invite created, but the email could not be sent. Share the link manually.",
+      ),
     };
   }
 
@@ -142,7 +143,7 @@ export async function inviteMember(_prevState: InviteMemberState, formData: Form
 export async function removeMember(memberId: string) {
   const ownerResult = await requireOwnerContext();
   if ("error" in ownerResult) {
-    return { error: ownerResult.error };
+    return { error: await localizeError(ownerResult.error) };
   }
 
   const {
@@ -157,11 +158,11 @@ export async function removeMember(memberId: string) {
       .limit(1);
 
     if (!member) {
-      return { error: "Member not found" };
+      return { error: await localizeError("Member not found") };
     }
 
     if (member.role === "owner" && (await countOwners(tx, org.id)) <= 1) {
-      return { error: "Cannot remove the last owner" };
+      return { error: await localizeError("Cannot remove the last owner") };
     }
 
     await tx.delete(orgMembers).where(eq(orgMembers.id, memberId));
@@ -175,12 +176,12 @@ export async function updateMemberRole(
 ) {
   const ownerResult = await requireOwnerContext();
   if ("error" in ownerResult) {
-    return { error: ownerResult.error };
+    return { error: await localizeError(ownerResult.error) };
   }
 
   const roleResult = memberRoleSchema.safeParse({ role });
   if (!roleResult.success) {
-    return { error: roleResult.error.issues[0].message };
+    return { error: await localizeError(roleResult.error.issues[0].message) };
   }
 
   const {
@@ -195,7 +196,7 @@ export async function updateMemberRole(
       .limit(1);
 
     if (!member) {
-      return { error: "Member not found" };
+      return { error: await localizeError("Member not found") };
     }
 
     if (
@@ -203,7 +204,7 @@ export async function updateMemberRole(
       roleResult.data.role !== "owner" &&
       (await countOwners(tx, org.id)) <= 1
     ) {
-      return { error: "Cannot demote the last owner" };
+      return { error: await localizeError("Cannot demote the last owner") };
     }
 
     await tx
@@ -217,7 +218,7 @@ export async function updateMemberRole(
 export async function listMembers() {
   const ownerResult = await requireOwnerContext();
   if ("error" in ownerResult) {
-    return { error: ownerResult.error };
+    return { error: await localizeError(ownerResult.error) };
   }
 
   const {
@@ -266,7 +267,7 @@ export async function listMembers() {
 export async function revokeInvite(inviteId: string) {
   const ownerResult = await requireOwnerContext();
   if ("error" in ownerResult) {
-    return { error: ownerResult.error };
+    return { error: await localizeError(ownerResult.error) };
   }
 
   const {
@@ -280,7 +281,7 @@ export async function revokeInvite(inviteId: string) {
     .limit(1);
 
   if (!invite) {
-    return { error: "Invite not found" };
+    return { error: await localizeError("Invite not found") };
   }
 
   await db.delete(invites).where(eq(invites.id, inviteId));

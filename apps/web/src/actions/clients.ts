@@ -4,6 +4,7 @@ import { and, eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
+import { localizeError } from "@/lib/action-errors";
 import { getCurrentUser } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { bankAccounts, clients } from "@/lib/db/schema";
@@ -71,7 +72,7 @@ export async function createClient(
 
   const result = clientSchema.safeParse(raw);
   if (!result.success) {
-    return { error: result.error.issues[0].message };
+    return { error: await localizeError(result.error.issues[0].message) };
   }
 
   const { org, user } = await getCurrentUser();
@@ -83,7 +84,7 @@ export async function createClient(
       .limit(1);
 
     if (!bankAccount) {
-      return { error: "Invalid bank account" };
+      return { error: await localizeError("Invalid bank account") };
     }
   }
 
@@ -97,8 +98,9 @@ export async function createClient(
     });
   } catch (error) {
     return {
-      error:
+      error: await localizeError(
         error instanceof TaxIdentifierValidationError ? error.message : "Could not save the client",
+      ),
     };
   }
 
@@ -115,7 +117,7 @@ export async function updateClient(
 
   const result = clientSchema.safeParse(raw);
   if (!result.success) {
-    return { error: result.error.issues[0].message };
+    return { error: await localizeError(result.error.issues[0].message) };
   }
 
   const { org } = await getCurrentUser();
@@ -126,7 +128,7 @@ export async function updateClient(
     .limit(1);
 
   if (!client) {
-    return { error: "Client not found" };
+    return { error: await localizeError("Client not found") };
   }
 
   if (result.data.bankAccountId) {
@@ -137,7 +139,7 @@ export async function updateClient(
       .limit(1);
 
     if (!bankAccount) {
-      return { error: "Invalid bank account" };
+      return { error: await localizeError("Invalid bank account") };
     }
   }
 
@@ -153,8 +155,9 @@ export async function updateClient(
       .where(and(eq(clients.id, clientId), eq(clients.orgId, org.id)));
   } catch (error) {
     return {
-      error:
+      error: await localizeError(
         error instanceof TaxIdentifierValidationError ? error.message : "Could not save the client",
+      ),
     };
   }
 

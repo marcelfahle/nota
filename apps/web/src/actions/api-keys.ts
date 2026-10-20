@@ -3,6 +3,7 @@
 import { and, eq } from "drizzle-orm";
 import { z } from "zod";
 
+import { localizeError } from "@/lib/action-errors";
 import { createApiKey } from "@/lib/api-auth";
 import { getCurrentUser } from "@/lib/auth";
 import { db } from "@/lib/db";
@@ -25,7 +26,7 @@ async function requireApiKeyManager() {
   const context = await getCurrentUser();
 
   if (!canManageApiKeys(context.role)) {
-    return { error: getInsufficientPermissionsError() };
+    return { error: await localizeError(getInsufficientPermissionsError()) };
   }
 
   return { context };
@@ -34,7 +35,7 @@ async function requireApiKeyManager() {
 export async function createApiKeyAction(_prevState: CreateApiKeyState, formData: FormData) {
   const permissionResult = await requireApiKeyManager();
   if ("error" in permissionResult) {
-    return { error: permissionResult.error };
+    return { error: await localizeError(permissionResult.error) };
   }
 
   const result = createApiKeySchema.safeParse({
@@ -42,7 +43,7 @@ export async function createApiKeyAction(_prevState: CreateApiKeyState, formData
   });
 
   if (!result.success) {
-    return { error: result.error.issues[0].message };
+    return { error: await localizeError(result.error.issues[0].message) };
   }
 
   const {
@@ -61,7 +62,7 @@ export async function createApiKeyAction(_prevState: CreateApiKeyState, formData
 export async function deleteApiKeyAction(apiKeyId: string) {
   const permissionResult = await requireApiKeyManager();
   if ("error" in permissionResult) {
-    return { error: permissionResult.error };
+    return { error: await localizeError(permissionResult.error) };
   }
 
   const {
@@ -75,7 +76,7 @@ export async function deleteApiKeyAction(apiKeyId: string) {
     .limit(1);
 
   if (!existingApiKey) {
-    return { error: "API key not found" };
+    return { error: await localizeError("API key not found") };
   }
 
   await db.delete(apiKeys).where(eq(apiKeys.id, apiKeyId));
