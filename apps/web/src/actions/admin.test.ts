@@ -52,7 +52,6 @@ mock.module("next/headers", () => ({
 const authModule = await import("@/lib/auth");
 mock.module("@/lib/db", () => ({ db }));
 mock.module("@/lib/auth", () => ({ ...authModule, requireSuperAdmin: async () => admin }));
-mock.module("@/lib/admin-delete", () => ({ deleteWorkspace: async () => ({ error: "unused" }) }));
 mock.module("next/cache", () => ({ revalidatePath: () => {} }));
 
 const { setGlobalModel, setWorkspaceActive, startViewAs } = await import("./admin");
