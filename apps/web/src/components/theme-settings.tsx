@@ -1,10 +1,12 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import { useOptimistic, useState, useTransition } from "react";
 
 import { updateTheme } from "@/actions/theme";
 
 export function ThemeSettings({ theme }: { theme: "system" | "light" | "dark" }) {
+  const t = useTranslations("settings.theme");
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState("");
   const [selectedTheme, setSelectedTheme] = useOptimistic<string>(theme);
@@ -12,13 +14,11 @@ export function ThemeSettings({ theme }: { theme: "system" | "light" | "dark" })
   return (
     <section aria-labelledby="appearance-heading" className="space-y-3">
       <h2 className="text-sm font-semibold" id="appearance-heading">
-        Appearance
+        {t("heading")}
       </h2>
-      <p className="text-sm text-muted-foreground">
-        Paper by day, Terminal by night. Saved to your account.
-      </p>
+      <p className="text-sm text-muted-foreground">{t("description")}</p>
       <div className="flex items-center gap-4 text-sm">
-        <label htmlFor="theme-preference">Theme</label>
+        <label htmlFor="theme-preference">{t("label")}</label>
         <select
           className="rounded-md border border-input bg-card px-3 py-2"
           disabled={pending}
@@ -31,15 +31,15 @@ export function ThemeSettings({ theme }: { theme: "system" | "light" | "dark" })
               try {
                 await updateTheme(value);
               } catch {
-                setError("Could not save your theme. Please try again.");
+                setError(t("error"));
               }
             });
           }}
           value={selectedTheme}
         >
-          <option value="system">System</option>
-          <option value="light">Light</option>
-          <option value="dark">Dark</option>
+          <option value="system">{t("system")}</option>
+          <option value="light">{t("light")}</option>
+          <option value="dark">{t("dark")}</option>
         </select>
       </div>
       {error ? (

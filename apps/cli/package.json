@@ -10,6 +10,7 @@
     "nota"
   ],
   "homepage": "https://github.com/marcelfahle/nota/tree/main/apps/cli",
+  "bugs": "https://github.com/marcelfahle/nota/issues",
   "license": "MIT",
   "repository": {
     "type": "git",

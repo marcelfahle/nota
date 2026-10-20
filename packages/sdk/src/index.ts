@@ -58,12 +58,24 @@ export type MeResponse = {
   user: NotaUser;
 };
 
+export type TaxTreatment = "standard" | "zero_rated" | "exempt_small_business" | "reverse_charge";
+
 export type ClientRecord = {
   id: string;
   name: string;
   email: string;
   company?: string | null;
+  /** Legacy free text. Prefer the structured fields. */
   address?: string | null;
+  street?: string | null;
+  postalCode?: string | null;
+  city?: string | null;
+  /** ISO 3166-1 alpha-2. */
+  countryCode?: string | null;
+  /** German public authority; invoices need a Leitweg-ID. */
+  publicSector?: boolean;
+  /** Leitweg-ID or standing PO reference copied onto new invoices. */
+  defaultBuyerReference?: string | null;
   defaultCurrency?: string | null;
   notes?: string | null;
   taxIdentifier?: TaxIdentifier | null;
@@ -84,7 +96,14 @@ export type ClientCreateInput = {
   name: string;
   email: string;
   company?: string;
+  /** @deprecated Use street, postalCode, city and countryCode. */
   address?: string;
+  street?: string | null;
+  postalCode?: string | null;
+  city?: string | null;
+  countryCode?: string | null;
+  publicSector?: boolean;
+  defaultBuyerReference?: string | null;
   defaultCurrency?: string;
   notes?: string;
   taxIdentifier?: TaxIdentifierInput | null;
@@ -176,7 +195,16 @@ export type InvoiceDetail = {
   total: string | null;
   notes?: string | null;
   internalNotes?: string | null;
+  taxTreatment: TaxTreatment;
+  /** @deprecated Mirrors taxTreatment === "reverse_charge". */
   reverseCharge: boolean | string;
+  /** Leistungsdatum or Leistungszeitraum; start equals end for a single day. */
+  servicePeriodStart: string | null;
+  servicePeriodEnd: string | null;
+  /** BT-10: Leitweg-ID or the buyer's reference. */
+  buyerReference: string | null;
+  /** What still blocks issuance. Empty for issued documents. */
+  issueProblems: Array<string>;
   issuedAt: string;
   dueAt: string;
   paidAt?: string | null;
@@ -220,10 +248,17 @@ export type InvoiceCreateInput = {
   dueAt: string;
   notes?: string;
   internalNotes?: string;
+  /** Defaults to the workspace setting. */
+  taxTreatment?: TaxTreatment;
+  /** @deprecated Use taxTreatment: "reverse_charge". */
   reverseCharge?: boolean;
   taxRate?: number | string;
+  servicePeriodStart?: string | null;
+  servicePeriodEnd?: string | null;
+  buyerReference?: string | null;
   lineItems: Array<InvoiceLineItemInput>;
 };
+
 
 export type InvoiceUpdateInput = InvoiceCreateInput;
 
@@ -268,6 +303,8 @@ type FetchLike = typeof fetch;
 
 type JsonErrorResponse = {
   error?: string;
+  /** Set on 422 responses: each thing to fix before the invoice can be issued or exported. */
+  problems?: Array<string>;
 };
 
 type JsonDataResponse<T> = {

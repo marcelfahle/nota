@@ -1,6 +1,7 @@
 "use client";
 
 import { ArrowLeft, BadgeCheck, Copy, Download, FileCode, Pencil, Send } from "lucide-react";
+import { useTranslations } from "next-intl";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import posthog from "posthog-js";
@@ -35,10 +36,14 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import type { AuthenticatedRole } from "@/lib/auth";
+import { parseInvoiceAttachments } from "@/lib/e-invoice-delivery";
+import { toIntlLocale, type AppLocale } from "@/lib/i18n";
+import { invoiceActivityText } from "@/lib/invoice-activity";
 import {
   canCancelInvoice as canCancelStatus,
   normalizeInvoiceStatus,
 } from "@/lib/invoice-lifecycle";
+import { translateProblem } from "@/lib/invoice-problems";
 import {
   canCancelInvoice,
   canDeleteInvoice,
@@ -46,7 +51,15 @@ import {
   canSendInvoice,
   canSendInvoiceReminder,
 } from "@/lib/roles";
-import { formatCurrency } from "@/lib/utils";
+import { type TaxTreatment, taxTreatmentNote } from "@/lib/tax-treatment";
+import {
+  cn,
+  formatCurrency,
+  formatDate,
+  formatNumber,
+  formatQuantity,
+  type Locale,
+} from "@/lib/utils";
 
 type ActivityEntry = {
   action: string;
@@ -57,19 +70,29 @@ type ActivityEntry = {
   sourceClient: string | null;
 };
 
+type StoredDocument = {
+  byteSize: number;
+  createdAt: string;
+  id: string;
+  kind: "pdf" | "xrechnung";
+  sha256: string;
+};
+
 type InvoiceDetailProps = {
   activities: Array<ActivityEntry>;
   business: {
     address: string | null;
     brandColor: string | null;
-    city: string | null;
-    country: string | null;
     logoUrl: string | null;
     name: string;
-    region: string | null;
   };
+  /** The language the document is written in: statutory notes follow it, not the UI. */
+  documentLocale: AppLocale;
+  /** Issued originals, exactly as the customer received them. */
+  documents: Array<StoredDocument>;
   invoice: {
     balance: string;
+    buyerReference: string | null;
     client: {
       address?: string | null;
       company?: string | null;
@@ -88,6 +111,7 @@ type InvoiceDetailProps = {
     dueAt: string;
     id: string;
     issuedAt: string;
+    issueProblems: Array<string>;
     kind: "credit_note" | "invoice";
     lineItems: Array<{
       amount: string;
@@ -99,35 +123,61 @@ type InvoiceDetailProps = {
     notes: string | null;
     number: string;
     paidAmount: string;
-    reverseCharge: string | null;
+    servicePeriodEnd: string | null;
+    servicePeriodStart: string | null;
     settlementStatus: "paid" | "partially_paid" | "unpaid";
     status: string | null;
     subtotal: string | null;
     taxAmount: string | null;
     taxRate: string | null;
+    taxTreatment: TaxTreatment;
     total: string | null;
     viewCount: number;
   };
+  /** The member's UI language; the document itself keeps its own. */
+  locale: AppLocale;
   role: AuthenticatedRole;
 };
 
-const ACTIVITY_LABELS: Record<string, string> = {
-  cancelled: "Invoice cancelled",
-  created: "Invoice created",
-  marked_overdue: "Invoice marked overdue",
-  paid: "Payment recorded",
-  reminder_sent: "Payment reminder sent",
-  sent: "Invoice sent",
-  viewed: "Invoice opened",
-};
+const ACTIVITY_ACTIONS = [
+  "cancelled",
+  "created",
+  "credited",
+  "marked_overdue",
+  "paid",
+  "proposal_approved",
+  "reminder_sent",
+  "sent",
+  "viewed",
+] as const;
 
-function formatDate(value: string) {
-  return new Intl.DateTimeFormat("en-GB", {
-    day: "numeric",
-    month: "short",
-    timeZone: "UTC",
-    year: "numeric",
-  }).format(new Date(value));
+type ActivityAction = (typeof ACTIVITY_ACTIONS)[number];
+
+function isActivityAction(action: string): action is ActivityAction {
+  return (ACTIVITY_ACTIONS as ReadonlyArray<string>).includes(action);
+}
+
+type Translate = ReturnType<typeof useTranslations<"invoiceDetail">>;
+
+function formatBytes(size: number) {
+  return size < 1024 ? `${size} B` : `${Math.round(size / 1024)} KB`;
+}
+
+/** The invoice a history entry points at: the credit note, or the original it corrects. */
+function relatedInvoiceId(metadata: unknown) {
+  const record =
+    metadata && typeof metadata === "object" ? (metadata as Record<string, unknown>) : null;
+  const id = record?.creditNoteId ?? record?.creditsInvoiceId;
+  return typeof id === "string" ? id : null;
+}
+
+function formatServicePeriod(start: string | null, end: string | null, locale: Locale) {
+  if (!start || !end) {
+    return null;
+  }
+  return start === end
+    ? formatDate(start, locale)
+    : `${formatDate(start, locale)} – ${formatDate(end, locale)}`;
 }
 
 function daysUntil(value: string) {
@@ -137,45 +187,74 @@ function daysUntil(value: string) {
   return Math.ceil((due.getTime() - today.getTime()) / 86_400_000);
 }
 
-function sourceLabel(activity: ActivityEntry) {
+function sourceLabel(activity: ActivityEntry, t: Translate) {
   if (activity.sourceClient) {
     return activity.sourceClient;
   }
   if (activity.source === "chat") {
-    return "Nota Chat";
+    return t("source.chat");
   }
   if (activity.source === "system" && activity.action === "paid") {
-    return "Stripe";
+    return t("source.stripe");
   }
   if (activity.source === "system" && activity.action === "viewed") {
-    return "public invoice";
+    return t("source.publicPage");
   }
   if (activity.source === "api") {
-    return "API";
+    return t("source.api");
   }
   if (activity.source === "cli") {
-    return "Nota CLI";
+    return t("source.cli");
   }
   if (activity.source === "mcp") {
-    return "MCP";
+    return t("source.mcp");
   }
-  return "Nota";
+  return t("source.nota");
 }
 
-function activityText(activity: ActivityEntry, currency: string) {
+/** The history line in the member's language; anything newer than the message list stays English. */
+function activityText(activity: ActivityEntry, currency: string, locale: Locale, t: Translate) {
   const metadata =
     activity.metadata && typeof activity.metadata === "object"
       ? (activity.metadata as Record<string, unknown>)
       : null;
   if (activity.action === "paid" && typeof metadata?.amount === "string") {
-    return `${formatCurrency(Number(metadata.amount), currency)} payment recorded`;
+    return t("activity.paymentRecorded", {
+      amount: formatCurrency(Number(metadata.amount), currency, locale),
+    });
   }
-  return ACTIVITY_LABELS[activity.action] ?? activity.action.replaceAll("_", " ");
+  if (activity.action === "created" && typeof metadata?.originalNumber === "string") {
+    return t("activity.creditNoteCreated", { number: metadata.originalNumber });
+  }
+  if (activity.action === "credited" && typeof metadata?.creditNoteNumber === "string") {
+    return t("activity.creditedBy", { number: metadata.creditNoteNumber });
+  }
+  if (activity.action === "sent" && Array.isArray(metadata?.attachments)) {
+    return parseInvoiceAttachments(metadata.attachments).includes("xml")
+      ? t("activity.sentWithXml")
+      : t("activity.sentWithPdf");
+  }
+  if (isActivityAction(activity.action)) {
+    return t(`activity.${activity.action}`);
+  }
+  return invoiceActivityText(activity, currency);
 }
 
-export function InvoiceDetailView({ activities, business, invoice, role }: InvoiceDetailProps) {
+export function InvoiceDetailView({
+  activities,
+  business,
+  documentLocale,
+  documents,
+  invoice,
+  locale: language,
+  role,
+}: InvoiceDetailProps) {
+  const t = useTranslations("invoiceDetail");
+  const tTreatment = useTranslations("taxTreatment");
+  const tProblems = useTranslations("problems");
   const router = useRouter();
   const currency = invoice.currency ?? "EUR";
+  const locale = toIntlLocale(language);
   const status = normalizeInvoiceStatus(invoice.status);
   const total = Number(invoice.total ?? 0);
   const paid = Number(invoice.paidAmount);
@@ -268,8 +347,11 @@ export function InvoiceDetailView({ activities, business, invoice, role }: Invoi
   }
 
   async function handleDestructiveAction(action: "cancel" | "delete") {
-    const verb = action === "delete" ? "delete" : "cancel";
-    if (!window.confirm(`Are you sure you want to ${verb} ${invoice.number}?`)) {
+    const question =
+      action === "delete"
+        ? t("confirmDelete", { number: invoice.number })
+        : t("confirmCancel", { number: invoice.number });
+    if (!window.confirm(question)) {
       return;
     }
     setPending(action);
@@ -290,18 +372,53 @@ export function InvoiceDetailView({ activities, business, invoice, role }: Invoi
     setPending(null);
   }
 
+  const servicePeriod = formatServicePeriod(
+    invoice.servicePeriodStart,
+    invoice.servicePeriodEnd,
+    locale,
+  );
+  const taxNote = taxTreatmentNote(invoice.taxTreatment, documentLocale);
+  const showVat = invoice.taxTreatment !== "exempt_small_business";
   const stamp =
     invoice.kind === "credit_note"
       ? status === "cancelled"
-        ? "Cancelled"
+        ? t("stamp.cancelled")
         : null
       : invoice.settlementStatus === "partially_paid"
-        ? "Part paid"
+        ? t("stamp.part_paid")
         : invoice.settlementStatus === "paid"
-          ? "Paid"
+          ? t("stamp.paid")
           : status === "cancelled"
-            ? "Cancelled"
+            ? t("stamp.cancelled")
             : null;
+
+  // One list, newest first: what happened and the originals stored at issuance.
+  const history = [
+    ...activities.map((activity) => ({
+      createdAt: activity.createdAt,
+      detail: t("via", {
+        date: formatDate(activity.createdAt, locale),
+        source: sourceLabel(activity, t),
+      }),
+      href: null,
+      id: activity.id,
+      relatedId: relatedInvoiceId(activity.metadata),
+      text: activityText(activity, currency, locale, t),
+    })),
+    ...documents.map((document) => ({
+      createdAt: document.createdAt,
+      detail: t("documentDetail", {
+        date: formatDate(document.createdAt, locale),
+        sha: document.sha256.slice(0, 12),
+        size: formatBytes(document.byteSize),
+      }),
+      href: `/api/invoices/${invoice.id}/${document.kind === "pdf" ? "pdf" : "xrechnung"}`,
+      id: document.id,
+      relatedId: null,
+      text:
+        document.kind === "pdf" ? t("activity.originalPdfStored") : t("activity.originalXmlStored"),
+    })),
+  ].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 
   return (
     <article aria-labelledby="invoice-title" className="min-w-0 space-y-6">
@@ -311,17 +428,17 @@ export function InvoiceDetailView({ activities, business, invoice, role }: Invoi
           href="/invoices"
         >
           <ArrowLeft className="size-3.5" />
-          Invoices / {invoice.kind === "credit_note" ? "Credit note" : "Invoice"}
+          {t("breadcrumb", { kind: t(`kind.${invoice.kind}`) })}
         </Link>
         <div className="flex flex-col justify-between gap-4 lg:flex-row lg:items-end">
           <h1 className="break-words" id="invoice-title">
             {invoice.number}{" "}
             <span className="font-normal text-muted-foreground">{invoice.client.name}</span>
           </h1>
-          <div aria-label="Invoice actions" className="flex flex-wrap gap-2">
+          <div aria-label={t("actions")} className="flex flex-wrap gap-2">
             <Button asChild size="sm" variant="outline">
               <a href={`/api/invoices/${invoice.id}/pdf`} rel="noopener noreferrer" target="_blank">
-                <Download /> PDF
+                <Download /> {t("pdf")}
               </a>
             </Button>
             <Button asChild size="sm" variant="outline">
@@ -330,7 +447,7 @@ export function InvoiceDetailView({ activities, business, invoice, role }: Invoi
                 rel="noopener noreferrer"
                 target="_blank"
               >
-                <FileCode /> XRechnung
+                <FileCode /> {t("xrechnung")}
               </a>
             </Button>
             {invoice.kind === "invoice" && ["sent", "overdue", "paid"].includes(status) ? (
@@ -340,7 +457,7 @@ export function InvoiceDetailView({ activities, business, invoice, role }: Invoi
                 size="sm"
                 variant="outline"
               >
-                {pending === "credit-note" ? "Creating…" : "Credit note"}
+                {pending === "credit-note" ? t("creating") : t("creditNote")}
               </Button>
             ) : null}
             <Button
@@ -349,13 +466,13 @@ export function InvoiceDetailView({ activities, business, invoice, role }: Invoi
               size="sm"
               variant="outline"
             >
-              <Copy /> {pending === "duplicate" ? "Duplicating…" : "Duplicate"}
+              <Copy /> {pending === "duplicate" ? t("duplicating") : t("duplicate")}
             </Button>
             {status === "draft" ? (
               <>
                 <Button asChild size="sm" variant="outline">
                   <Link href={`/invoices/${invoice.id}/edit`}>
-                    <Pencil /> Edit
+                    <Pencil /> {t("edit")}
                   </Link>
                 </Button>
                 {canSendInvoice(role) ? (
@@ -366,7 +483,7 @@ export function InvoiceDetailView({ activities, business, invoice, role }: Invoi
                       onClick={() => runAction("send", () => sendInvoice(invoice.id))}
                       size="sm"
                     >
-                      <Send /> {pending === "send" ? "Sending…" : "Send invoice"}
+                      <Send /> {pending === "send" ? t("sending") : t("sendInvoice")}
                     </Button>
                     <Button
                       data-testid="invoice-mark-sent"
@@ -375,7 +492,7 @@ export function InvoiceDetailView({ activities, business, invoice, role }: Invoi
                       size="sm"
                       variant="outline"
                     >
-                      {pending === "mark-sent" ? "Marking…" : "Mark sent"}
+                      {pending === "mark-sent" ? t("marking") : t("markSent")}
                     </Button>
                   </>
                 ) : null}
@@ -389,7 +506,7 @@ export function InvoiceDetailView({ activities, business, invoice, role }: Invoi
                 }}
                 size="sm"
               >
-                Record payment
+                {t("recordPayment")}
               </Button>
             ) : null}
           </div>
@@ -406,11 +523,29 @@ export function InvoiceDetailView({ activities, business, invoice, role }: Invoi
             {message.text}
           </p>
         ) : null}
+        {status === "draft" && invoice.issueProblems.length ? (
+          <div
+            className="rounded-md border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-950"
+            data-testid="invoice-issue-problems"
+            role="status"
+          >
+            <p className="font-medium">{t("fixBefore")}</p>
+            <ul className="mt-1.5 list-disc space-y-1 pl-5">
+              {invoice.issueProblems.map((problem) => (
+                <li key={problem}>
+                  {translateProblem(problem, tProblems, (treatment) =>
+                    tTreatment(`labels.${treatment}`),
+                  )}
+                </li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
       </header>
 
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1.45fr)_minmax(280px,0.55fr)]">
         <section
-          aria-label="Invoice preview"
+          aria-label={t("preview")}
           className="overflow-hidden rounded-lg border p-4 sm:p-8"
           style={{
             backgroundColor: "var(--paper-2)",
@@ -418,7 +553,13 @@ export function InvoiceDetailView({ activities, business, invoice, role }: Invoi
             backgroundSize: "8px 8px",
           }}
         >
-          <div className="invoice-paper relative mx-auto min-h-[720px] max-w-[720px] border p-7 shadow-sm sm:p-12">
+          <div
+            className={cn(
+              "invoice-paper relative mx-auto min-h-[720px] max-w-[720px] border p-7 shadow-sm sm:p-12",
+              // The pay bar sits at the foot of the paper; long notes must not run under it.
+              invoice.kind === "invoice" && "pb-28 sm:pb-32",
+            )}
+          >
             <div className="flex items-start justify-between gap-8 border-b pb-8">
               <div className="flex items-start gap-3">
                 {business.logoUrl ? (
@@ -435,23 +576,19 @@ export function InvoiceDetailView({ activities, business, invoice, role }: Invoi
                 <div>
                   <p className="font-semibold">{business.name}</p>
                   <p className="mt-1 max-w-52 text-xs leading-relaxed whitespace-pre-line text-zinc-500">
-                    {[business.address, business.city, business.region, business.country]
-                      .filter(Boolean)
-                      .join(", ")}
+                    {business.address}
                   </p>
                 </div>
               </div>
               <div className="text-right">
-                <p className="text-3xl font-semibold">
-                  {invoice.kind === "credit_note" ? "Credit note" : "Invoice"}
-                </p>
+                <p className="text-3xl font-semibold">{t(`kind.${invoice.kind}`)}</p>
                 <p className="mt-1 font-mono text-sm text-zinc-500">{invoice.number}</p>
               </div>
             </div>
 
             <dl className="grid gap-6 border-b py-7 text-sm sm:grid-cols-3">
               <div>
-                <dt className="nota-label text-zinc-500">Billed to</dt>
+                <dt className="nota-label text-zinc-500">{t("billedTo")}</dt>
                 <dd className="mt-2 font-semibold">
                   {invoice.client.company || invoice.client.name}
                 </dd>
@@ -460,22 +597,40 @@ export function InvoiceDetailView({ activities, business, invoice, role }: Invoi
                 </dd>
               </div>
               <div>
-                <dt className="nota-label text-zinc-500">Issued</dt>
-                <dd className="mt-2 font-mono text-xs">{formatDate(invoice.issuedAt)}</dd>
+                <dt className="nota-label text-zinc-500">{t("issued")}</dt>
+                <dd className="mt-2 font-mono text-xs">{formatDate(invoice.issuedAt, locale)}</dd>
               </div>
               <div>
-                <dt className="nota-label text-zinc-500">Due</dt>
-                <dd className="mt-2 font-mono text-xs">{formatDate(invoice.dueAt)}</dd>
+                <dt className="nota-label text-zinc-500">{t("due")}</dt>
+                <dd className="mt-2 font-mono text-xs">{formatDate(invoice.dueAt, locale)}</dd>
               </div>
+              {servicePeriod ? (
+                <div>
+                  <dt className="nota-label text-zinc-500">
+                    {invoice.servicePeriodStart === invoice.servicePeriodEnd
+                      ? t("serviceDate")
+                      : t("servicePeriod")}
+                  </dt>
+                  <dd className="mt-2 font-mono text-xs" data-testid="invoice-service-period">
+                    {servicePeriod}
+                  </dd>
+                </div>
+              ) : null}
+              {invoice.buyerReference ? (
+                <div>
+                  <dt className="nota-label text-zinc-500">{t("buyerReference")}</dt>
+                  <dd className="mt-2 font-mono text-xs">{invoice.buyerReference}</dd>
+                </div>
+              ) : null}
             </dl>
 
             <div className="py-7">
               <table className="w-full table-fixed text-sm">
                 <thead>
                   <tr className="nota-label border-b text-left text-zinc-500">
-                    <th className="pb-3 font-medium">Description</th>
-                    <th className="w-12 pb-3 text-right font-medium">Qty</th>
-                    <th className="w-28 pb-3 text-right font-medium">Amount</th>
+                    <th className="pb-3 font-medium">{t("description")}</th>
+                    <th className="w-16 pb-3 text-right font-medium">{t("quantity")}</th>
+                    <th className="w-28 pb-3 text-right font-medium">{t("amount")}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -484,14 +639,16 @@ export function InvoiceDetailView({ activities, business, invoice, role }: Invoi
                       <td className="py-5 pr-4">
                         <span className="font-medium">{item.description}</span>
                         <span className="mt-1 block font-mono text-xs text-zinc-500">
-                          {formatCurrency(Number(item.unitPrice), currency)} each
+                          {t("each", {
+                            price: formatCurrency(Number(item.unitPrice), currency, locale),
+                          })}
                         </span>
                       </td>
                       <td className="py-5 text-right font-mono text-xs whitespace-nowrap">
-                        {item.quantity}
+                        {formatQuantity(item.quantity, locale)}
                       </td>
                       <td className="py-5 text-right font-mono text-xs whitespace-nowrap">
-                        {formatCurrency(Number(item.amount), currency)}
+                        {formatCurrency(Number(item.amount), currency, locale)}
                       </td>
                     </tr>
                   ))}
@@ -499,18 +656,27 @@ export function InvoiceDetailView({ activities, business, invoice, role }: Invoi
               </table>
               <dl className="mt-6 ml-auto w-full max-w-64 space-y-2 font-mono text-xs">
                 <div className="flex justify-between">
-                  <dt className="text-zinc-500">Subtotal</dt>
-                  <dd>{formatCurrency(Number(invoice.subtotal), currency)}</dd>
+                  <dt className="text-zinc-500">{t("subtotal")}</dt>
+                  <dd>{formatCurrency(Number(invoice.subtotal), currency, locale)}</dd>
                 </div>
-                <div className="flex justify-between">
-                  <dt className="text-zinc-500">VAT {invoice.taxRate}%</dt>
-                  <dd>{formatCurrency(Number(invoice.taxAmount), currency)}</dd>
-                </div>
+                {showVat ? (
+                  <div className="flex justify-between">
+                    <dt className="text-zinc-500">
+                      {t("vat", { rate: formatNumber(Number(invoice.taxRate ?? 0), locale) })}
+                    </dt>
+                    <dd>{formatCurrency(Number(invoice.taxAmount), currency, locale)}</dd>
+                  </div>
+                ) : null}
                 <div className="mt-3 flex justify-between border-t pt-3 text-sm font-bold">
-                  <dt>Total</dt>
-                  <dd>{formatCurrency(total, currency)}</dd>
+                  <dt>{t("total")}</dt>
+                  <dd>{formatCurrency(total, currency, locale)}</dd>
                 </div>
               </dl>
+              {taxNote ? (
+                <p className="mt-4 pb-4 text-xs text-zinc-500" data-testid="invoice-tax-note">
+                  {taxNote}
+                </p>
+              ) : null}
             </div>
 
             {stamp ? (
@@ -532,75 +698,81 @@ export function InvoiceDetailView({ activities, business, invoice, role }: Invoi
                 className="absolute right-7 bottom-7 left-7 flex items-center justify-between rounded-md px-5 py-4 text-sm font-semibold text-white sm:right-12 sm:left-12"
                 style={{ backgroundColor: business.brandColor || "#1f1b16" }}
               >
-                <span>{balance > 0 ? `${formatCurrency(balance, currency)} due` : "Settled"}</span>
+                <span>
+                  {balance > 0
+                    ? t("amountDue", { amount: formatCurrency(balance, currency, locale) })
+                    : t("settled")}
+                </span>
                 <span aria-hidden="true">→</span>
               </div>
             ) : null}
           </div>
         </section>
 
-        <aside aria-label="Invoice details" className="space-y-8">
+        <aside aria-label={t("details")} className="space-y-8">
           <section className="border-b pb-7">
-            <p className="nota-label text-muted-foreground">Still owed</p>
+            <p className="nota-label text-muted-foreground">{t("stillOwed")}</p>
             <p className="mt-2 text-4xl font-semibold tabular-nums">
-              {formatCurrency(balance, currency)}
+              {formatCurrency(balance, currency, locale)}
             </p>
             <div
-              aria-label={`${paidPercent}% paid`}
+              aria-label={t("paidPercent", { percent: paidPercent })}
               className="mt-5 h-2 overflow-hidden rounded-full bg-muted ring-1 ring-border"
               role="img"
             >
               <div className="h-full bg-primary" style={{ width: `${paidPercent}%` }} />
             </div>
             <div className="mt-2 flex justify-between font-mono text-[11px] text-muted-foreground">
-              <span>{formatCurrency(paid, currency)} paid</span>
+              <span>{t("paidAmount", { amount: formatCurrency(paid, currency, locale) })}</span>
               <span>
                 {balance <= 0 || status === "cancelled"
-                  ? "Settled"
+                  ? t("settled")
                   : remainingDays < 0
-                    ? `${Math.abs(remainingDays)} days overdue`
+                    ? t("overdueDays", { days: Math.abs(remainingDays) })
                     : remainingDays === 0
-                      ? "Due today"
-                      : `${remainingDays} days until due`}
+                      ? t("dueToday")
+                      : t("daysUntilDue", { days: remainingDays })}
               </span>
             </div>
           </section>
 
           <section className="border-b pb-7">
-            <h2 className="nota-label">Client</h2>
+            <h2 className="nota-label">{t("client")}</h2>
             <dl className="mt-4 space-y-4 text-sm">
               <div>
-                <dt className="text-xs text-muted-foreground">Billed to</dt>
+                <dt className="text-xs text-muted-foreground">{t("billedTo")}</dt>
                 <dd className="mt-1 font-medium">
                   {invoice.client.company || invoice.client.name}
                 </dd>
               </div>
               <div>
-                <dt className="text-xs text-muted-foreground">Sent to</dt>
+                <dt className="text-xs text-muted-foreground">{t("sentTo")}</dt>
                 <dd className="mt-1 break-all">{invoice.client.email}</dd>
               </div>
               {invoice.client.taxIdentifier ? (
                 <div>
                   <dt className="text-xs text-muted-foreground">
                     {invoice.client.taxIdentifier.type === "eu_vat"
-                      ? "VAT ID"
+                      ? t("vatId")
                       : invoice.client.taxIdentifier.type === "us_ein"
-                        ? "EIN"
-                        : "Tax ID"}
+                        ? t("ein")
+                        : t("taxId")}
                   </dt>
                   <dd className="mt-1 flex items-center gap-1.5 font-mono text-xs">
                     {invoice.client.taxIdentifier.value}
                     {invoice.client.taxIdentifier.type === "eu_vat" &&
                     invoice.client.vatStatus === "valid" ? (
-                      <BadgeCheck aria-label="Verified" className="size-4 text-emerald-600" />
+                      <BadgeCheck aria-label={t("verified")} className="size-4 text-emerald-600" />
                     ) : null}
                   </dd>
                 </div>
               ) : null}
               <div>
-                <dt className="text-xs text-muted-foreground">Tax rule</dt>
+                <dt className="text-xs text-muted-foreground">{t("taxRule")}</dt>
                 <dd className="mt-1">
-                  {invoice.reverseCharge === "true" ? "Reverse charge" : `VAT ${invoice.taxRate}%`}
+                  {invoice.taxTreatment === "standard"
+                    ? t("vatRate", { rate: formatNumber(Number(invoice.taxRate ?? 0), locale) })
+                    : tTreatment(`labels.${invoice.taxTreatment}`)}
                 </dd>
               </div>
             </dl>
@@ -608,29 +780,55 @@ export function InvoiceDetailView({ activities, business, invoice, role }: Invoi
 
           <section>
             <div className="flex items-baseline justify-between gap-3">
-              <h2 className="nota-label">What happened</h2>
+              <h2 className="nota-label">{t("whatHappened")}</h2>
               {invoice.viewCount > 0 ? (
                 <span className="font-mono text-[11px] text-muted-foreground">
-                  {invoice.viewCount} {invoice.viewCount === 1 ? "open" : "opens"}
+                  {t("opens", { count: invoice.viewCount })}
                 </span>
               ) : null}
             </div>
-            {activities.length ? (
+            {history.length ? (
               <ol className="mt-5 space-y-5">
-                {activities.map((activity) => (
-                  <li className="grid grid-cols-[8px_1fr] gap-3" key={activity.id}>
+                {history.map((entry) => (
+                  <li className="grid grid-cols-[8px_1fr] gap-3" key={entry.id}>
                     <span className="mt-1.5 size-2 rounded-full bg-foreground" />
                     <div>
-                      <p className="text-sm">{activityText(activity, currency)}</p>
+                      <p className="text-sm">
+                        {entry.text}
+                        {entry.href ? (
+                          <>
+                            {" · "}
+                            <a
+                              className="underline underline-offset-4"
+                              href={entry.href}
+                              rel="noopener noreferrer"
+                              target="_blank"
+                            >
+                              {t("download")}
+                            </a>
+                          </>
+                        ) : null}
+                        {entry.relatedId ? (
+                          <>
+                            {" · "}
+                            <Link
+                              className="underline underline-offset-4"
+                              href={`/invoices/${entry.relatedId}`}
+                            >
+                              {t("open")}
+                            </Link>
+                          </>
+                        ) : null}
+                      </p>
                       <p className="mt-1 font-mono text-[11px] text-muted-foreground">
-                        {formatDate(activity.createdAt)} · via {sourceLabel(activity)}
+                        {entry.detail}
                       </p>
                     </div>
                   </li>
                 ))}
               </ol>
             ) : (
-              <p className="mt-4 text-sm text-muted-foreground">No activity yet.</p>
+              <p className="mt-4 text-sm text-muted-foreground">{t("noActivity")}</p>
             )}
             {(status === "sent" || status === "overdue") && canSendInvoiceReminder(role) ? (
               <Button
@@ -640,7 +838,7 @@ export function InvoiceDetailView({ activities, business, invoice, role }: Invoi
                 size="sm"
                 variant="outline"
               >
-                {pending === "reminder" ? "Sending…" : "Send reminder"}
+                {pending === "reminder" ? t("sending") : t("sendReminder")}
               </Button>
             ) : null}
             {status === "draft" && canDeleteInvoice(role) ? (
@@ -651,7 +849,7 @@ export function InvoiceDetailView({ activities, business, invoice, role }: Invoi
                 size="sm"
                 variant="ghost"
               >
-                {pending === "delete" ? "Deleting…" : "Delete draft"}
+                {pending === "delete" ? t("deleting") : t("deleteDraft")}
               </Button>
             ) : canCancelInvoice(role) && canCancelStatus(status) ? (
               <Button
@@ -661,7 +859,7 @@ export function InvoiceDetailView({ activities, business, invoice, role }: Invoi
                 size="sm"
                 variant="ghost"
               >
-                {pending === "cancel" ? "Cancelling…" : "Cancel invoice"}
+                {pending === "cancel" ? t("cancelling") : t("cancelInvoice")}
               </Button>
             ) : null}
           </section>
@@ -672,15 +870,12 @@ export function InvoiceDetailView({ activities, business, invoice, role }: Invoi
         <DialogContent>
           <form onSubmit={handlePayment}>
             <DialogHeader>
-              <DialogTitle>Record payment</DialogTitle>
-              <DialogDescription>
-                The amount defaults to the outstanding balance. Enter a lower amount to record a
-                partial payment.
-              </DialogDescription>
+              <DialogTitle>{t("payment.title")}</DialogTitle>
+              <DialogDescription>{t("payment.description")}</DialogDescription>
             </DialogHeader>
             <div className="grid gap-5 py-6">
               <div className="grid gap-2">
-                <Label htmlFor="payment-amount">Amount ({currency})</Label>
+                <Label htmlFor="payment-amount">{t("payment.amount", { currency })}</Label>
                 <Input
                   autoFocus
                   id="payment-amount"
@@ -694,7 +889,7 @@ export function InvoiceDetailView({ activities, business, invoice, role }: Invoi
                 />
               </div>
               <div className="grid gap-2">
-                <Label htmlFor="payment-method">Method</Label>
+                <Label htmlFor="payment-method">{t("payment.method")}</Label>
                 <Select
                   onValueChange={(value: "bank_transfer" | "other") => setPaymentMethod(value)}
                   value={paymentMethod}
@@ -703,14 +898,15 @@ export function InvoiceDetailView({ activities, business, invoice, role }: Invoi
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="bank_transfer">Bank transfer</SelectItem>
-                    <SelectItem value="other">Other</SelectItem>
+                    <SelectItem value="bank_transfer">{t("payment.bankTransfer")}</SelectItem>
+                    <SelectItem value="other">{t("payment.other")}</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
               <div className="grid gap-2">
                 <Label htmlFor="payment-note">
-                  Note <span className="font-normal text-muted-foreground">(optional)</span>
+                  {t("payment.note")}{" "}
+                  <span className="font-normal text-muted-foreground">{t("payment.optional")}</span>
                 </Label>
                 <Input
                   id="payment-note"
@@ -726,14 +922,14 @@ export function InvoiceDetailView({ activities, business, invoice, role }: Invoi
                 type="button"
                 variant="outline"
               >
-                Cancel
+                {t("payment.cancel")}
               </Button>
               <Button
                 data-testid="invoice-payment-submit"
                 disabled={pending === "payment"}
                 type="submit"
               >
-                {pending === "payment" ? "Recording…" : "Record payment"}
+                {pending === "payment" ? t("payment.recording") : t("payment.submit")}
               </Button>
             </DialogFooter>
           </form>

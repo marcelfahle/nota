@@ -40,6 +40,21 @@ jobs:
       - name: Workspace unit tests
         run: bun run test
 
+      - name: Setup Java for the KoSIT validator
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Cache the KoSIT validator and XRechnung configuration
+        uses: actions/cache@v4
+        with:
+          path: apps/web/.cache/kosit
+          key: kosit-validator-1.6.3-xrechnung-3.0.2-2026-08-31
+
+      - name: Validate XRechnung exports with the official KoSIT validator
+        run: bun run validate:xrechnung
+
       - name: Web static checks
         run: bun run check:web
 

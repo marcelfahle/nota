@@ -10,14 +10,27 @@ import { bankAccounts, clients } from "@/lib/db/schema";
 import { TAX_IDENTIFIER_TYPES, TaxIdentifierValidationError } from "@/lib/tax-identifier";
 import { clientTaxIdentifierFields } from "@/lib/vat";
 
+const countryCodeSchema = z
+  .string()
+  .trim()
+  .toUpperCase()
+  .regex(/^[A-Z]{2}$/, "Country must be a two-letter code such as DE")
+  .nullable();
+
 const clientSchema = z.object({
   address: z.string().nullable().optional(),
   bankAccountId: z.string().uuid().nullable().optional(),
+  city: z.string().trim().max(250).nullable(),
   company: z.string().nullable().optional(),
+  countryCode: countryCodeSchema,
+  defaultBuyerReference: z.string().trim().max(200).nullable(),
   defaultCurrency: z.string().optional().default("EUR"),
   email: z.string().email("Invalid email address"),
   name: z.string().min(1, "Name is required"),
   notes: z.string().nullable().optional(),
+  postalCode: z.string().trim().max(40).nullable(),
+  publicSector: z.boolean(),
+  street: z.string().trim().max(500).nullable(),
   taxIdentifierType: z.enum(TAX_IDENTIFIER_TYPES),
   taxIdentifierValue: z.string().max(100),
 });
@@ -27,11 +40,17 @@ function parseClientFormData(formData: FormData) {
   return {
     address: (formData.get("address") as string) || null,
     bankAccountId: bankAccountId && bankAccountId !== "" ? bankAccountId : null,
+    city: (formData.get("city") as string) || null,
     company: (formData.get("company") as string) || null,
+    countryCode: (formData.get("countryCode") as string) || null,
+    defaultBuyerReference: (formData.get("defaultBuyerReference") as string) || null,
     defaultCurrency: (formData.get("defaultCurrency") as string) || undefined,
     email: formData.get("email") as string,
     name: formData.get("name") as string,
     notes: (formData.get("notes") as string) || null,
+    postalCode: (formData.get("postalCode") as string) || null,
+    publicSector: formData.get("publicSector") === "true",
+    street: (formData.get("street") as string) || null,
     taxIdentifierType: formData.get("taxIdentifierType") as string,
     taxIdentifierValue: (formData.get("taxIdentifierValue") as string) || "",
   };

@@ -53,6 +53,42 @@ export function validateIban(iban: string): { error?: string; valid: boolean } {
   return { valid: true };
 }
 
+/** The first valid IBAN in free text, written compact or in groups of four. */
+export function findIban(text?: string | null): string | null {
+  if (!text) {
+    return null;
+  }
+  for (const match of text.matchAll(
+    /\b[A-Z]{2}\d{2}(?: ?[A-Z0-9]{4}){2,7}(?: ?[A-Z0-9]{1,4})?\b/gi,
+  )) {
+    // The match may run into the next word, so shorter prefixes are tried too.
+    const candidate = formatIban(match[0]);
+    for (let length = candidate.length; length >= 15; length--) {
+      const iban = candidate.slice(0, length);
+      if (validateIban(iban).valid) {
+        return iban;
+      }
+    }
+  }
+  return null;
+}
+
+/**
+ * The IBAN an invoice is paid to: the structured column when it is valid,
+ * else the first valid one in the free-text details. Null when there is none.
+ */
+export function paymentIban(
+  account: { details?: string | null; iban?: string | null } | null | undefined,
+): string | null {
+  if (!account) {
+    return null;
+  }
+  if (account.iban && validateIban(account.iban).valid) {
+    return formatIban(account.iban);
+  }
+  return findIban(account.details);
+}
+
 /** Format an IBAN for display in groups of 4 (e.g. `DE89 3704 0044 0532 0130 00`). */
 export function formatIbanDisplay(iban: string): string {
   const normalized = formatIban(iban);

@@ -31,6 +31,7 @@ import {
 } from "@/lib/db/schema";
 import { sendEmail } from "@/lib/email";
 import { getBetterAuthEnv } from "@/lib/env";
+import { defaultDocumentLocale, localeFromAcceptLanguage } from "@/lib/i18n";
 import {
   cookieValueFromHeader,
   finishOnboarding,
@@ -79,10 +80,21 @@ function onboardingCookieFrom(context: unknown) {
   return cookieValueFromHeader(headers?.get?.("cookie"));
 }
 
+/** The Accept-Language header of the sign-up request, if the hook context carries one. */
+function acceptLanguageFrom(context: unknown) {
+  const candidate = context as {
+    headers?: Headers;
+    request?: { headers?: Headers };
+  } | null;
+  const headers = candidate?.headers ?? candidate?.request?.headers;
+  return headers?.get?.("accept-language") ?? null;
+}
+
 async function joinOrCreateWorkspace(
   user: { email: string; id: string; name: string },
   inviteToken?: string,
   onboardingCookie?: string | null,
+  acceptLanguage?: string | null,
 ) {
   const invite = inviteToken ? await findInviteFor(user.email, inviteToken) : null;
   if (inviteToken && !invite) {
@@ -94,6 +106,11 @@ async function joinOrCreateWorkspace(
   let orgId: string | null = null;
 
   await db.transaction(async (tx) => {
+    // Nota speaks to a new member in their browser's language from the first screen.
+    await tx
+      .update(users)
+      .set({ locale: localeFromAcceptLanguage(acceptLanguage) })
+      .where(eq(users.id, user.id));
     if (invite) {
       const [accepted] = await tx
         .update(invites)
@@ -115,13 +132,14 @@ async function joinOrCreateWorkspace(
       return;
     }
 
+    const values = {
+      ...(profile ? orgValuesFromProfile(profile) : {}),
+      firstRunCompletedAt: null,
+      name: profile?.fields.name?.value ?? `${user.name}'s Workspace`,
+    };
     const [org] = await tx
       .insert(orgs)
-      .values({
-        ...(profile ? orgValuesFromProfile(profile) : {}),
-        firstRunCompletedAt: null,
-        name: profile?.fields.name?.value ?? `${user.name}'s Workspace`,
-      })
+      .values({ ...values, documentLocale: defaultDocumentLocale(values) })
       .returning({ id: orgs.id });
     await tx.insert(orgMembers).values({ orgId: org.id, role: "owner", userId: user.id });
     orgId = org.id;
@@ -168,6 +186,7 @@ export const auth = betterAuth({
             user,
             await requestInviteToken(context),
             onboardingCookieFrom(context),
+            acceptLanguageFrom(context),
           );
         },
         // Reject a bad invite before the account exists, as the old sign-up did.

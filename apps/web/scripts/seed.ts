@@ -80,8 +80,8 @@ const seeded = await db.transaction(async (tx) => {
     .values({
       accountType: "iban",
       bic: "NOTAESMMXXX",
-      details: "IBAN ES00 0000 0000 0000 0000 0000 · BIC NOTAESMMXXX",
-      iban: "ES0000000000000000000000",
+      details: "IBAN ES91 2100 0418 4502 0005 1332 · BIC NOTAESMMXXX",
+      iban: "ES9121000418450200051332",
       isDefault: true,
       name: "Demo EUR account",
       orgId: org.id,

@@ -6,7 +6,9 @@ import { z } from "zod";
 
 import { getCurrentUser } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { invoiceNumberEvents, orgs } from "@/lib/db/schema";
+import { invoiceNumberEvents, orgs, users } from "@/lib/db/schema";
+import { E_INVOICE_DELIVERIES } from "@/lib/e-invoice-delivery";
+import { APP_LOCALES } from "@/lib/i18n";
 import { deleteManagedLogo, uploadOrgFavicon, uploadOrgLogo } from "@/lib/logo-storage";
 import { canManageSettings, getInsufficientPermissionsError } from "@/lib/roles";
 import {
@@ -14,7 +16,9 @@ import {
   TAX_IDENTIFIER_TYPES,
   TaxIdentifierValidationError,
 } from "@/lib/tax-identifier";
+import { TAX_TREATMENTS } from "@/lib/tax-treatment";
 import { clientTaxIdentifierFields } from "@/lib/vat";
+import { toCountryCode } from "@/lib/xrechnung";
 
 const settingsSchema = z.object({
   defaultCurrency: z.string().optional().default("EUR"),
@@ -30,7 +34,11 @@ const brandFieldSchema = z.enum([
   "businessName",
   "city",
   "contactEmail",
+  "contactName",
+  "contactPhone",
   "country",
+  "countryCode",
+  "defaultTaxTreatment",
   "invoiceLayout",
   "legalName",
   "name",
@@ -53,7 +61,18 @@ const brandSettingsSchema = z.object({
   businessName: z.string().trim().max(250),
   city: z.string().trim().max(250),
   contactEmail: z.union([z.literal(""), z.email("Enter a valid email address")]),
+  contactName: z.string().trim().max(250),
+  contactPhone: z.string().trim().max(60),
   country: z.string().trim().max(250),
+  countryCode: z.union([
+    z.literal(""),
+    z
+      .string()
+      .trim()
+      .toUpperCase()
+      .regex(/^[A-Z]{2}$/, "Country code must be two letters, for example DE"),
+  ]),
+  defaultTaxTreatment: z.enum(TAX_TREATMENTS),
   dirtyFields: z
     .string()
     .transform((value) => value.split(",").filter(Boolean))
@@ -78,7 +97,11 @@ export async function updateBrandSettings(
     businessName: formData.get("businessName"),
     city: formData.get("city"),
     contactEmail: formData.get("contactEmail"),
+    contactName: formData.get("contactName"),
+    contactPhone: formData.get("contactPhone"),
     country: formData.get("country"),
+    countryCode: formData.get("countryCode"),
+    defaultTaxTreatment: formData.get("defaultTaxTreatment"),
     dirtyFields: formData.get("dirtyFields"),
     invoiceLayout: formData.get("invoiceLayout"),
     legalName: formData.get("legalName"),
@@ -132,6 +155,16 @@ export async function updateBrandSettings(
   ) as Partial<typeof values>;
   if (dirtyFields.includes("name")) {
     update.name = values.name;
+  }
+  if (dirtyFields.includes("defaultTaxTreatment")) {
+    update.defaultTaxTreatment = values.defaultTaxTreatment;
+  }
+  // A new country name refreshes the ISO code unless the code was edited itself.
+  if (dirtyFields.includes("country") && !dirtyFields.includes("countryCode")) {
+    const code = toCountryCode(values.country);
+    if (code) {
+      update.countryCode = code;
+    }
   }
   if (dirtyFields.includes("taxIdentifierType") || dirtyFields.includes("taxIdentifierValue")) {
     try {
@@ -266,5 +299,54 @@ export async function updateSettings(
 
   revalidatePath("/settings");
   revalidatePath("/");
+  return { success: true };
+}
+
+/** The language Nota speaks to this member. Documents keep their own setting. */
+export async function updateUserLocale(value: string) {
+  const parsed = z.enum(APP_LOCALES).safeParse(value);
+  if (!parsed.success) {
+    return { error: "Choose English or German" };
+  }
+  const { user } = await getCurrentUser();
+  await db.update(users).set({ locale: parsed.data }).where(eq(users.id, user.id));
+  revalidatePath("/", "layout");
+  return { success: true };
+}
+
+/** The language of invoices, the public invoice page and customer emails. Issued documents keep theirs. */
+export async function updateDocumentLocale(value: string) {
+  const parsed = z.enum(APP_LOCALES).safeParse(value);
+  if (!parsed.success) {
+    return { error: "Choose English or German" };
+  }
+  const { org, role } = await getCurrentUser();
+  if (!canManageSettings(role)) {
+    return { error: getInsufficientPermissionsError() };
+  }
+  try {
+    await db.update(orgs).set({ documentLocale: parsed.data }).where(eq(orgs.id, org.id));
+  } catch {
+    return { error: "Could not save the document language right now" };
+  }
+  revalidatePath("/settings");
+  return { success: true };
+}
+
+export async function updateEInvoiceDelivery(value: string) {
+  const parsed = z.enum(E_INVOICE_DELIVERIES).safeParse(value);
+  if (!parsed.success) {
+    return { error: "Choose whether to attach the XRechnung XML" };
+  }
+  const { org, role } = await getCurrentUser();
+  if (!canManageSettings(role)) {
+    return { error: getInsufficientPermissionsError() };
+  }
+  try {
+    await db.update(orgs).set({ eInvoiceDelivery: parsed.data }).where(eq(orgs.id, org.id));
+  } catch {
+    return { error: "Could not save the email setting right now" };
+  }
+  revalidatePath("/settings");
   return { success: true };
 }

@@ -1,5 +1,6 @@
 import { and, desc, eq, sql } from "drizzle-orm";
 import { FileText, Plus } from "lucide-react";
+import { getTranslations } from "next-intl/server";
 import Link from "next/link";
 
 import { InvoiceArchiveMenu } from "@/components/invoice-archive-menu";
@@ -9,22 +10,17 @@ import { Button } from "@/components/ui/button";
 import { getCurrentUser } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { clients, invoices } from "@/lib/db/schema";
+import { toIntlLocale } from "@/lib/i18n";
 import {
   formatInvoiceDueDate,
   getInvoiceListStatus,
   matchesInvoiceSearch,
 } from "@/lib/invoice-list";
-import { formatCurrency } from "@/lib/utils";
+import { formatCurrency, formatDate } from "@/lib/utils";
 
-const FILTERS = [
-  { key: "all", label: "All" },
-  { key: "draft", label: "Draft" },
-  { key: "open", label: "Open" },
-  { key: "overdue", label: "Overdue" },
-  { key: "paid", label: "Paid" },
-] as const;
+const FILTERS = ["all", "draft", "open", "overdue", "paid"] as const;
 
-type FilterKey = (typeof FILTERS)[number]["key"];
+type FilterKey = (typeof FILTERS)[number];
 
 export default async function InvoicesPage({
   searchParams,
@@ -34,7 +30,9 @@ export default async function InvoicesPage({
   const params = await searchParams;
   const filterStatus = first(params.status);
   const query = first(params.q)?.trim() ?? "";
-  const { org, role } = await getCurrentUser();
+  const { org, role, user } = await getCurrentUser();
+  const locale = toIntlLocale(user.locale);
+  const t = await getTranslations("invoices");
 
   const invoiceList = await db
     .select({
@@ -58,7 +56,7 @@ export default async function InvoicesPage({
     .where(eq(invoices.orgId, org.id))
     .orderBy(desc(invoices.issuedAt), desc(invoices.createdAt));
 
-  const activeFilter = FILTERS.some(({ key }) => key === filterStatus)
+  const activeFilter = FILTERS.some((key) => key === filterStatus)
     ? (filterStatus as FilterKey)
     : "all";
   const statusCounts: Record<FilterKey, number> = {
@@ -92,7 +90,7 @@ export default async function InvoicesPage({
     const matchesStatus =
       activeFilter === "all" ||
       (activeFilter === "open" ? invoice.status === "sent" : invoice.status === activeFilter);
-    return matchesStatus && matchesInvoiceSearch(invoice, query);
+    return matchesStatus && matchesInvoiceSearch(invoice, query, locale);
   });
   const filteredOwed = filtered.reduce(
     (sum, invoice) =>
@@ -109,25 +107,25 @@ export default async function InvoicesPage({
       <header className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <p className="nota-label mb-2.5">
-            {invoiceList.length} {invoiceList.length === 1 ? "invoice" : "invoices"}{" "}
-            <span className="opacity-40">/</span> {formatCurrency(totalOwed, defaultCurrency)} owed
+            {t("count", { count: invoiceList.length })} <span className="opacity-40">/</span>{" "}
+            {t("owed", { amount: formatCurrency(totalOwed, defaultCurrency, locale) })}
           </p>
-          <h1>Invoices</h1>
+          <h1>{t("title")}</h1>
         </div>
         <div className="flex flex-wrap gap-2">
           <InvoiceArchiveMenu status={exportStatus === "all" ? undefined : exportStatus} />
           <Button asChild className="min-h-11 sm:min-h-8" size="sm">
             <Link href="/invoices/new">
               <Plus />
-              New invoice
+              {t("newInvoice")}
             </Link>
           </Button>
         </div>
       </header>
 
       <div className="flex min-w-0 flex-wrap items-center justify-between gap-3 border-b pb-3">
-        <nav aria-label="Invoice status" className="flex max-w-full min-w-0 flex-wrap gap-1">
-          {FILTERS.map(({ key, label }) => (
+        <nav aria-label={t("statusNav")} className="flex max-w-full min-w-0 flex-wrap gap-1">
+          {FILTERS.map((key) => (
             <Link
               aria-current={activeFilter === key ? "page" : undefined}
               className={
@@ -138,7 +136,7 @@ export default async function InvoicesPage({
               href={filterHref(key, query)}
               key={key}
             >
-              {label}
+              {t(`filters.${key}`)}
               <span
                 className={`font-mono text-[11px] ${
                   key === "overdue" && activeFilter !== key ? "text-destructive" : "opacity-70"
@@ -158,18 +156,18 @@ export default async function InvoicesPage({
             <input name="status" type="hidden" value={activeFilter} />
           ) : null}
           <label className="nota-label mr-2.5" htmlFor="invoice-search">
-            Find
+            {t("find")}
           </label>
           <input
             className="min-w-0 flex-1 border-0 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
             defaultValue={query}
             id="invoice-search"
             name="q"
-            placeholder="client, number, amount"
+            placeholder={t("searchPlaceholder")}
             type="search"
           />
           <button className="sr-only" type="submit">
-            Search invoices
+            {t("searchInvoices")}
           </button>
         </form>
       </div>
@@ -181,28 +179,28 @@ export default async function InvoicesPage({
           </div>
           <p className="mb-1 text-sm font-medium">
             {query
-              ? "No matching invoices"
+              ? t("empty.noMatch")
               : activeFilter === "all"
-                ? "No invoices yet"
-                : `No ${activeFilter} invoices`}
+                ? t("empty.none")
+                : t("empty.noneStatus", { status: t(`filters.${activeFilter}`) })}
           </p>
           <p className="mb-4 text-sm text-muted-foreground">
             {query
-              ? "Try a different client, number, or amount."
+              ? t("empty.tryDifferent")
               : activeFilter === "all"
-                ? "Create your first invoice to get started."
-                : "Try another status or return to all invoices."}
+                ? t("empty.createFirst")
+                : t("empty.tryAnother")}
           </p>
           {activeFilter === "all" && !query ? (
             <Button asChild size="sm">
               <Link href="/invoices/new">
                 <Plus />
-                Create invoice
+                {t("createInvoice")}
               </Link>
             </Button>
           ) : (
             <Button asChild size="sm" variant="outline">
-              <Link href="/invoices">View all invoices</Link>
+              <Link href="/invoices">{t("viewAll")}</Link>
             </Button>
           )}
         </div>
@@ -215,13 +213,15 @@ export default async function InvoicesPage({
             <table className="w-full min-w-[960px] border-collapse text-sm">
               <thead>
                 <tr className="nota-label text-left text-muted-foreground">
-                  <th className="w-[100px] px-3 py-2 font-medium">Number</th>
-                  <th className="min-w-[180px] px-3 py-2 font-medium">Client</th>
-                  <th className="w-[90px] px-3 py-2 font-medium">Issued</th>
-                  <th className="w-[105px] px-3 py-2 font-medium">Due</th>
-                  <th className="w-[110px] px-3 py-2 font-medium">Status</th>
-                  <th className="w-[100px] px-3 py-2 font-medium">Made in</th>
-                  <th className="w-[280px] px-3 py-2 text-right font-medium">Amount</th>
+                  <th className="w-[100px] px-3 py-2 font-medium">{t("columns.number")}</th>
+                  <th className="min-w-[180px] px-3 py-2 font-medium">{t("columns.client")}</th>
+                  <th className="w-[100px] px-3 py-2 font-medium">{t("columns.issued")}</th>
+                  <th className="w-[115px] px-3 py-2 font-medium">{t("columns.due")}</th>
+                  <th className="w-[110px] px-3 py-2 font-medium">{t("columns.status")}</th>
+                  <th className="w-[100px] px-3 py-2 font-medium">{t("columns.madeIn")}</th>
+                  <th className="w-[280px] px-3 py-2 text-right font-medium">
+                    {t("columns.amount")}
+                  </th>
                 </tr>
               </thead>
               <tbody>
@@ -241,21 +241,28 @@ export default async function InvoicesPage({
                       </td>
                       <td className="max-w-[260px] px-3 py-2.5">
                         <Link className="block truncate font-semibold" href={href}>
-                          {invoice.clientName ?? "Unknown client"}
+                          {invoice.clientName ?? t("unknownClient")}
                           {Number(invoice.paidAmount) > 0 && Number(invoice.balance) > 0 ? (
                             <span className="ml-1 font-normal text-muted-foreground">
-                              {formatCurrency(
-                                Number(invoice.paidAmount),
-                                invoice.currency ?? defaultCurrency,
-                              )}{" "}
-                              received
+                              {t("received", {
+                                amount: formatCurrency(
+                                  Number(invoice.paidAmount),
+                                  invoice.currency ?? defaultCurrency,
+                                  locale,
+                                ),
+                              })}
                             </span>
                           ) : null}
                         </Link>
                       </td>
                       <td className="px-3 py-2.5 font-mono text-xs text-muted-foreground">
                         <Link href={href}>
-                          {invoice.status === "draft" ? "—" : formatDate(invoice.issuedAt)}
+                          {invoice.status === "draft"
+                            ? "—"
+                            : formatDate(invoice.issuedAt, locale, {
+                                day: "numeric",
+                                month: "short",
+                              })}
                         </Link>
                       </td>
                       <td
@@ -268,7 +275,12 @@ export default async function InvoicesPage({
                         <Link href={href}>
                           {invoice.status === "draft"
                             ? "—"
-                            : formatInvoiceDueDate(invoice.dueAt, invoice.status)}
+                            : formatInvoiceDueDate(
+                                invoice.dueAt,
+                                invoice.status,
+                                new Date(),
+                                locale,
+                              )}
                         </Link>
                       </td>
                       <td className="px-3 py-2.5">
@@ -277,7 +289,9 @@ export default async function InvoicesPage({
                         </Link>
                       </td>
                       <td className="px-3 py-2.5 font-mono text-[11px] text-muted-foreground">
-                        <Link href={href}>{sourceLabel(invoice.source, invoice.sourceClient)}</Link>
+                        <Link href={href}>
+                          {invoice.sourceClient ?? t(`source.${sourceKey(invoice.source)}`)}
+                        </Link>
                       </td>
                       <td className="py-1.5 pr-1 pl-3">
                         <div className="flex items-center justify-end gap-2">
@@ -285,6 +299,7 @@ export default async function InvoicesPage({
                             {formatCurrency(
                               Number(invoice.total ?? 0),
                               invoice.currency ?? defaultCurrency,
+                              locale,
                             )}
                           </Link>
                           <InvoiceRowActions
@@ -305,11 +320,11 @@ export default async function InvoicesPage({
               <tfoot>
                 <tr className="border-t">
                   <td className="nota-label px-3 py-3 text-foreground" colSpan={6}>
-                    Showing {filtered.length} of {invoiceList.length}{" "}
-                    <span className="opacity-40">/</span> owed on this page
+                    {t("showing", { shown: filtered.length, total: invoiceList.length })}{" "}
+                    <span className="opacity-40">/</span> {t("owedOnPage")}
                   </td>
                   <td className="px-3 py-3 text-right font-mono text-lg font-semibold">
-                    {formatCurrency(filteredOwed, defaultCurrency)}
+                    {formatCurrency(filteredOwed, defaultCurrency, locale)}
                   </td>
                 </tr>
               </tfoot>
@@ -337,32 +352,12 @@ function filterHref(status: FilterKey, query: string) {
   return search ? `/invoices?${search}` : "/invoices";
 }
 
-function formatDate(date: string) {
-  return new Date(`${date}T00:00:00Z`).toLocaleDateString("en-US", {
-    day: "numeric",
-    month: "short",
-    timeZone: "UTC",
-  });
-}
-
-function sourceLabel(source: string, sourceClient: string | null) {
-  if (sourceClient) {
-    return sourceClient;
-  }
-  if (source === "chat") {
-    return "Nota chat";
-  }
-  if (source === "cli") {
-    return "CLI";
-  }
-  if (source === "mcp") {
-    return "MCP";
-  }
-  if (source === "api") {
-    return "API";
-  }
-  if (source === "system") {
-    return "System";
-  }
-  return "Web";
+function sourceKey(source: string) {
+  return source === "chat" ||
+    source === "cli" ||
+    source === "mcp" ||
+    source === "api" ||
+    source === "system"
+    ? source
+    : "web";
 }

@@ -12,6 +12,8 @@ import {
 } from "@react-email/components";
 
 import { APP_NAME } from "@/lib/app-brand";
+import { getTranslator, toIntlLocale, type AppLocale } from "@/lib/i18n";
+import { formatCurrency, formatDate, type Locale } from "@/lib/utils";
 
 type InvoiceSentEmailProps = {
   bankDetails?: string | null;
@@ -21,26 +23,43 @@ type InvoiceSentEmailProps = {
   dueAt: string;
   invoiceNumber: string;
   invoiceUrl: string | null;
+  /** The document language: the customer reads this, not the sender. */
+  locale?: AppLocale;
   paymentLinkUrl: string | null;
   reminder?: boolean;
   /** A copy the sender mailed to themselves. It must never pass for a real invoice. */
   testCopy?: boolean;
   total: string;
+  /** The XRechnung XML travels with the PDF. */
+  xmlAttached?: boolean;
 };
 
-function formatCurrencyEmail(amount: string, currency: string): string {
-  return new Intl.NumberFormat("en-US", {
-    currency,
-    style: "currency",
-  }).format(Number.parseFloat(amount));
+function formatCurrencyEmail(amount: string, currency: string, locale: Locale): string {
+  return formatCurrency(Number.parseFloat(amount), currency, locale);
 }
 
-function formatDateEmail(dateStr: string): string {
-  return new Date(dateStr).toLocaleDateString("en-US", {
-    day: "numeric",
-    month: "long",
-    year: "numeric",
-  });
+function formatDateEmail(dateStr: string, locale: Locale): string {
+  return formatDate(dateStr, locale, { day: "numeric", month: "long", year: "numeric" });
+}
+
+/** The subject line the job sends with the email. */
+export function invoiceSentSubject(
+  props: Pick<
+    InvoiceSentEmailProps,
+    "businessName" | "currency" | "invoiceNumber" | "locale" | "reminder" | "testCopy" | "total"
+  >,
+) {
+  const language = props.locale ?? "en";
+  const t = getTranslator(language, "emails.invoiceSent");
+  const values = {
+    amount: formatCurrencyEmail(props.total, props.currency, toIntlLocale(language)),
+    business: props.businessName,
+    number: props.invoiceNumber,
+  };
+  if (props.reminder) {
+    return t("reminderSubject", values);
+  }
+  return props.testCopy ? t("testSubject", values) : t("subject", values);
 }
 
 export function InvoiceSentEmail({
@@ -51,15 +70,25 @@ export function InvoiceSentEmail({
   dueAt,
   invoiceNumber,
   invoiceUrl,
+  locale: language = "en",
   paymentLinkUrl,
   reminder = false,
   testCopy = false,
   total,
+  xmlAttached = false,
 }: InvoiceSentEmailProps) {
+  const locale = toIntlLocale(language);
+  const t = getTranslator(language, "emails.invoiceSent");
   const actionUrl = invoiceUrl ?? paymentLinkUrl;
-  const subject = reminder
-    ? `Reminder: Invoice ${invoiceNumber} — ${formatCurrencyEmail(total, currency)} due`
-    : `Invoice ${invoiceNumber} from ${businessName}`;
+  const subject = invoiceSentSubject({
+    businessName,
+    currency,
+    invoiceNumber,
+    locale: language,
+    reminder,
+    testCopy,
+    total,
+  });
 
   return (
     <Html>
@@ -72,41 +101,46 @@ export function InvoiceSentEmail({
           </Section>
 
           {testCopy ? (
-            <Text style={styles.testCopy}>
-              Test copy. You sent this to yourself from {APP_NAME} to see what your client will
-              receive. Nobody else has received it, and nothing is owed.
-            </Text>
+            <Text style={styles.testCopy}>{t("testCopy", { app: APP_NAME })}</Text>
           ) : null}
 
-          <Heading style={styles.heading}>{reminder ? "Payment Reminder" : "New Invoice"}</Heading>
+          <Heading style={styles.heading}>{reminder ? t("reminderHeading") : t("heading")}</Heading>
 
-          <Text style={styles.text}>Hi {clientName},</Text>
+          <Text style={styles.text}>{t("greeting", { name: clientName })}</Text>
 
           <Text style={styles.text}>
             {reminder
-              ? `This is a friendly reminder that invoice ${invoiceNumber} is still outstanding. Please find the details below.`
-              : `Please find your invoice from ${businessName} below.`}
+              ? t("reminderIntro", { number: invoiceNumber })
+              : t("intro", { business: businessName })}
           </Text>
 
+          {xmlAttached ? <Text style={styles.text}>{t("xmlAttached")}</Text> : null}
+
           <Section style={styles.invoiceBox}>
-            <Text style={styles.invoiceLabel}>Invoice</Text>
+            <Text style={styles.invoiceLabel}>{t("label")}</Text>
             <Text style={styles.invoiceNumber}>{invoiceNumber}</Text>
-            <Text style={styles.invoiceAmount}>{formatCurrencyEmail(total, currency)}</Text>
-            <Text style={styles.invoiceDue}>Due {formatDateEmail(dueAt)}</Text>
+            <Text style={styles.invoiceAmount}>{formatCurrencyEmail(total, currency, locale)}</Text>
+            <Text style={styles.invoiceDue}>
+              {t("due", { date: formatDateEmail(dueAt, locale) })}
+            </Text>
           </Section>
 
           {actionUrl ? (
             <Section style={styles.buttonSection}>
               <Button href={actionUrl} style={styles.button}>
-                {invoiceUrl ? "View invoice" : "Pay now"}
+                {invoiceUrl ? t("viewInvoice") : t("payNow")}
               </Button>
             </Section>
           ) : (
             <Text style={{ ...styles.text, whiteSpace: "pre-line" }}>
               {bankDetails
-                ? `Pay by bank transfer using invoice ${invoiceNumber} as the reference.\n${bankDetails}`
-                : "Please contact the sender to arrange payment."}
+                ? `${t("bankTransfer", { number: invoiceNumber })}\n${bankDetails}`
+                : t("contactSender")}
             </Text>
+          )}
+
+          {reminder ? null : (
+            <Text style={{ ...styles.text, marginTop: "24px" }}>{t("thanks")}</Text>
           )}
 
           <Hr style={styles.hr} />

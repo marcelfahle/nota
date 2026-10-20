@@ -5,10 +5,11 @@ import { ClientDetailView } from "@/components/client-detail";
 import { getCurrentUser } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { bankAccounts, clients, invoices } from "@/lib/db/schema";
+import { toIntlLocale } from "@/lib/i18n";
 
 export default async function ClientDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const { org } = await getCurrentUser();
+  const { org, user } = await getCurrentUser();
 
   const [client] = await db
     .select()
@@ -50,6 +51,7 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
       bankAccounts={organizationBankAccounts}
       client={client}
       invoices={clientInvoices}
+      locale={toIntlLocale(user.locale)}
     />
   );
 }

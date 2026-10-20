@@ -1,6 +1,7 @@
 "use client";
 
 import { Pencil, Plus, Star, Trash2 } from "lucide-react";
+import { useTranslations } from "next-intl";
 import { useActionState, useMemo, useState } from "react";
 
 import { createBankAccount, deleteBankAccount, updateBankAccount } from "@/actions/bank-accounts";
@@ -57,6 +58,7 @@ export function NumberingSettings({
   lastIssuedNumber: string | null;
   settings: SettingsData;
 }) {
+  const t = useTranslations("settings.numbering");
   const [state, formAction, pending] = useActionState(updateSettings, null);
 
   const [prefix, setPrefix] = useState(settings.invoicePrefix ?? "");
@@ -88,19 +90,17 @@ export function NumberingSettings({
         value={settings.nextInvoiceNumber ?? 1}
       />
       <div>
-        <h2 className="text-lg font-semibold">Invoice numbering and tax</h2>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Choose the currency and sequence used for new invoices.
-        </p>
+        <h2 className="text-lg font-semibold">{t("heading")}</h2>
+        <p className="mt-1 text-sm text-muted-foreground">{t("description")}</p>
       </div>
       {readOnlySettings && (
         <div className="rounded-lg border border-zinc-200 bg-zinc-50 px-4 py-3 text-sm text-zinc-600">
-          Only organization owners can update these settings.
+          {t("readOnly")}
         </div>
       )}
       <fieldset className="space-y-6" disabled={readOnlySettings}>
         <div className="space-y-2">
-          <Label>Default Currency</Label>
+          <Label>{t("defaultCurrency")}</Label>
           <Select
             defaultValue={settings.defaultCurrency ?? "EUR"}
             disabled={readOnlySettings}
@@ -118,7 +118,7 @@ export function NumberingSettings({
         </div>
 
         <div className="space-y-2">
-          <Label htmlFor="invoicePrefix">Invoice Prefix</Label>
+          <Label htmlFor="invoicePrefix">{t("prefix")}</Label>
           <Input
             disabled={readOnlySettings}
             id="invoicePrefix"
@@ -130,7 +130,7 @@ export function NumberingSettings({
 
         <div className="grid gap-4 sm:grid-cols-3">
           <div className="space-y-2">
-            <Label htmlFor="invoiceSeparator">Separator</Label>
+            <Label htmlFor="invoiceSeparator">{t("separator")}</Label>
             <Select
               disabled={readOnlySettings}
               name="invoiceSeparator"
@@ -141,16 +141,16 @@ export function NumberingSettings({
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="-">Dash (-)</SelectItem>
-                <SelectItem value="/">Slash (/)</SelectItem>
-                <SelectItem value=".">Dot (.)</SelectItem>
-                <SelectItem value="none">None</SelectItem>
+                <SelectItem value="-">{t("dash")}</SelectItem>
+                <SelectItem value="/">{t("slash")}</SelectItem>
+                <SelectItem value=".">{t("dot")}</SelectItem>
+                <SelectItem value="none">{t("none")}</SelectItem>
               </SelectContent>
             </Select>
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="invoiceDigits">Number of Digits</Label>
+            <Label htmlFor="invoiceDigits">{t("digits")}</Label>
             <Input
               disabled={readOnlySettings}
               id="invoiceDigits"
@@ -164,7 +164,7 @@ export function NumberingSettings({
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="nextInvoiceNumber">Next Invoice Number</Label>
+            <Label htmlFor="nextInvoiceNumber">{t("nextNumber")}</Label>
             <Input
               disabled={readOnlySettings}
               id="nextInvoiceNumber"
@@ -180,8 +180,10 @@ export function NumberingSettings({
         <div className="rounded-xl border border-zinc-200 bg-zinc-50 p-4">
           <div className="flex items-center justify-between gap-3">
             <div>
-              <p className="text-sm font-medium text-zinc-900">Invoice number preview</p>
-              <p className="text-xs text-zinc-500">Last issued: {lastIssuedNumber ?? "None yet"}</p>
+              <p className="text-sm font-medium text-zinc-900">{t("preview")}</p>
+              <p className="text-xs text-zinc-500">
+                {t("lastIssued", { number: lastIssuedNumber ?? t("noneYet") })}
+              </p>
             </div>
           </div>
           <div className="mt-3 flex flex-wrap gap-2">
@@ -198,10 +200,10 @@ export function NumberingSettings({
 
         <div className="flex items-center gap-3">
           <Button disabled={pending || readOnlySettings} type="submit">
-            Save Settings
+            {t("save")}
           </Button>
           {state?.error ? <p className="text-sm text-red-600">{state.error}</p> : null}
-          {state?.success ? <p className="text-sm text-green-600">Settings updated.</p> : null}
+          {state?.success ? <p className="text-sm text-green-600">{t("saved")}</p> : null}
         </div>
       </fieldset>
     </form>
@@ -249,6 +251,7 @@ function BankAccountFormFields({
   idPrefix: string;
   setFormState: React.Dispatch<React.SetStateAction<BankAccountFormState>>;
 }) {
+  const t = useTranslations("settings.bank");
   const handleIbanBlur = () => {
     if (!formState.iban) {
       setFormState((s) => ({ ...s, ibanError: null }));
@@ -257,26 +260,26 @@ function BankAccountFormFields({
     const result = validateIban(formState.iban);
     setFormState((s) => ({
       ...s,
-      ibanError: result.valid ? null : (result.error ?? "Invalid IBAN"),
+      ibanError: result.valid ? null : (result.error ?? t("invalidIban")),
     }));
   };
 
   return (
     <>
       <div className="space-y-2">
-        <Label htmlFor={`${idPrefix}-name`}>Name</Label>
+        <Label htmlFor={`${idPrefix}-name`}>{t("name")}</Label>
         <Input
           id={`${idPrefix}-name`}
           name="name"
           onChange={(e) => setFormState((s) => ({ ...s, name: e.target.value }))}
-          placeholder="Business account"
+          placeholder={t("namePlaceholder")}
           required
           value={formState.name}
         />
       </div>
 
       <div className="space-y-2">
-        <Label>Account Type</Label>
+        <Label>{t("accountType")}</Label>
         <div className="flex gap-4">
           <label className="flex items-center gap-2 text-sm text-zinc-700">
             <input
@@ -286,7 +289,7 @@ function BankAccountFormFields({
               type="radio"
               value="iban"
             />
-            IBAN
+            {t("iban")}
           </label>
           <label className="flex items-center gap-2 text-sm text-zinc-700">
             <input
@@ -298,7 +301,7 @@ function BankAccountFormFields({
               type="radio"
               value="freeform"
             />
-            Freeform
+            {t("freeform")}
           </label>
         </div>
       </div>
@@ -306,7 +309,7 @@ function BankAccountFormFields({
       {formState.accountType === "iban" ? (
         <>
           <div className="space-y-2">
-            <Label htmlFor={`${idPrefix}-iban`}>IBAN</Label>
+            <Label htmlFor={`${idPrefix}-iban`}>{t("iban")}</Label>
             <Input
               id={`${idPrefix}-iban`}
               name="iban"
@@ -323,7 +326,7 @@ function BankAccountFormFields({
             ) : null}
           </div>
           <div className="space-y-2">
-            <Label htmlFor={`${idPrefix}-bic`}>BIC (optional)</Label>
+            <Label htmlFor={`${idPrefix}-bic`}>{t("bicOptional")}</Label>
             <Input
               id={`${idPrefix}-bic`}
               name="bic"
@@ -335,13 +338,13 @@ function BankAccountFormFields({
         </>
       ) : (
         <div className="space-y-2">
-          <Label htmlFor={`${idPrefix}-details`}>Details</Label>
+          <Label htmlFor={`${idPrefix}-details`}>{t("details")}</Label>
           <textarea
             className="min-h-[140px] w-full rounded-md border border-input bg-transparent px-3 py-2 text-base shadow-xs transition-[color,box-shadow] outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50 md:text-sm"
             id={`${idPrefix}-details`}
             name="details"
             onChange={(e) => setFormState((s) => ({ ...s, details: e.target.value }))}
-            placeholder="IBAN\nBIC\nBank name"
+            placeholder={t("detailsPlaceholder")}
             required
             rows={6}
             value={formState.details}
@@ -357,7 +360,7 @@ function BankAccountFormFields({
           type="checkbox"
           value="true"
         />
-        Set as default account
+        {t("setDefault")}
       </label>
     </>
   );
@@ -370,6 +373,7 @@ export function BankAccountsSettings({
   accounts: Array<BankAccount>;
   canManageBankAccounts: boolean;
 }) {
+  const t = useTranslations("settings.bank");
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [editingAccount, setEditingAccount] = useState<BankAccount | null>(null);
   const [formState, setFormState] = useState<BankAccountFormState>(EMPTY_FORM);
@@ -441,20 +445,18 @@ export function BankAccountsSettings({
     <div className="space-y-4">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h2 className="text-lg font-medium text-zinc-900">Bank Accounts</h2>
-          <p className="text-sm text-zinc-500">
-            Manage the payout instructions shown on your invoices.
-          </p>
+          <h2 className="text-lg font-medium text-zinc-900">{t("heading")}</h2>
+          <p className="text-sm text-zinc-500">{t("description")}</p>
         </div>
         <Button disabled={!canManageBankAccounts} onClick={openCreateDialog} type="button">
           <Plus className="size-4" />
-          New Account
+          {t("newAccount")}
         </Button>
       </div>
 
       {!canManageBankAccounts ? (
         <div className="rounded-lg border border-zinc-200 bg-zinc-50 px-4 py-3 text-sm text-zinc-600">
-          Only owners and admins can manage bank accounts.
+          {t("readOnly")}
         </div>
       ) : null}
 
@@ -463,7 +465,7 @@ export function BankAccountsSettings({
       <div className="grid gap-4">
         {accounts.length === 0 ? (
           <div className="rounded-2xl border border-dashed border-zinc-300 px-6 py-12 text-center text-sm text-zinc-500">
-            No bank accounts yet.
+            {t("none")}
           </div>
         ) : (
           accounts.map((account) => (
@@ -478,7 +480,7 @@ export function BankAccountsSettings({
                     {account.isDefault ? (
                       <span className="inline-flex items-center gap-1 rounded-full bg-zinc-100 px-2 py-1 text-xs font-medium text-zinc-700">
                         <Star className="size-3" />
-                        Default
+                        {t("default")}
                       </span>
                     ) : null}
                   </div>
@@ -486,7 +488,7 @@ export function BankAccountsSettings({
                     <div className="text-sm leading-6 text-zinc-600">
                       <span className="font-mono">{formatIbanDisplay(account.iban)}</span>
                       {account.bic ? (
-                        <span className="ml-3 text-zinc-500">BIC: {account.bic}</span>
+                        <span className="ml-3 text-zinc-500">{t("bic", { bic: account.bic })}</span>
                       ) : null}
                     </div>
                   ) : (
@@ -503,7 +505,7 @@ export function BankAccountsSettings({
                     variant="outline"
                   >
                     <Pencil className="size-4" />
-                    Edit
+                    {t("edit")}
                   </Button>
                   <Button
                     onClick={() => handleDelete(account.id)}
@@ -512,7 +514,7 @@ export function BankAccountsSettings({
                     variant="outline"
                   >
                     <Trash2 className="size-4" />
-                    Delete
+                    {t("delete")}
                   </Button>
                 </div>
               </div>
@@ -524,10 +526,8 @@ export function BankAccountsSettings({
       <Dialog onOpenChange={setIsCreateOpen} open={isCreateOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>New bank account</DialogTitle>
-            <DialogDescription>
-              Add payout instructions to show on future invoices.
-            </DialogDescription>
+            <DialogTitle>{t("createTitle")}</DialogTitle>
+            <DialogDescription>{t("createDescription")}</DialogDescription>
           </DialogHeader>
           <form className="space-y-4" onSubmit={handleCreate}>
             <BankAccountFormFields
@@ -538,10 +538,10 @@ export function BankAccountsSettings({
             {error ? <p className="text-sm text-red-600">{error}</p> : null}
             <DialogFooter>
               <Button onClick={closeDialogs} type="button" variant="ghost">
-                Cancel
+                {t("cancel")}
               </Button>
               <Button disabled={isPending} type="submit">
-                Save account
+                {t("saveAccount")}
               </Button>
             </DialogFooter>
           </form>
@@ -551,10 +551,8 @@ export function BankAccountsSettings({
       <Dialog onOpenChange={(open) => !open && closeDialogs()} open={Boolean(editingAccount)}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Edit bank account</DialogTitle>
-            <DialogDescription>
-              Update the payout instructions shown on your invoices.
-            </DialogDescription>
+            <DialogTitle>{t("editTitle")}</DialogTitle>
+            <DialogDescription>{t("editDescription")}</DialogDescription>
           </DialogHeader>
           <form className="space-y-4" onSubmit={handleUpdate}>
             <BankAccountFormFields
@@ -565,10 +563,10 @@ export function BankAccountsSettings({
             {error ? <p className="text-sm text-red-600">{error}</p> : null}
             <DialogFooter>
               <Button onClick={closeDialogs} type="button" variant="ghost">
-                Cancel
+                {t("cancel")}
               </Button>
               <Button disabled={isPending} type="submit">
-                Update account
+                {t("updateAccount")}
               </Button>
             </DialogFooter>
           </form>

@@ -6,6 +6,7 @@ import { getCurrentUser, getViewAs } from "@/lib/auth";
 import { billingStatus } from "@/lib/billing";
 import { db } from "@/lib/db";
 import { clients, invoices, jobs, proposals } from "@/lib/db/schema";
+import { toIntlLocale } from "@/lib/i18n";
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
   const [{ org, user }, viewAs] = await Promise.all([getCurrentUser(), getViewAs()]);
@@ -122,6 +123,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
         pending: emailJobSummary?.pending ?? 0,
         processing: emailJobSummary?.processing ?? 0,
       }}
+      locale={toIntlLocale(user.locale)}
       logoUrl={org.logoUrl}
       navCounts={{
         overdue: overdueSummary?.count ?? 0,

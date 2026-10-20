@@ -1,6 +1,7 @@
 "use client";
 
 import { Plus, Trash2 } from "lucide-react";
+import { useTranslations } from "next-intl";
 import { useRouter } from "next/navigation";
 import posthog from "posthog-js";
 import { useActionState, useEffect, useState, useCallback } from "react";
@@ -16,7 +17,9 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { addDecimals, currencyExponent, multiplyAndRound, percentageAndRound } from "@/lib/money";
-import { formatCurrency } from "@/lib/utils";
+import { defaultServicePeriod } from "@/lib/service-period";
+import { requiresZeroRate, TAX_TREATMENTS, type TaxTreatment } from "@/lib/tax-treatment";
+import { formatCurrency, type Locale } from "@/lib/utils";
 
 type LineItem = {
   description: string;
@@ -31,16 +34,19 @@ type ActionState = {
 } | null;
 
 type Client = {
+  defaultBuyerReference?: string | null;
   defaultCurrency: string | null;
   email: string;
   id: string;
   name: string;
+  publicSector?: boolean;
 };
 
 type InvoiceFormProps = {
   action: (state: ActionState, formData: FormData) => Promise<ActionState>;
   clients: Array<Client>;
   defaultValues?: {
+    buyerReference?: string | null;
     clientId?: string;
     currency?: string;
     dueAt?: string;
@@ -48,9 +54,13 @@ type InvoiceFormProps = {
     issuedAt?: string;
     lineItems?: Array<{ description: string; quantity: string; unitPrice: string }>;
     notes?: string | null;
-    reverseCharge?: string;
+    servicePeriodEnd?: string | null;
+    servicePeriodStart?: string | null;
     taxRate?: string;
+    taxTreatment?: TaxTreatment;
   };
+  locale?: Locale;
+  org: { countryCode: string | null; defaultTaxTreatment: TaxTreatment };
   redirectTo?: string;
   submitLabel?: string;
 };
@@ -77,19 +87,48 @@ export function InvoiceForm({
   action,
   clients,
   defaultValues,
+  locale = "en-US",
+  org,
   redirectTo = "/invoices",
-  submitLabel = "Save Draft",
+  submitLabel,
 }: InvoiceFormProps) {
+  const t = useTranslations("invoiceForm");
+  const tTreatment = useTranslations("taxTreatment");
   const [state, formAction, pending] = useActionState(action, null);
   const router = useRouter();
 
   const [items, setItems] = useState<Array<LineItem>>(
     defaultValues?.lineItems?.length ? defaultValues.lineItems : [emptyLineItem()],
   );
-
+  const [clientId, setClientId] = useState(defaultValues?.clientId ?? "");
   const [currency, setCurrency] = useState(defaultValues?.currency ?? "EUR");
-
+  const [issuedAt, setIssuedAt] = useState(defaultValues?.issuedAt ?? todayISO());
+  const [taxTreatment, setTaxTreatment] = useState<TaxTreatment>(
+    defaultValues?.taxTreatment ?? org.defaultTaxTreatment,
+  );
   const [taxRate, setTaxRate] = useState(defaultValues?.taxRate ?? "0");
+  // Until someone edits the period it follows the line items and the issue date,
+  // shown as a visible default so nobody has to guess what gets saved.
+  const [editedPeriod, setEditedPeriod] = useState<{ end: string; start: string } | null>(
+    defaultValues?.servicePeriodStart
+      ? {
+          end: defaultValues.servicePeriodEnd ?? defaultValues.servicePeriodStart,
+          start: defaultValues.servicePeriodStart,
+        }
+      : null,
+  );
+  // A public-sector client brings its Leitweg-ID along until the reference is edited.
+  const [editedReference, setEditedReference] = useState<string | null>(
+    defaultValues?.buyerReference ?? null,
+  );
+
+  const selectedClient = clients.find((client) => client.id === clientId);
+  const zeroRated = requiresZeroRate(taxTreatment);
+  const german = org.countryCode === "DE";
+  const period = editedPeriod ?? defaultServicePeriod(items, issuedAt) ?? { end: "", start: "" };
+  const servicePeriodStart = period.start;
+  const servicePeriodEnd = period.end;
+  const buyerReference = editedReference ?? selectedClient?.defaultBuyerReference ?? "";
 
   useEffect(() => {
     if (state?.success && state.invoiceId) {
@@ -108,6 +147,13 @@ export function InvoiceForm({
   const removeItem = useCallback((index: number) => {
     setItems((prev) => (prev.length <= 1 ? prev : prev.filter((_, i) => i !== index)));
   }, []);
+
+  function changeTreatment(value: TaxTreatment) {
+    setTaxTreatment(value);
+    if (requiresZeroRate(value)) {
+      setTaxRate("0");
+    }
+  }
 
   // Computed totals
   const exponent = currencyExponent(currency);
@@ -137,11 +183,13 @@ export function InvoiceForm({
           ),
         );
         formData.set("taxRate", taxRate);
+        formData.set("taxTreatment", taxTreatment);
         formData.set("currency", currency);
         posthog.capture("invoice_submitted", {
           currency,
           invoice_mode: defaultValues ? "edit" : "create",
           line_item_count: items.length,
+          tax_treatment: taxTreatment,
           total,
         });
         formAction(formData);
@@ -152,10 +200,10 @@ export function InvoiceForm({
       {/* Invoice Details */}
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="space-y-2">
-          <Label htmlFor="clientId">Client *</Label>
-          <Select defaultValue={defaultValues?.clientId} name="clientId" required>
+          <Label htmlFor="clientId">{t("client")}</Label>
+          <Select name="clientId" onValueChange={setClientId} required value={clientId}>
             <SelectTrigger className="w-full" data-testid="invoice-client-select">
-              <SelectValue placeholder="Select a client" />
+              <SelectValue placeholder={t("selectClient")} />
             </SelectTrigger>
             <SelectContent>
               {clients.map((client) => (
@@ -168,7 +216,7 @@ export function InvoiceForm({
         </div>
 
         <div className="space-y-2">
-          <Label>Currency</Label>
+          <Label>{t("currency")}</Label>
           <Select name="currency_display" onValueChange={setCurrency} value={currency}>
             <SelectTrigger className="w-full" data-testid="invoice-currency-select">
               <SelectValue />
@@ -184,17 +232,18 @@ export function InvoiceForm({
 
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="space-y-2">
-          <Label htmlFor="issuedAt">Issue Date *</Label>
+          <Label htmlFor="issuedAt">{t("issueDate")}</Label>
           <Input
-            defaultValue={defaultValues?.issuedAt ?? todayISO()}
             id="issuedAt"
             name="issuedAt"
+            onChange={(e) => setIssuedAt(e.target.value)}
             required
             type="date"
+            value={issuedAt}
           />
         </div>
         <div className="space-y-2">
-          <Label htmlFor="dueAt">Due Date *</Label>
+          <Label htmlFor="dueAt">{t("dueDate")}</Label>
           <Input
             defaultValue={defaultValues?.dueAt ?? defaultDueDate()}
             id="dueAt"
@@ -205,16 +254,66 @@ export function InvoiceForm({
         </div>
       </div>
 
+      {/* Service period and buyer reference */}
+      <div className="grid gap-4 sm:grid-cols-2">
+        <div className="space-y-2">
+          <Label htmlFor="servicePeriodStart">
+            {t("servicePeriod")}
+            {german ? " *" : ""}
+          </Label>
+          <div className="flex items-center gap-2">
+            <Input
+              data-testid="invoice-service-period-start"
+              id="servicePeriodStart"
+              name="servicePeriodStart"
+              onChange={(e) => setEditedPeriod({ end: servicePeriodEnd, start: e.target.value })}
+              required={german}
+              type="date"
+              value={servicePeriodStart}
+            />
+            <span className="text-sm text-zinc-500">{t("to")}</span>
+            <Input
+              aria-label={t("servicePeriodEnd")}
+              data-testid="invoice-service-period-end"
+              name="servicePeriodEnd"
+              onChange={(e) => setEditedPeriod({ end: e.target.value, start: servicePeriodStart })}
+              required={german}
+              type="date"
+              value={servicePeriodEnd}
+            />
+          </div>
+          <p className="text-xs text-zinc-500">{t("servicePeriodHint")}</p>
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="buyerReference">
+            {t("buyerReference")}
+            {selectedClient?.publicSector ? " *" : ""}
+          </Label>
+          <Input
+            data-testid="invoice-buyer-reference"
+            id="buyerReference"
+            name="buyerReference"
+            onChange={(e) => setEditedReference(e.target.value)}
+            placeholder={selectedClient?.publicSector ? t("leitwegId") : t("optional")}
+            required={Boolean(selectedClient?.publicSector)}
+            value={buyerReference}
+          />
+          <p className="text-xs text-zinc-500">
+            {selectedClient?.publicSector ? t("publicSectorHint") : t("referenceHint")}
+          </p>
+        </div>
+      </div>
+
       {/* Line Items */}
       <div>
-        <Label className="mb-3 block">Line Items</Label>
+        <Label className="mb-3 block">{t("lineItems")}</Label>
         <div className="rounded-lg border border-zinc-200">
           {/* Header (desktop only) */}
           <div className="hidden gap-2 border-b border-zinc-100 px-3 py-2 text-xs font-medium tracking-wide text-zinc-400 uppercase sm:grid sm:grid-cols-[1fr_80px_100px_100px_36px]">
-            <span>Description</span>
-            <span>Qty/Hrs</span>
-            <span>Rate</span>
-            <span className="text-right">Amount</span>
+            <span>{t("description")}</span>
+            <span>{t("qtyHours")}</span>
+            <span>{t("rate")}</span>
+            <span className="text-right">{t("amount")}</span>
             <span />
           </div>
 
@@ -228,7 +327,7 @@ export function InvoiceForm({
                 className="h-8 text-sm"
                 data-testid={`invoice-line-item-description-${index}`}
                 onChange={(e) => updateItem(index, "description", e.target.value)}
-                placeholder="Description"
+                placeholder={t("description")}
                 required
                 value={item.description}
               />
@@ -238,7 +337,7 @@ export function InvoiceForm({
                   data-testid={`invoice-line-item-quantity-${index}`}
                   min="0"
                   onChange={(e) => updateItem(index, "quantity", e.target.value)}
-                  placeholder="Qty"
+                  placeholder={t("qty")}
                   required
                   step="0.000001"
                   type="number"
@@ -249,7 +348,7 @@ export function InvoiceForm({
                   data-testid={`invoice-line-item-unit-price-${index}`}
                   min="0"
                   onChange={(e) => updateItem(index, "unitPrice", e.target.value)}
-                  placeholder="Rate"
+                  placeholder={t("rate")}
                   required
                   step="0.000001"
                   type="number"
@@ -265,7 +364,7 @@ export function InvoiceForm({
                 </button>
               </div>
               <p className="text-right text-sm font-medium text-zinc-900 sm:order-none">
-                {formatCurrency(lineAmounts[index], currency)}
+                {formatCurrency(lineAmounts[index], currency, locale)}
               </p>
             </div>
           ))}
@@ -279,23 +378,46 @@ export function InvoiceForm({
               type="button"
             >
               <Plus className="size-3.5" />
-              Add line item
+              {t("addLineItem")}
             </button>
           </div>
         </div>
       </div>
 
-      {/* Totals */}
-      <div className="flex justify-end">
-        <div className="w-64 space-y-2">
+      {/* Tax treatment and totals */}
+      <div className="grid gap-6 sm:grid-cols-[minmax(0,1fr)_16rem]">
+        <div className="space-y-2">
+          <Label htmlFor="taxTreatment">{t("vatTreatment")}</Label>
+          <Select
+            onValueChange={(value) => changeTreatment(value as TaxTreatment)}
+            value={taxTreatment}
+          >
+            <SelectTrigger className="w-full" data-testid="invoice-tax-treatment" id="taxTreatment">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {TAX_TREATMENTS.map((treatment) => (
+                <SelectItem key={treatment} value={treatment}>
+                  {tTreatment(`labels.${treatment}`)}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <p className="text-xs text-zinc-500">{tTreatment(`hints.${taxTreatment}`)}</p>
+          <p className="text-xs text-zinc-500">{t("oneRate")}</p>
+        </div>
+        <div className="space-y-2">
           <div className="flex items-center justify-between text-sm">
-            <span className="text-zinc-500">Subtotal</span>
-            <span className="font-medium">{formatCurrency(subtotal, currency)}</span>
+            <span className="text-zinc-500">{t("subtotal")}</span>
+            <span className="font-medium">{formatCurrency(subtotal, currency, locale)}</span>
           </div>
           <div className="flex items-center gap-2 text-sm">
-            <span className="text-zinc-500">Tax</span>
+            <span className="text-zinc-500">{t("vat")}</span>
             <Input
+              aria-label={t("taxRate")}
               className="h-7 w-20 text-center text-xs"
+              data-testid="invoice-tax-rate"
+              disabled={zeroRated}
               max="100"
               min="0"
               onChange={(e) => setTaxRate(e.target.value)}
@@ -304,11 +426,13 @@ export function InvoiceForm({
               value={taxRate}
             />
             <span className="text-zinc-500">%</span>
-            <span className="ml-auto font-medium">{formatCurrency(taxAmount, currency)}</span>
+            <span className="ml-auto font-medium">
+              {formatCurrency(taxAmount, currency, locale)}
+            </span>
           </div>
           <div className="flex items-center justify-between border-t border-zinc-200 pt-2 text-sm">
-            <span className="font-semibold">Total</span>
-            <span className="text-lg font-semibold">{formatCurrency(total, currency)}</span>
+            <span className="font-semibold">{t("total")}</span>
+            <span className="text-lg font-semibold">{formatCurrency(total, currency, locale)}</span>
           </div>
         </div>
       </div>
@@ -316,53 +440,42 @@ export function InvoiceForm({
       {/* Notes */}
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="space-y-2">
-          <Label htmlFor="notes">Notes (visible on invoice)</Label>
+          <Label htmlFor="notes">{t("notes")}</Label>
           <textarea
             className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:outline-none"
             defaultValue={defaultValues?.notes ?? ""}
             id="notes"
             name="notes"
-            placeholder="Payment terms, thank you message, etc."
+            placeholder={t("notesPlaceholder")}
             rows={3}
           />
         </div>
         <div className="space-y-2">
-          <Label htmlFor="internalNotes">Internal Notes</Label>
+          <Label htmlFor="internalNotes">{t("internalNotes")}</Label>
           <textarea
             className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:outline-none"
             defaultValue={defaultValues?.internalNotes ?? ""}
             id="internalNotes"
             name="internalNotes"
-            placeholder="Notes for your own reference"
+            placeholder={t("internalNotesPlaceholder")}
             rows={3}
           />
         </div>
       </div>
 
-      {/* Reverse Charge */}
-      <div className="flex items-center gap-2">
-        <input
-          className="size-4 rounded border-zinc-300"
-          defaultChecked={defaultValues?.reverseCharge === "true"}
-          id="reverseCharge"
-          name="reverseCharge"
-          type="checkbox"
-          value="true"
-        />
-        <Label className="text-sm font-normal" htmlFor="reverseCharge">
-          Reverse charge (VAT not applicable)
-        </Label>
-      </div>
-
-      {state?.error && <p className="text-sm text-red-500">{state.error}</p>}
+      {state?.error && (
+        <p className="text-sm text-red-500" role="alert">
+          {state.error}
+        </p>
+      )}
 
       {/* Actions */}
       <div className="flex justify-end gap-2">
         <Button onClick={() => router.push("/invoices")} type="button" variant="outline">
-          Cancel
+          {t("cancel")}
         </Button>
         <Button data-testid="invoice-submit" disabled={pending} type="submit">
-          {pending ? "Saving..." : submitLabel}
+          {pending ? t("saving") : (submitLabel ?? t("saveDraft"))}
         </Button>
       </div>
     </form>

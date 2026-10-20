@@ -1,6 +1,7 @@
 "use client";
 
 import { Check, ChevronDown, Landmark, Mail, Send } from "lucide-react";
+import { useTranslations } from "next-intl";
 import { useRouter } from "next/navigation";
 import {
   createContext,
@@ -24,12 +25,13 @@ import { ChatPanel } from "@/components/chat-panel";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { toIntlLocale, type AppLocale } from "@/lib/i18n";
 import {
   formatTaxIdentifier,
   taxIdentifierFromColumns,
   type TaxIdentifierType,
 } from "@/lib/tax-identifier";
-import { cn, formatCurrency } from "@/lib/utils";
+import { cn, formatCurrency, formatDate, formatQuantity } from "@/lib/utils";
 
 type FirstRunInvoice = {
   client: { email: string; name: string };
@@ -68,20 +70,13 @@ export type FirstRunHomeData = {
   email: string;
   emailVerified: boolean;
   invoice: FirstRunInvoice;
+  /** The member's UI language. */
+  locale: AppLocale;
   org: FirstRunOrg;
   testSent: boolean;
 };
 
 type Editor = "bank" | "profile" | null;
-
-function formatDate(value: string) {
-  return new Intl.DateTimeFormat("en-GB", {
-    day: "numeric",
-    month: "short",
-    timeZone: "UTC",
-    year: "numeric",
-  }).format(new Date(`${value}T00:00:00Z`));
-}
 
 function readableTextColor(background: string) {
   const channels = background.match(/[\da-f]{2}/gi)?.map((channel) => Number.parseInt(channel, 16));
@@ -131,6 +126,7 @@ function Landed({ children, value }: { children?: React.ReactNode; value: string
 }
 
 function ProfileForm({ onSaved, org }: { onSaved: () => void; org: FirstRunOrg }) {
+  const t = useTranslations("firstRun");
   const [state, action, pending] = useActionState(saveFirstRunProfile, null);
   const taxIdentifier = taxIdentifierFromColumns(org);
   const [taxIdentifierType, setTaxIdentifierType] = useState<TaxIdentifierType>(
@@ -142,39 +138,39 @@ function ProfileForm({ onSaved, org }: { onSaved: () => void; org: FirstRunOrg }
     <form action={action} className="space-y-4" data-testid="first-run-profile-form">
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="space-y-1.5 sm:col-span-2">
-          <Label htmlFor="first-run-legal-name">Legal name</Label>
+          <Label htmlFor="first-run-legal-name">{t("legalName")}</Label>
           <Input
             defaultValue={org.legalName ?? org.businessName ?? ""}
             id="first-run-legal-name"
             name="legalName"
-            placeholder="Registered business name"
+            placeholder={t("legalNamePlaceholder")}
             required
           />
         </div>
         <div className="space-y-1.5 sm:col-span-2">
-          <Label htmlFor="first-run-street">Street and number</Label>
+          <Label htmlFor="first-run-street">{t("street")}</Label>
           <Input
             defaultValue={org.street ?? ""}
             id="first-run-street"
             name="street"
-            placeholder="Carrer de la Mar 12"
+            placeholder={t("streetPlaceholder")}
             required
           />
         </div>
         <div className="space-y-1.5">
-          <Label htmlFor="first-run-postal-code">Postal code</Label>
+          <Label htmlFor="first-run-postal-code">{t("postalCode")}</Label>
           <Input defaultValue={org.postalCode ?? ""} id="first-run-postal-code" name="postalCode" />
         </div>
         <div className="space-y-1.5">
-          <Label htmlFor="first-run-city">City</Label>
+          <Label htmlFor="first-run-city">{t("city")}</Label>
           <Input defaultValue={org.city ?? ""} id="first-run-city" name="city" required />
         </div>
         <div className="space-y-1.5">
-          <Label htmlFor="first-run-country">Country</Label>
+          <Label htmlFor="first-run-country">{t("country")}</Label>
           <Input defaultValue={org.country ?? ""} id="first-run-country" name="country" required />
         </div>
         <div className="space-y-1.5">
-          <Label htmlFor="first-run-tax-id-type">Tax identifier type</Label>
+          <Label htmlFor="first-run-tax-id-type">{t("taxIdType")}</Label>
           <select
             className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
             id="first-run-tax-id-type"
@@ -182,13 +178,13 @@ function ProfileForm({ onSaved, org }: { onSaved: () => void; org: FirstRunOrg }
             onChange={(event) => setTaxIdentifierType(event.target.value as TaxIdentifierType)}
             value={taxIdentifierType}
           >
-            <option value="eu_vat">EU VAT ID</option>
-            <option value="us_ein">US EIN</option>
-            <option value="tax_id">Tax ID</option>
+            <option value="eu_vat">{t("euVat")}</option>
+            <option value="us_ein">{t("usEin")}</option>
+            <option value="tax_id">{t("taxId")}</option>
           </select>
         </div>
         <div className="space-y-1.5">
-          <Label htmlFor="first-run-tax-id">Tax ID (if used)</Label>
+          <Label htmlFor="first-run-tax-id">{t("taxIdIfUsed")}</Label>
           <Input
             defaultValue={taxIdentifier?.value ?? ""}
             id="first-run-tax-id"
@@ -199,7 +195,7 @@ function ProfileForm({ onSaved, org }: { onSaved: () => void; org: FirstRunOrg }
       </div>
       <div className="flex items-center gap-3">
         <Button disabled={pending} type="submit">
-          {pending ? "Saving…" : "Save legal details"}
+          {pending ? t("saving") : t("saveLegal")}
         </Button>
         {state?.error ? (
           <p className="text-sm text-destructive" role="alert">
@@ -208,7 +204,7 @@ function ProfileForm({ onSaved, org }: { onSaved: () => void; org: FirstRunOrg }
         ) : null}
         {state?.success ? (
           <p className="flex items-center gap-1.5 text-sm" role="status">
-            <Check className="size-4" /> Saved
+            <Check className="size-4" /> {t("saved")}
           </p>
         ) : null}
       </div>
@@ -223,6 +219,7 @@ function BankForm({
   bankAccount: FirstRunHomeData["bankAccount"];
   onSaved: () => void;
 }) {
+  const t = useTranslations("firstRun");
   const [state, action, pending] = useActionState(saveFirstRunBankDetails, null);
   useSaved(state, onSaved);
 
@@ -230,7 +227,7 @@ function BankForm({
     <form action={action} className="space-y-4" data-testid="first-run-bank-form">
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="space-y-1.5 sm:col-span-2">
-          <Label htmlFor="first-run-account-holder">Account holder</Label>
+          <Label htmlFor="first-run-account-holder">{t("accountHolder")}</Label>
           <Input
             defaultValue={bankAccount?.name ?? ""}
             id="first-run-account-holder"
@@ -239,7 +236,7 @@ function BankForm({
           />
         </div>
         <div className="space-y-1.5 sm:col-span-2">
-          <Label htmlFor="first-run-iban">IBAN</Label>
+          <Label htmlFor="first-run-iban">{t("iban")}</Label>
           <Input
             autoCapitalize="characters"
             defaultValue={bankAccount?.iban ?? ""}
@@ -250,7 +247,7 @@ function BankForm({
           />
         </div>
         <div className="space-y-1.5 sm:col-span-2">
-          <Label htmlFor="first-run-bic">BIC (optional)</Label>
+          <Label htmlFor="first-run-bic">{t("bicOptional")}</Label>
           <Input
             autoCapitalize="characters"
             defaultValue={bankAccount?.bic ?? ""}
@@ -261,7 +258,7 @@ function BankForm({
       </div>
       <div className="flex items-center gap-3">
         <Button disabled={pending} type="submit">
-          {pending ? "Saving…" : "Save bank details"}
+          {pending ? t("saving") : t("saveBank")}
         </Button>
         {state?.error ? (
           <p className="text-sm text-destructive" role="alert">
@@ -270,7 +267,7 @@ function BankForm({
         ) : null}
         {state?.success ? (
           <p className="flex items-center gap-1.5 text-sm" role="status">
-            <Check className="size-4" /> Saved
+            <Check className="size-4" /> {t("saved")}
           </p>
         ) : null}
       </div>
@@ -279,6 +276,7 @@ function BankForm({
 }
 
 export function FirstRunHome({ data }: { data: FirstRunHomeData }) {
+  const t = useTranslations("firstRun");
   const router = useRouter();
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const editorRef = useRef<HTMLDivElement>(null);
@@ -302,6 +300,7 @@ export function FirstRunHome({ data }: { data: FirstRunHomeData }) {
   const [pending, startTransition] = useTransition();
   const invoice = data.invoice;
   const currency = invoice?.currency ?? "EUR";
+  const locale = toIntlLocale(data.locale);
   const total = Number(invoice?.total ?? 0);
   const brandColor = data.org.brandColor ?? "#d1fd39";
   const addressLine = [data.org.postalCode, data.org.city].filter(Boolean).join(" ");
@@ -369,7 +368,7 @@ export function FirstRunHome({ data }: { data: FirstRunHomeData }) {
         return;
       }
       setTestSent(true);
-      setNotice({ kind: "success", text: `Test copy queued for ${data.email}.` });
+      setNotice({ kind: "success", text: t("testQueued", { email: data.email }) });
       router.refresh();
     });
   }
@@ -381,7 +380,7 @@ export function FirstRunHome({ data }: { data: FirstRunHomeData }) {
       setNotice(
         result.error
           ? { kind: "error", text: result.error }
-          : { kind: "success", text: `Confirmation sent to ${data.email}.` },
+          : { kind: "success", text: t("confirmationSent", { email: data.email }) },
       );
     });
   }
@@ -409,12 +408,12 @@ export function FirstRunHome({ data }: { data: FirstRunHomeData }) {
   const nextStep = !invoice
     ? undefined
     : !legalReady
-      ? { label: "Next: your legal details", onClick: () => setEditor("profile") }
+      ? { label: t("next.legal"), onClick: () => setEditor("profile") }
       : !bankReady
-        ? { label: "Next: how you get paid", onClick: () => setEditor("bank") }
+        ? { label: t("next.bank"), onClick: () => setEditor("bank") }
         : !testSent
-          ? { label: "Next: send yourself a test copy", onClick: sendTest }
-          : { label: "Last step: send it to your client", onClick: sendRealInvoice };
+          ? { label: t("next.test"), onClick: sendTest }
+          : { label: t("next.send"), onClick: sendRealInvoice };
 
   return (
     <Settled value={settled}>
@@ -429,7 +428,7 @@ export function FirstRunHome({ data }: { data: FirstRunHomeData }) {
           ref={scrollRef}
         >
           <article
-            aria-label="Your first invoice"
+            aria-label={t("invoiceLabel")}
             className="invoice-paper overflow-hidden border border-black/10 p-5 text-[#1f1b16] shadow-[0_24px_70px_-42px_rgb(31_27_22/55%)] sm:p-8 lg:sticky lg:top-6 lg:col-start-1 lg:row-span-4 lg:row-start-1"
             data-testid="first-run-invoice"
           >
@@ -455,36 +454,36 @@ export function FirstRunHome({ data }: { data: FirstRunHomeData }) {
                     {data.org.legalName ? (
                       <Landed value={data.org.legalName} />
                     ) : (
-                      <Gap onClick={() => setEditor("profile")}>Legal name</Gap>
+                      <Gap onClick={() => setEditor("profile")}>{t("gaps.legalName")}</Gap>
                     )}
                   </p>
                   <p>
                     {data.org.street ? (
                       <Landed value={data.org.street} />
                     ) : (
-                      <Gap onClick={() => setEditor("profile")}>Street and number</Gap>
+                      <Gap onClick={() => setEditor("profile")}>{t("gaps.street")}</Gap>
                     )}
                   </p>
                   <p>
                     {addressLine && data.org.country ? (
                       <Landed value={`${addressLine}, ${data.org.country}`} />
                     ) : (
-                      <Gap onClick={() => setEditor("profile")}>Postcode, city, country</Gap>
+                      <Gap onClick={() => setEditor("profile")}>{t("gaps.address")}</Gap>
                     )}
                   </p>
                   <p>
                     {taxIdentifierFromColumns(data.org) ? (
-                      formatTaxIdentifier(taxIdentifierFromColumns(data.org))
+                      formatTaxIdentifier(taxIdentifierFromColumns(data.org), data.locale)
                     ) : legalReady ? (
-                      <span className="text-[#6b655c]">No tax ID</span>
+                      <span className="text-[#6b655c]">{t("gaps.noTaxId")}</span>
                     ) : (
-                      <Gap onClick={() => setEditor("profile")}>Tax ID, if used</Gap>
+                      <Gap onClick={() => setEditor("profile")}>{t("gaps.taxId")}</Gap>
                     )}
                   </p>
                 </div>
               </div>
               <div className="shrink-0 text-right">
-                <p className="text-2xl font-bold tracking-[-0.04em] sm:text-4xl">Invoice</p>
+                <p className="text-2xl font-bold tracking-[-0.04em] sm:text-4xl">{t("invoice")}</p>
                 <p className="mt-1 font-mono text-xs text-[#6b655c]">
                   {invoice?.number ?? "INV-0001"}
                 </p>
@@ -493,12 +492,12 @@ export function FirstRunHome({ data }: { data: FirstRunHomeData }) {
 
             <section className="grid grid-cols-2 gap-4 border-b border-black/10 py-5 sm:grid-cols-3 sm:py-6">
               <div className="col-span-2 sm:col-span-1">
-                <p className="nota-label text-[#6b655c]">Billed to</p>
+                <p className="nota-label text-[#6b655c]">{t("billedTo")}</p>
                 <p className="mt-2 text-sm font-bold">
                   {invoice ? (
                     <Landed value={invoice.client.name} />
                   ) : (
-                    <Gap onClick={askNota}>Your first client</Gap>
+                    <Gap onClick={askNota}>{t("gaps.firstClient")}</Gap>
                   )}
                 </p>
                 {invoice ? (
@@ -506,15 +505,15 @@ export function FirstRunHome({ data }: { data: FirstRunHomeData }) {
                 ) : null}
               </div>
               <div>
-                <p className="nota-label text-[#6b655c]">Issued</p>
+                <p className="nota-label text-[#6b655c]">{t("issued")}</p>
                 <p className="mt-2 font-mono text-xs">
-                  {invoice ? formatDate(invoice.issuedAt) : "When drafted"}
+                  {invoice ? formatDate(invoice.issuedAt, locale) : t("whenDrafted")}
                 </p>
               </div>
               <div>
-                <p className="nota-label text-[#6b655c]">Due</p>
+                <p className="nota-label text-[#6b655c]">{t("due")}</p>
                 <p className="mt-2 font-mono text-xs">
-                  {invoice ? formatDate(invoice.dueAt) : "14 days later"}
+                  {invoice ? formatDate(invoice.dueAt, locale) : t("daysLater")}
                 </p>
               </div>
             </section>
@@ -523,9 +522,13 @@ export function FirstRunHome({ data }: { data: FirstRunHomeData }) {
               <table className="w-full table-fixed border-collapse text-left text-sm">
                 <thead>
                   <tr className="border-b border-black/10 text-[#6b655c]">
-                    <th className="nota-label pb-3 font-medium">Description</th>
-                    <th className="nota-label w-10 pb-3 text-right font-medium sm:w-14">Qty</th>
-                    <th className="nota-label w-24 pb-3 text-right font-medium sm:w-28">Amount</th>
+                    <th className="nota-label pb-3 font-medium">{t("description")}</th>
+                    <th className="nota-label w-10 pb-3 text-right font-medium sm:w-14">
+                      {t("qty")}
+                    </th>
+                    <th className="nota-label w-24 pb-3 text-right font-medium sm:w-28">
+                      {t("amount")}
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
@@ -536,17 +539,17 @@ export function FirstRunHome({ data }: { data: FirstRunHomeData }) {
                           <Landed value={item.description} />
                         </td>
                         <td className="py-4 text-right font-mono text-xs">
-                          {Number(item.quantity)}
+                          {formatQuantity(item.quantity, locale)}
                         </td>
                         <td className="py-4 text-right font-mono text-xs font-medium">
-                          {formatCurrency(Number(item.amount), currency)}
+                          {formatCurrency(Number(item.amount), currency, locale)}
                         </td>
                       </tr>
                     ))
                   ) : (
                     <tr className="border-b border-black/10">
                       <td className="py-4" colSpan={3}>
-                        <Gap onClick={askNota}>What you did and what it costs</Gap>
+                        <Gap onClick={askNota}>{t("gaps.work")}</Gap>
                       </td>
                     </tr>
                   )}
@@ -555,9 +558,9 @@ export function FirstRunHome({ data }: { data: FirstRunHomeData }) {
             </div>
 
             <div className="mt-5 flex items-end justify-between gap-5 sm:mt-6">
-              <p className="nota-label pb-1">Total due</p>
+              <p className="nota-label pb-1">{t("totalDue")}</p>
               <p className="font-mono text-2xl font-bold tracking-[-0.04em] sm:text-3xl">
-                {invoice ? <Landed value={formatCurrency(total, currency)} /> : "—"}
+                {invoice ? <Landed value={formatCurrency(total, currency, locale)} /> : "—"}
               </p>
             </div>
 
@@ -567,20 +570,18 @@ export function FirstRunHome({ data }: { data: FirstRunHomeData }) {
               style={{ backgroundColor: brandColor, color: readableTextColor(brandColor) }}
               type="button"
             >
-              <Landed value={bankReady ? "Pay by bank transfer" : "Add how you get paid"} />
+              <Landed value={bankReady ? t("payByTransfer") : t("addHowPaid")} />
               <span className="flex items-center gap-2 font-mono text-xs">
-                {bankReady ? data.bankAccount?.name : "Bank details"}
+                {bankReady ? data.bankAccount?.name : t("bankDetails")}
                 <Landmark className="size-4" />
               </span>
             </button>
           </article>
 
           <div className="min-w-0 space-y-2 max-lg:hidden lg:col-start-2 lg:row-start-1">
-            <p className="nota-label">Your first invoice</p>
-            <h1 className="!text-[2rem] !leading-[1.05]">Who’s the first one for?</h1>
-            <p className="max-w-md text-sm leading-6 text-muted-foreground">
-              One sentence is enough. Include who, what you did, the price, and their email.
-            </p>
+            <p className="nota-label">{t("invoiceLabel")}</p>
+            <h1 className="!text-[2rem] !leading-[1.05]">{t("whoFirst")}</h1>
+            <p className="max-w-md text-sm leading-6 text-muted-foreground">{t("oneSentence")}</p>
           </div>
 
           <section
@@ -588,7 +589,7 @@ export function FirstRunHome({ data }: { data: FirstRunHomeData }) {
             className="min-w-0 border-t pt-5 lg:col-start-2 lg:row-start-3"
           >
             <h2 className="nota-label text-foreground" id="finish-invoice-heading">
-              Finish on the invoice
+              {t("finishOn")}
             </h2>
             <div className="mt-3 divide-y">
               <button
@@ -605,7 +606,7 @@ export function FirstRunHome({ data }: { data: FirstRunHomeData }) {
                   >
                     {legalReady ? <Check className="size-3" /> : "1"}
                   </span>
-                  Legal name and address
+                  {t("legalNameAddress")}
                 </span>
                 <ChevronDown
                   className={cn(
@@ -628,7 +629,7 @@ export function FirstRunHome({ data }: { data: FirstRunHomeData }) {
                   >
                     {bankReady ? <Check className="size-3" /> : "2"}
                   </span>
-                  Bank details
+                  {t("bankDetailsStep")}
                 </span>
                 <ChevronDown
                   className={cn("size-4 transition-transform", editor === "bank" && "rotate-180")}
@@ -651,7 +652,7 @@ export function FirstRunHome({ data }: { data: FirstRunHomeData }) {
           </section>
 
           <section
-            aria-label="Send your first invoice"
+            aria-label={t("sendSection")}
             className="min-w-0 space-y-3 border-t pt-5 lg:col-start-2 lg:row-start-4"
             ref={sendRef}
           >
@@ -662,12 +663,10 @@ export function FirstRunHome({ data }: { data: FirstRunHomeData }) {
               type="button"
             >
               {testSent ? <Check /> : <Mail />}
-              {testSent ? "Test copy sent" : "Send it to me first"}
+              {testSent ? t("testSent") : t("sendToMe")}
             </Button>
             {!readyForTest ? (
-              <p className="text-xs leading-5 text-muted-foreground">
-                Fill the highlighted client, work, legal, and bank details to send a test copy.
-              </p>
+              <p className="text-xs leading-5 text-muted-foreground">{t("fillHighlighted")}</p>
             ) : null}
             {testSent ? (
               <Button
@@ -677,7 +676,7 @@ export function FirstRunHome({ data }: { data: FirstRunHomeData }) {
                 type="button"
                 variant="outline"
               >
-                <Send /> Send invoice
+                <Send /> {t("sendInvoice")}
               </Button>
             ) : null}
 
@@ -686,13 +685,10 @@ export function FirstRunHome({ data }: { data: FirstRunHomeData }) {
                 className="space-y-3 rounded-lg border bg-card p-4"
                 data-testid="first-run-verify"
               >
-                <p className="text-sm font-semibold">Confirm {data.email}</p>
-                <p className="text-sm leading-6 text-muted-foreground">
-                  We’ll send a one-time link. Come back here after confirming, then send the
-                  invoice.
-                </p>
+                <p className="text-sm font-semibold">{t("confirmEmail", { email: data.email })}</p>
+                <p className="text-sm leading-6 text-muted-foreground">{t("confirmLead")}</p>
                 <Button disabled={pending} onClick={requestVerification} size="sm" type="button">
-                  Send confirmation link
+                  {t("sendConfirmation")}
                 </Button>
               </div>
             ) : null}
@@ -710,6 +706,7 @@ export function FirstRunHome({ data }: { data: FirstRunHomeData }) {
         <ChatPanel
           dockAction={nextStep}
           inputRef={inputRef}
+          locale={locale}
           mode="first-run"
           onDockSubmit={() => scrollRef.current?.scrollTo({ behavior: "smooth", top: 0 })}
           onOpenChange={setChatOpen}
@@ -717,16 +714,16 @@ export function FirstRunHome({ data }: { data: FirstRunHomeData }) {
           prompt={
             invoice
               ? {
-                  label: "Change anything",
-                  placeholder: "Make it 4 days, due in 30",
-                  question: "Who’s the first one for?",
-                  submitLabel: "Update",
+                  label: t("prompt.changeLabel"),
+                  placeholder: t("prompt.changePlaceholder"),
+                  question: t("whoFirst"),
+                  submitLabel: t("prompt.update"),
                 }
               : {
-                  label: "Client, work, price, email",
-                  placeholder: "Acme GmbH, 3 days of design at €600, billing@acme.com",
-                  question: "Who’s the first one for?",
-                  submitLabel: "Draft it",
+                  label: t("prompt.newLabel"),
+                  placeholder: t("prompt.newPlaceholder"),
+                  question: t("whoFirst"),
+                  submitLabel: t("prompt.draft"),
                 }
           }
           starterPrompts={[]}

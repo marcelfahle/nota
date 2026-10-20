@@ -6,13 +6,19 @@ Claude and ChatGPT hosts that support MCP Apps can show an interactive invoice w
 
 ## Remote connection for Claude and ChatGPT
 
-Current deployment: **Hetzner `91.99.49.152`**, alongside Bold MCP, in its own `nota-mcp` container. Connect to:
+The hosted Nota app serves its own remote MCP endpoint, shown in Nota Settings:
+
+```text
+https://mcp.withnota.com/mcp
+```
+
+The standalone server in this package is also deployed, on a **temporary host** (Hetzner `91.99.49.152`, container `nota-mcp`):
 
 ```text
 https://nota-mcp.91-99-49-152.sslip.io/mcp
 ```
 
-Create a dedicated API key in [Nota Settings](https://nota-weld.vercel.app/settings), add the URL as a custom connector/app, and enter the key on the OAuth page. A branded domain can replace this initial hostname later. See [deployment operations](./deploy/README.md).
+Create a dedicated API key in [Nota Settings](https://app.withnota.com/settings), add the URL as a custom connector/app, and enter the key on the OAuth page. A branded domain will replace the temporary hostname. See [deployment operations](./deploy/README.md).
 
 Build from the repository root with `bun install` and `bun run build:mcp`. Run the HTTP server on a persistent Node.js host behind HTTPS:
 
@@ -59,12 +65,12 @@ The remote server is deployed. Your individual Claude/ChatGPT account connection
 - A Nota deployment URL
 - A Nota API key created in `Settings -> API Keys`
 
-`NOTA_URL` should point at the app origin such as `https://nota-weld.vercel.app`. The MCP client appends `/api/v1` automatically.
+`NOTA_URL` should point at the app origin such as `https://app.withnota.com`. The MCP client appends `/api/v1` automatically.
 
 ## Environment
 
 ```bash
-export NOTA_URL="https://nota-weld.vercel.app"
+export NOTA_URL="https://app.withnota.com"
 export NOTA_API_KEY="nota_..."
 ```
 
@@ -85,7 +91,7 @@ The server speaks MCP on stdio and waits for a client connection.
 cd apps/mcp
 bun install
 bun run build
-NOTA_URL="https://nota-weld.vercel.app" \
+NOTA_URL="https://app.withnota.com" \
 NOTA_API_KEY="nota_..." \
 node dist/index.js
 ```
@@ -104,7 +110,7 @@ Add a local stdio server entry to `claude_desktop_config.json`.
       "command": "npx",
       "args": ["-y", "@nota-app/mcp"],
       "env": {
-        "NOTA_URL": "https://nota-weld.vercel.app",
+        "NOTA_URL": "https://app.withnota.com",
         "NOTA_API_KEY": "nota_..."
       }
     }
@@ -114,22 +120,6 @@ Add a local stdio server entry to `claude_desktop_config.json`.
 
 For a source checkout, use `"command": "node"` with
 `"args": ["/absolute/path/to/nota/apps/mcp/dist/index.js"]` after building locally.
-
-```json
-{
-  "mcpServers": {
-    "nota": {
-      "type": "stdio",
-      "command": "npx",
-      "args": ["-y", "@nota-app/mcp"],
-      "env": {
-        "NOTA_URL": "https://nota-weld.vercel.app",
-        "NOTA_API_KEY": "nota_..."
-      }
-    }
-  }
-}
-```
 
 ## Claude Code
 
@@ -145,7 +135,7 @@ Project config:
       "command": "npx",
       "args": ["-y", "@nota-app/mcp"],
       "env": {
-        "NOTA_URL": "https://nota-weld.vercel.app",
+        "NOTA_URL": "https://app.withnota.com",
         "NOTA_API_KEY": "nota_..."
       }
     }
@@ -158,7 +148,7 @@ CLI alternative:
 ```bash
 claude mcp add nota \
   --transport stdio \
-  --env NOTA_URL=https://nota-weld.vercel.app \
+  --env NOTA_URL=https://app.withnota.com \
   --env NOTA_API_KEY=nota_... \
   -- npx -y @nota-app/mcp
 ```
@@ -174,7 +164,7 @@ Cursor supports project config in `.cursor/mcp.json` and user config in `~/.curs
       "command": "npx",
       "args": ["-y", "@nota-app/mcp"],
       "env": {
-        "NOTA_URL": "https://nota-weld.vercel.app",
+        "NOTA_URL": "https://app.withnota.com",
         "NOTA_API_KEY": "nota_..."
       }
     }

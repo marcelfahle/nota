@@ -1,5 +1,6 @@
 import { and, asc, eq } from "drizzle-orm";
 import { ArrowLeft } from "lucide-react";
+import { getTranslations } from "next-intl/server";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
@@ -8,10 +9,12 @@ import { InvoiceForm } from "@/components/invoice-form";
 import { getCurrentUser } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { clients, invoices, lineItems } from "@/lib/db/schema";
+import { toIntlLocale } from "@/lib/i18n";
 
 export default async function EditInvoicePage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const { org } = await getCurrentUser();
+  const { org, user } = await getCurrentUser();
+  const t = await getTranslations("invoiceForm");
 
   const [invoice] = await db
     .select()
@@ -29,10 +32,12 @@ export default async function EditInvoicePage({ params }: { params: Promise<{ id
 
   const clientList = await db
     .select({
+      defaultBuyerReference: clients.defaultBuyerReference,
       defaultCurrency: clients.defaultCurrency,
       email: clients.email,
       id: clients.id,
       name: clients.name,
+      publicSector: clients.publicSector,
     })
     .from(clients)
     .where(eq(clients.orgId, org.id))
@@ -53,16 +58,17 @@ export default async function EditInvoicePage({ params }: { params: Promise<{ id
         href={`/invoices/${id}`}
       >
         <ArrowLeft className="size-4" />
-        Back to invoice
+        {t("backToInvoice")}
       </Link>
 
-      <h1 className="mb-6 text-lg font-semibold">Edit {invoice.number}</h1>
+      <h1 className="mb-6 text-lg font-semibold">{t("editInvoice", { number: invoice.number })}</h1>
 
       <div className="max-w-3xl">
         <InvoiceForm
           action={boundUpdateAction}
           clients={clientList}
           defaultValues={{
+            buyerReference: invoice.buyerReference,
             clientId: invoice.clientId,
             currency: invoice.currency ?? "EUR",
             dueAt: invoice.dueAt,
@@ -74,11 +80,15 @@ export default async function EditInvoicePage({ params }: { params: Promise<{ id
               unitPrice: item.unitPrice,
             })),
             notes: invoice.notes,
-            reverseCharge: invoice.reverseCharge ?? "false",
+            servicePeriodEnd: invoice.servicePeriodEnd,
+            servicePeriodStart: invoice.servicePeriodStart,
             taxRate: invoice.taxRate ?? "0",
+            taxTreatment: invoice.taxTreatment,
           }}
+          locale={toIntlLocale(user.locale)}
+          org={{ countryCode: org.countryCode, defaultTaxTreatment: org.defaultTaxTreatment }}
           redirectTo={`/invoices/${id}`}
-          submitLabel="Update Invoice"
+          submitLabel={t("updateInvoice")}
         />
       </div>
     </div>

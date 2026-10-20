@@ -1,134 +1,53 @@
 import { renderToBuffer } from "@react-pdf/renderer";
-import { and, asc, eq } from "drizzle-orm";
 
 import { InvoicePdf } from "@/components/invoice-pdf";
-import { formatOrgAddress, getPdfLogoSrc } from "@/lib/branding";
-import { db } from "@/lib/db";
-import { bankAccounts, clients, invoices, lineItems } from "@/lib/db/schema";
-import { buildInvoiceFilename } from "@/lib/invoice-filename";
-import { invoiceTaxIdentifier, type TaxIdentifierType } from "@/lib/tax-identifier";
+import { getPdfLogoSrc } from "@/lib/branding";
+import { documentLocaleOf } from "@/lib/i18n";
+import {
+  type InvoiceDocumentDatabase,
+  type InvoiceDocumentOrg,
+  loadInvoiceDocument,
+} from "@/lib/invoice-document";
+import { formatVariableDecimal } from "@/lib/money";
 
-export type InvoicePdfOrg = {
-  brandColor: string | null;
-  businessAddress: string | null;
-  businessName: string | null;
-  city: string | null;
-  country: string | null;
-  id: string;
-  legalName: string | null;
-  logoUrl: string | null;
-  name: string;
-  postalCode: string | null;
-  region: string | null;
-  street: string | null;
-  taxIdentifierCanonicalValue?: string | null;
-  taxIdentifierCountryCode?: string | null;
-  taxIdentifierType?: TaxIdentifierType | null;
-  taxIdentifierValue?: string | null;
-  vatNumber: string | null;
-};
+export type InvoicePdfOrg = InvoiceDocumentOrg;
 
-export class InvoicePdfDataError extends Error {
-  readonly status = 404;
-
-  constructor(message: string) {
-    super(message);
-    this.name = "InvoicePdfDataError";
-  }
-}
+export { InvoiceDocumentError as InvoicePdfDataError } from "@/lib/invoice-document";
 
 export async function renderInvoicePdfForOrg(
   org: InvoicePdfOrg,
   invoiceId: string,
-  options: { logoSrc?: string | null } = {},
+  options: { database?: InvoiceDocumentDatabase; logoSrc?: string | null } = {},
 ) {
-  const [invoice] = await db
-    .select()
-    .from(invoices)
-    .where(and(eq(invoices.id, invoiceId), eq(invoices.orgId, org.id)))
-    .limit(1);
-
-  if (!invoice) {
-    throw new InvoicePdfDataError("Invoice not found");
-  }
-
-  const [client] = await db
-    .select()
-    .from(clients)
-    .where(and(eq(clients.id, invoice.clientId), eq(clients.orgId, org.id)))
-    .limit(1);
-
-  if (!client) {
-    throw new InvoicePdfDataError("Client not found");
-  }
-
-  const items = await db
-    .select()
-    .from(lineItems)
-    .where(eq(lineItems.invoiceId, invoiceId))
-    .orderBy(asc(lineItems.sortOrder));
-  const [creditedInvoice] = invoice.creditsInvoiceId
-    ? await db
-        .select({ number: invoices.number })
-        .from(invoices)
-        .where(eq(invoices.id, invoice.creditsInvoiceId))
-        .limit(1)
-    : [];
-
-  let bankAccount: {
-    bic: string | null;
-    details: string;
-    iban: string | null;
-  } | null = null;
-  if (client.bankAccountId) {
-    const [assignedAccount] = await db
-      .select({
-        bic: bankAccounts.bic,
-        details: bankAccounts.details,
-        iban: bankAccounts.iban,
-      })
-      .from(bankAccounts)
-      .where(and(eq(bankAccounts.id, client.bankAccountId), eq(bankAccounts.orgId, org.id)))
-      .limit(1);
-    bankAccount = assignedAccount ?? null;
-  }
-
-  if (!bankAccount) {
-    const [defaultAccount] = await db
-      .select({
-        bic: bankAccounts.bic,
-        details: bankAccounts.details,
-        iban: bankAccounts.iban,
-      })
-      .from(bankAccounts)
-      .where(and(eq(bankAccounts.orgId, org.id), eq(bankAccounts.isDefault, true)))
-      .limit(1);
-    bankAccount = defaultAccount ?? null;
-  }
+  const document = await loadInvoiceDocument(org, invoiceId, options.database);
+  const { bank, buyer, invoice, items, seller, totals } = document;
+  // An issued invoice keeps the language it was issued in; a draft follows the workspace.
+  const locale = documentLocaleOf(invoice, org);
 
   const logoSrc =
-    options.logoSrc === undefined ? await getPdfLogoSrc(org.logoUrl) : options.logoSrc;
+    options.logoSrc === undefined ? await getPdfLogoSrc(seller.logoUrl) : options.logoSrc;
   const buffer = await renderToBuffer(
     InvoicePdf({
       business: {
-        address: formatOrgAddress(org),
-        bankDetails: bankAccount?.details ?? null,
-        bic: bankAccount?.bic ?? null,
-        brandColor: org.brandColor,
-        iban: bankAccount?.iban ?? null,
+        address: seller.address,
+        bankDetails: bank?.details ?? null,
+        bic: bank?.bic ?? null,
+        brandColor: seller.brandColor,
+        iban: bank?.iban ?? null,
         logoSrc,
-        name: org.legalName ?? org.businessName ?? org.name,
-        taxIdentifier: invoiceTaxIdentifier(invoice.status, invoice.sellerTaxIdentifier, org),
+        name: seller.name,
+        taxIdentifier: seller.taxIdentifier,
       },
       client: {
-        address: client.address,
-        company: client.company,
-        email: client.email,
-        name: client.name,
-        taxIdentifier: invoiceTaxIdentifier(invoice.status, invoice.clientTaxIdentifier, client),
+        address: buyer.address,
+        company: buyer.company,
+        email: buyer.email,
+        name: buyer.name,
+        taxIdentifier: buyer.taxIdentifier,
       },
       invoice: {
-        currency: invoice.currency ?? "EUR",
+        buyerReference: invoice.buyerReference,
+        currency: totals.currency,
         dueAt: invoice.dueAt,
         issuedAt: invoice.issuedAt,
         kind: invoice.kind,
@@ -140,29 +59,24 @@ export async function renderInvoicePdfForOrg(
         })),
         notes: invoice.notes,
         number: invoice.number,
-        originalNumber: creditedInvoice?.number,
+        originalNumber: document.originalNumber,
         paymentLinkUrl: invoice.stripePaymentLinkUrl,
-        reverseCharge: invoice.reverseCharge,
-        subtotal: invoice.subtotal ?? "0.00",
-        taxAmount: invoice.taxAmount ?? "0.00",
-        taxRate: invoice.taxRate ?? "0.00",
-        total: invoice.total ?? "0.00",
+        servicePeriodEnd: invoice.servicePeriodEnd,
+        servicePeriodStart: invoice.servicePeriodStart,
+        subtotal: totals.subtotal,
+        taxAmount: totals.taxAmount,
+        taxRate: formatVariableDecimal(totals.taxRate, 6, 2),
+        taxTreatment: totals.taxTreatment,
+        total: totals.total,
       },
+      locale,
     }),
   );
 
   return {
     buffer: new Uint8Array(buffer),
-    clientName: client.name,
-    filename: buildInvoiceFilename(
-      {
-        clientName: client.name,
-        issuedAt: invoice.issuedAt,
-        lineItems: items,
-        number: invoice.number,
-      },
-      "pdf",
-    ),
+    clientName: buyer.name,
+    filename: document.filename("pdf"),
     invoiceNumber: invoice.number,
   };
 }

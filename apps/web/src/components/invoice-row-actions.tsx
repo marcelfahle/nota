@@ -10,6 +10,7 @@ import {
   Pencil,
   Send,
 } from "lucide-react";
+import { useTranslations } from "next-intl";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
@@ -62,40 +63,6 @@ type InvoiceRowActionsProps = {
   role: AuthenticatedRole;
 };
 
-const CONFIRM_COPY: Record<
-  ConfirmAction,
-  {
-    confirmLabel: string;
-    description: (invoiceNumber: string) => string;
-    title: string;
-  }
-> = {
-  "mark-paid": {
-    confirmLabel: "Mark as paid",
-    description: (invoiceNumber) =>
-      `This records ${invoiceNumber} as paid and removes it from outstanding balances.`,
-    title: "Record payment?",
-  },
-  "mark-sent": {
-    confirmLabel: "Mark as sent",
-    description: (invoiceNumber) =>
-      `This records ${invoiceNumber} as sent without emailing the client. You can record its payment later.`,
-    title: "Mark this invoice as sent?",
-  },
-  remind: {
-    confirmLabel: "Send reminder",
-    description: (invoiceNumber) =>
-      `Nota will email a payment reminder for ${invoiceNumber} to the client.`,
-    title: "Send payment reminder?",
-  },
-  send: {
-    confirmLabel: "Send invoice",
-    description: (invoiceNumber) =>
-      `Nota will email ${invoiceNumber} to the client with the configured payment instructions.`,
-    title: "Send this invoice?",
-  },
-};
-
 function getPrimaryAction(
   status: ReturnType<typeof normalizeInvoiceStatus>,
   canSend: boolean,
@@ -127,6 +94,7 @@ function runInvoiceAction(action: ConfirmAction, invoiceId: string) {
 }
 
 export function InvoiceRowActions({ invoice, role }: InvoiceRowActionsProps) {
+  const t = useTranslations("invoices.actions");
   const router = useRouter();
   const [confirmAction, setConfirmAction] = useState<ConfirmAction | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -156,7 +124,7 @@ export function InvoiceRowActions({ invoice, role }: InvoiceRowActionsProps) {
       setConfirmAction(null);
       router.refresh();
     } catch {
-      setError("That action did not finish. Please try again.");
+      setError(t("failed"));
     } finally {
       setPendingAction(null);
     }
@@ -174,7 +142,7 @@ export function InvoiceRowActions({ invoice, role }: InvoiceRowActionsProps) {
 
       router.push(`/invoices/${result.invoiceId}`);
     } catch {
-      setError("Invoice could not be duplicated. Please try again.");
+      setError(t("duplicateFailed"));
     } finally {
       setPendingAction(null);
     }
@@ -191,7 +159,7 @@ export function InvoiceRowActions({ invoice, role }: InvoiceRowActionsProps) {
             <Button asChild className="min-h-11 sm:min-h-8" size="sm" variant="ghost">
               <Link href={`/invoices/${invoice.id}/edit`}>
                 <Pencil />
-                Edit
+                {t("edit")}
               </Link>
             </Button>
           ) : primaryAction ? (
@@ -203,12 +171,12 @@ export function InvoiceRowActions({ invoice, role }: InvoiceRowActionsProps) {
               variant="ghost"
             >
               {primaryAction === "send" ? <Send /> : <CheckCircle2 />}
-              {primaryAction === "send" ? "Send" : "Mark paid"}
+              {primaryAction === "send" ? t("send") : t("markPaid")}
             </Button>
           ) : null}
 
           <Button
-            aria-label={`Download ${invoice.number} PDF`}
+            aria-label={t("downloadPdfFor", { number: invoice.number })}
             asChild
             className="min-h-11 px-2.5 sm:min-h-8"
             size="sm"
@@ -216,14 +184,14 @@ export function InvoiceRowActions({ invoice, role }: InvoiceRowActionsProps) {
           >
             <a href={`/api/invoices/${invoice.id}/pdf`}>
               <Download />
-              <span className="sr-only sm:not-sr-only">PDF</span>
+              <span className="sr-only sm:not-sr-only">{t("pdf")}</span>
             </a>
           </Button>
 
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button
-                aria-label={`More actions for ${invoice.number}`}
+                aria-label={t("moreFor", { number: invoice.number })}
                 className="min-h-11 min-w-11 sm:min-h-8 sm:min-w-8"
                 disabled={pendingAction !== null}
                 size="icon-sm"
@@ -237,50 +205,50 @@ export function InvoiceRowActions({ invoice, role }: InvoiceRowActionsProps) {
                 {invoice.number}
               </DropdownMenuLabel>
               <DropdownMenuItem asChild>
-                <Link href={`/invoices/${invoice.id}`}>View invoice</Link>
+                <Link href={`/invoices/${invoice.id}`}>{t("view")}</Link>
               </DropdownMenuItem>
               {status === "draft" && (
                 <DropdownMenuItem asChild>
                   <Link href={`/invoices/${invoice.id}/edit`}>
                     <Pencil />
-                    Edit draft
+                    {t("editDraft")}
                   </Link>
                 </DropdownMenuItem>
               )}
               <DropdownMenuItem asChild>
                 <a href={`/api/invoices/${invoice.id}/pdf`}>
                   <Download />
-                  Download PDF
+                  {t("downloadPdf")}
                 </a>
               </DropdownMenuItem>
               <DropdownMenuItem asChild>
                 <a href={`/api/invoices/${invoice.id}/xrechnung`}>
                   <FileCode2 />
-                  Download XRechnung
+                  {t("downloadXml")}
                 </a>
               </DropdownMenuItem>
               <DropdownMenuSeparator />
               {canRemind && (
                 <DropdownMenuItem onSelect={() => setConfirmAction("remind")}>
                   <Mail />
-                  Send reminder
+                  {t("sendReminder")}
                 </DropdownMenuItem>
               )}
               {canSend && (
                 <DropdownMenuItem onSelect={() => setConfirmAction("mark-sent")}>
                   <CheckCircle2 />
-                  Mark as sent
+                  {t("markSent")}
                 </DropdownMenuItem>
               )}
               {canMarkPaid && primaryAction !== "mark-paid" && (
                 <DropdownMenuItem onSelect={() => setConfirmAction("mark-paid")}>
                   <CheckCircle2 />
-                  Mark as paid
+                  {t("markAsPaid")}
                 </DropdownMenuItem>
               )}
               <DropdownMenuItem onSelect={handleDuplicate}>
                 <Copy />
-                Duplicate as draft
+                {t("duplicate")}
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
@@ -305,9 +273,9 @@ export function InvoiceRowActions({ invoice, role }: InvoiceRowActionsProps) {
           {confirmAction ? (
             <>
               <DialogHeader>
-                <DialogTitle>{CONFIRM_COPY[confirmAction].title}</DialogTitle>
+                <DialogTitle>{t(`confirm.${confirmAction}.title`)}</DialogTitle>
                 <DialogDescription>
-                  {CONFIRM_COPY[confirmAction].description(invoice.number)}
+                  {t(`confirm.${confirmAction}.description`, { number: invoice.number })}
                 </DialogDescription>
               </DialogHeader>
               {error ? (
@@ -321,12 +289,12 @@ export function InvoiceRowActions({ invoice, role }: InvoiceRowActionsProps) {
                   onClick={() => setConfirmAction(null)}
                   variant="outline"
                 >
-                  Review invoice
+                  {t("reviewInvoice")}
                 </Button>
                 <Button disabled={pendingAction !== null} onClick={runConfirmedAction}>
                   {pendingAction === confirmAction
-                    ? "Working…"
-                    : CONFIRM_COPY[confirmAction].confirmLabel}
+                    ? t("working")
+                    : t(`confirm.${confirmAction}.confirm`)}
                 </Button>
               </DialogFooter>
             </>

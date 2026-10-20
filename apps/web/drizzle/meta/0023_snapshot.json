@@ -1,5 +1,5 @@
 {
-  "id": "0035fc80-df44-451d-ba64-5fc9483dc8ea",
+  "id": "23aa06a0-1e0c-4f54-855c-02b7d4d76d03",
   "prevId": "1ad4e85e-d8fc-4a92-a251-0c383254d842",
   "version": "7",
   "dialect": "postgresql",
@@ -196,134 +196,6 @@
           "columnsFrom": ["invoice_id"],
           "columnsTo": ["id"],
           "onDelete": "no action",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.admin_audit_log": {
-      "name": "admin_audit_log",
-      "schema": "",
-      "columns": {
-        "action": {
-          "name": "action",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "admin_user_id": {
-          "name": "admin_user_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "expires_at": {
-          "name": "expires_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "gen_random_uuid()"
-        },
-        "metadata": {
-          "name": "metadata",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "target_org_id": {
-          "name": "target_org_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "target_user_id": {
-          "name": "target_user_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        }
-      },
-      "indexes": {
-        "admin_audit_log_created_at_idx": {
-          "name": "admin_audit_log_created_at_idx",
-          "columns": [
-            {
-              "expression": "created_at",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "admin_audit_log_target_org_idx": {
-          "name": "admin_audit_log_target_org_idx",
-          "columns": [
-            {
-              "expression": "target_org_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "created_at",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "admin_audit_log_admin_user_id_users_id_fk": {
-          "name": "admin_audit_log_admin_user_id_users_id_fk",
-          "tableFrom": "admin_audit_log",
-          "tableTo": "users",
-          "columnsFrom": ["admin_user_id"],
-          "columnsTo": ["id"],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "admin_audit_log_target_org_id_orgs_id_fk": {
-          "name": "admin_audit_log_target_org_id_orgs_id_fk",
-          "tableFrom": "admin_audit_log",
-          "tableTo": "orgs",
-          "columnsFrom": ["target_org_id"],
-          "columnsTo": ["id"],
-          "onDelete": "set null",
-          "onUpdate": "no action"
-        },
-        "admin_audit_log_target_user_id_users_id_fk": {
-          "name": "admin_audit_log_target_user_id_users_id_fk",
-          "tableFrom": "admin_audit_log",
-          "tableTo": "users",
-          "columnsFrom": ["target_user_id"],
-          "columnsTo": ["id"],
-          "onDelete": "set null",
           "onUpdate": "no action"
         }
       },
@@ -1047,8 +919,20 @@
           "primaryKey": false,
           "notNull": false
         },
+        "city": {
+          "name": "city",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
         "company": {
           "name": "company",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "country_code": {
+          "name": "country_code",
           "type": "text",
           "primaryKey": false,
           "notNull": false
@@ -1059,6 +943,12 @@
           "primaryKey": false,
           "notNull": false,
           "default": "now()"
+        },
+        "default_buyer_reference": {
+          "name": "default_buyer_reference",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
         },
         "default_currency": {
           "name": "default_currency",
@@ -1095,6 +985,25 @@
         "org_id": {
           "name": "org_id",
           "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "postal_code": {
+          "name": "postal_code",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "public_sector": {
+          "name": "public_sector",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "street": {
+          "name": "street",
+          "type": "text",
           "primaryKey": false,
           "notNull": false
         },
@@ -1505,6 +1414,12 @@
       "name": "invoices",
       "schema": "",
       "columns": {
+        "buyer_reference": {
+          "name": "buyer_reference",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
         "client_id": {
           "name": "client_id",
           "type": "uuid",
@@ -1626,6 +1541,18 @@
           "primaryKey": false,
           "notNull": false
         },
+        "service_period_end": {
+          "name": "service_period_end",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "service_period_start": {
+          "name": "service_period_start",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": false
+        },
         "source": {
           "name": "source",
           "type": "invoice_source",
@@ -1689,6 +1616,14 @@
           "type": "numeric(9, 6)",
           "primaryKey": false,
           "notNull": false
+        },
+        "tax_treatment": {
+          "name": "tax_treatment",
+          "type": "tax_treatment",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'standard'"
         },
         "total": {
           "name": "total",
@@ -3015,8 +2950,26 @@
           "primaryKey": false,
           "notNull": false
         },
+        "contact_name": {
+          "name": "contact_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "contact_phone": {
+          "name": "contact_phone",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
         "country": {
           "name": "country",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "country_code": {
+          "name": "country_code",
           "type": "text",
           "primaryKey": false,
           "notNull": false
@@ -3047,6 +3000,14 @@
           "primaryKey": false,
           "notNull": true,
           "default": "'EUR'"
+        },
+        "default_tax_treatment": {
+          "name": "default_tax_treatment",
+          "type": "tax_treatment",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'standard'"
         },
         "favicon_url": {
           "name": "favicon_url",
@@ -4147,6 +4108,11 @@
       "name": "proposal_status",
       "schema": "public",
       "values": ["pending", "approved", "dismissed", "expired", "executed"]
+    },
+    "public.tax_treatment": {
+      "name": "tax_treatment",
+      "schema": "public",
+      "values": ["standard", "zero_rated", "exempt_small_business", "reverse_charge"]
     },
     "public.vat_status": {
       "name": "vat_status",

@@ -1,11 +1,9 @@
-import { renderToBuffer } from "@react-pdf/renderer";
 import { and, asc, eq, isNull, lt, lte, or } from "drizzle-orm";
 
-import { InvoicePdf } from "@/components/invoice-pdf";
-import { InvoiceSentEmail } from "@/emails/invoice-sent";
-import { PaymentReceivedEmail } from "@/emails/payment-received";
+import { InvoiceSentEmail, invoiceSentSubject } from "@/emails/invoice-sent";
+import { PaymentReceivedEmail, paymentReceivedSubject } from "@/emails/payment-received";
 import { APP_NAME } from "@/lib/app-brand";
-import { formatOrgAddress, getPdfLogoSrc } from "@/lib/branding";
+import { getPdfLogoSrc } from "@/lib/branding";
 import { db } from "@/lib/db";
 import {
   activityLog,
@@ -13,16 +11,17 @@ import {
   clients,
   invoices,
   jobs,
-  lineItems,
   orgs,
   proposals,
   users,
 } from "@/lib/db/schema";
+import { type InvoiceAttachment, parseInvoiceAttachments } from "@/lib/e-invoice-delivery";
 import { sendEmail } from "@/lib/email";
 import { getAppEnv } from "@/lib/env";
-import { buildInvoiceFilename } from "@/lib/invoice-filename";
+import { documentLocaleOf, getTranslator, isAppLocale, type AppLocale } from "@/lib/i18n";
+import type { InvoiceDocumentOrg } from "@/lib/invoice-document";
+import { loadInvoicePdf, loadInvoiceXml } from "@/lib/invoice-documents";
 import { reminderPayloadSchema } from "@/lib/proposal-service";
-import { invoiceTaxIdentifier } from "@/lib/tax-identifier";
 
 const JOB_LOCK_TIMEOUT_MS = 1000 * 60 * 10;
 
@@ -33,6 +32,8 @@ type EmailJobType =
   | "send_payment_received_email";
 
 type EmailJobPayload = {
+  /** Decided at send time, so a settings change later never alters what was promised. */
+  attachments: Array<InvoiceAttachment>;
   invoiceId: string;
   proposalId?: string;
   recipient?: string;
@@ -54,6 +55,7 @@ function parseEmailJobPayload(payload: Record<string, unknown>): EmailJobPayload
     return null;
   }
   return {
+    attachments: parseInvoiceAttachments(payload.attachments),
     invoiceId: payload.invoiceId,
     proposalId: typeof payload.proposalId === "string" ? payload.proposalId : undefined,
     recipient: typeof payload.recipient === "string" ? payload.recipient : undefined,
@@ -65,6 +67,14 @@ function parseEmailJobPayload(payload: Record<string, unknown>): EmailJobPayload
         : undefined,
     sourceClient: typeof payload.sourceClient === "string" ? payload.sourceClient : null,
   };
+}
+
+/** Reminder payloads first stored Intl tags; both forms map to a document language. */
+function storedLocale(value: string | undefined): AppLocale {
+  if (isAppLocale(value)) {
+    return value;
+  }
+  return value?.startsWith("de") ? "de" : "en";
 }
 
 function getPublicInvoiceUrl(token: string | null) {
@@ -91,12 +101,6 @@ async function getInvoiceEmailContext(invoiceId: string) {
     throw new Error("Organization not found");
   }
 
-  const items = await db
-    .select()
-    .from(lineItems)
-    .where(eq(lineItems.invoiceId, invoiceId))
-    .orderBy(asc(lineItems.sortOrder));
-
   let bankDetails: string | null = null;
   if (client.bankAccountId) {
     const [assignedBankAccount] = await db
@@ -122,89 +126,64 @@ async function getInvoiceEmailContext(invoiceId: string) {
     bankDetails,
     client,
     invoice,
-    items,
     logoSrc: await getPdfLogoSrc(organization.logoUrl),
     org: organization,
   };
 }
 
-async function sendInvoiceEmail(invoiceId: string, recipient?: string, idempotencyKey?: string) {
-  const { bankDetails, client, invoice, items, logoSrc, org } =
-    await getInvoiceEmailContext(invoiceId);
+/**
+ * The files one invoice email carries: the PDF, plus the XRechnung XML under
+ * the same base name when the send decided so. An issued invoice attaches the
+ * originals stored at issuance, byte for byte; only a draft (a test copy) or
+ * an invoice issued before originals were kept is rendered here.
+ */
+export async function renderInvoiceAttachments(
+  org: InvoiceDocumentOrg,
+  invoiceId: string,
+  attachments: Array<InvoiceAttachment>,
+  options: { logoSrc?: string | null } = {},
+) {
+  const pdf = await loadInvoicePdf(org, invoiceId, options);
+  const files = [
+    { content: Buffer.from(pdf.buffer), contentType: "application/pdf", filename: pdf.filename },
+  ];
+  if (attachments.includes("xml")) {
+    const { filename, xml } = await loadInvoiceXml(org, invoiceId);
+    files.push({ content: Buffer.from(xml, "utf8"), contentType: "application/xml", filename });
+  }
+  return files;
+}
 
-  const pdfBuffer = await renderToBuffer(
-    InvoicePdf({
-      business: {
-        address: formatOrgAddress(org),
-        bankDetails,
-        logoSrc,
-        name: org.legalName ?? org.businessName ?? org.name,
-        taxIdentifier: invoiceTaxIdentifier(invoice.status, invoice.sellerTaxIdentifier, org),
-      },
-      client: {
-        address: client.address,
-        company: client.company,
-        email: client.email,
-        name: client.name,
-        taxIdentifier: invoiceTaxIdentifier(invoice.status, invoice.clientTaxIdentifier, client),
-      },
-      invoice: {
-        currency: invoice.currency ?? "EUR",
-        dueAt: invoice.dueAt,
-        issuedAt: invoice.issuedAt,
-        lineItems: items.map((item) => ({
-          amount: item.amount,
-          description: item.description,
-          quantity: item.quantity,
-          unitPrice: item.unitPrice,
-        })),
-        notes: invoice.notes,
-        number: invoice.number,
-        paymentLinkUrl: invoice.stripePaymentLinkUrl,
-        reverseCharge: invoice.reverseCharge,
-        subtotal: invoice.subtotal ?? "0.00",
-        taxAmount: invoice.taxAmount ?? "0.00",
-        taxRate: invoice.taxRate ?? "0.00",
-        total: invoice.total ?? "0.00",
-      },
-    }),
-  );
+async function sendInvoiceEmail(
+  invoiceId: string,
+  attachments: Array<InvoiceAttachment>,
+  recipient?: string,
+  idempotencyKey?: string,
+) {
+  const { bankDetails, client, invoice, logoSrc, org } = await getInvoiceEmailContext(invoiceId);
 
   const businessName = org.legalName ?? org.businessName ?? org.name ?? APP_NAME;
+  const email = {
+    bankDetails,
+    businessName,
+    clientName: client.name,
+    currency: invoice.currency ?? "EUR",
+    dueAt: invoice.dueAt,
+    invoiceNumber: invoice.number,
+    invoiceUrl: getPublicInvoiceUrl(invoice.publicToken),
+    locale: documentLocaleOf(invoice, org),
+    paymentLinkUrl: invoice.stripePaymentLinkUrl,
+    // A copy sent to the sender is labelled as one in the subject and the body.
+    testCopy: Boolean(recipient),
+    total: invoice.total ?? "0",
+    xmlAttached: attachments.includes("xml"),
+  };
 
   await sendEmail({
-    attachments: [
-      {
-        content: pdfBuffer,
-        contentType: "application/pdf",
-        filename: buildInvoiceFilename(
-          {
-            clientName: client.name,
-            issuedAt: invoice.issuedAt,
-            lineItems: items,
-            number: invoice.number,
-          },
-          "pdf",
-        ),
-      },
-    ],
+    attachments: await renderInvoiceAttachments(org, invoiceId, attachments, { logoSrc }),
     idempotencyKey,
-    react: InvoiceSentEmail({
-      bankDetails,
-      businessName,
-      clientName: client.name,
-      currency: invoice.currency ?? "EUR",
-      dueAt: invoice.dueAt,
-      invoiceNumber: invoice.number,
-      invoiceUrl: getPublicInvoiceUrl(invoice.publicToken),
-      paymentLinkUrl: invoice.stripePaymentLinkUrl,
-      testCopy: Boolean(recipient),
-      total: invoice.total ?? "0",
-    }),
-    // A copy sent to the sender is labelled as one in the subject and the body.
-    subject: recipient
-      ? `Test copy: Invoice ${invoice.number} from ${businessName}`
-      : `Invoice ${invoice.number} from ${businessName}`,
+    react: InvoiceSentEmail(email),
+    subject: invoiceSentSubject(email),
     to: [recipient ?? client.email],
   });
 }
@@ -257,6 +236,7 @@ async function sendInvoiceReminderEmail(
         dueAt: stored.dueAt,
         invoiceNumber: stored.invoiceNumber,
         invoiceUrl: getPublicInvoiceUrl(invoice.publicToken),
+        locale: storedLocale(stored.locale),
         paymentLinkUrl: stored.paymentLinkUrl,
         reminder: true,
         total: stored.total,
@@ -275,22 +255,24 @@ async function sendInvoiceReminderEmail(
   const { bankDetails, client, invoice, org } = await getInvoiceEmailContext(invoiceId);
 
   const businessName = org.legalName ?? org.businessName ?? org.name ?? APP_NAME;
+  const email = {
+    bankDetails,
+    businessName,
+    clientName: client.name,
+    currency: invoice.currency ?? "EUR",
+    dueAt: invoice.dueAt,
+    invoiceNumber: invoice.number,
+    invoiceUrl: getPublicInvoiceUrl(invoice.publicToken),
+    locale: documentLocaleOf(invoice, org),
+    paymentLinkUrl: invoice.stripePaymentLinkUrl,
+    reminder: true,
+    total: invoice.total ?? "0",
+  };
 
   await sendEmail({
     idempotencyKey,
-    react: InvoiceSentEmail({
-      bankDetails,
-      businessName,
-      clientName: client.name,
-      currency: invoice.currency ?? "EUR",
-      dueAt: invoice.dueAt,
-      invoiceNumber: invoice.number,
-      invoiceUrl: getPublicInvoiceUrl(invoice.publicToken),
-      paymentLinkUrl: invoice.stripePaymentLinkUrl,
-      reminder: true,
-      total: invoice.total ?? "0",
-    }),
-    subject: `Reminder: Invoice ${invoice.number} — ${businessName}`,
+    react: InvoiceSentEmail(email),
+    subject: invoiceSentSubject(email),
     to: [client.email],
   });
 
@@ -308,6 +290,7 @@ async function sendPaymentReceivedEmail(invoiceId: string, idempotencyKey?: stri
       clientId: invoices.clientId,
       currency: invoices.currency,
       number: invoices.number,
+      orgId: invoices.orgId,
       paidAt: invoices.paidAt,
       total: invoices.total,
       userId: invoices.userId,
@@ -327,7 +310,7 @@ async function sendPaymentReceivedEmail(invoiceId: string, idempotencyKey?: stri
     .limit(1);
 
   const [user] = await db
-    .select({ businessName: users.businessName, email: users.email })
+    .select({ businessName: users.businessName, email: users.email, locale: users.locale })
     .from(users)
     .where(eq(users.id, invoice.userId))
     .limit(1);
@@ -336,16 +319,20 @@ async function sendPaymentReceivedEmail(invoiceId: string, idempotencyKey?: stri
     throw new Error("User not found");
   }
 
+  // This one goes to the workspace member, so it speaks their UI language.
+  const email = {
+    clientName:
+      client?.name ?? getTranslator(user.locale, "emails.paymentReceived")("unknownClient"),
+    currency: invoice.currency ?? "EUR",
+    invoiceNumber: invoice.number,
+    locale: user.locale,
+    paidAt: invoice.paidAt ?? new Date().toISOString().split("T")[0],
+    total: invoice.total ?? "0",
+  };
   await sendEmail({
     idempotencyKey,
-    react: PaymentReceivedEmail({
-      clientName: client?.name ?? "Client",
-      currency: invoice.currency ?? "EUR",
-      invoiceNumber: invoice.number,
-      paidAt: invoice.paidAt ?? new Date().toISOString().split("T")[0],
-      total: invoice.total ?? "0",
-    }),
-    subject: `Payment received: ${invoice.number}`,
+    react: PaymentReceivedEmail(email),
+    subject: paymentReceivedSubject(email),
     to: [user.email],
   });
 }
@@ -353,13 +340,14 @@ async function sendPaymentReceivedEmail(invoiceId: string, idempotencyKey?: stri
 async function performEmailJob(type: EmailJobType, payload: EmailJobPayload, jobId: string) {
   switch (type) {
     case "send_invoice_email":
-      await sendInvoiceEmail(payload.invoiceId, undefined, jobId);
+      await sendInvoiceEmail(payload.invoiceId, payload.attachments, undefined, jobId);
       return;
     case "send_invoice_test_email":
       if (!payload.recipient) {
         throw new Error("Test invoice recipient is missing");
       }
-      await sendInvoiceEmail(payload.invoiceId, payload.recipient, jobId);
+      // A test copy of a draft may still be incomplete, so it carries the PDF only.
+      await sendInvoiceEmail(payload.invoiceId, ["pdf"], payload.recipient, jobId);
       return;
     case "send_invoice_reminder_email":
       await sendInvoiceReminderEmail(payload.invoiceId, payload.reminder, payload, jobId);

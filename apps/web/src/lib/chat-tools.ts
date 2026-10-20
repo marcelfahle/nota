@@ -36,6 +36,7 @@ import {
   sendReminder,
   type InvoiceMutationInput,
 } from "@/lib/invoice-service";
+import { TAX_TREATMENTS, type TaxTreatment } from "@/lib/tax-treatment";
 import { clientTaxIdentifierFields } from "@/lib/vat";
 
 export type ChatToolContext = Pick<AuthenticatedUserContext, "org" | "role" | "user">;
@@ -73,8 +74,8 @@ type InvoiceTemplate = {
     unitPrice: number;
   }>;
   notes: string | null;
-  reverseCharge: string | null;
   taxRate: number | null;
+  taxTreatment: TaxTreatment;
 };
 
 type ClientSearchResult = Awaited<ReturnType<typeof listClientsForOrg>>[number];
@@ -344,8 +345,8 @@ async function loadLatestInvoiceTemplate(
       id: invoices.id,
       internalNotes: invoices.internalNotes,
       notes: invoices.notes,
-      reverseCharge: invoices.reverseCharge,
       taxRate: invoices.taxRate,
+      taxTreatment: invoices.taxTreatment,
     })
     .from(invoices)
     .where(
@@ -396,8 +397,8 @@ async function loadLatestInvoiceTemplate(
         } => item.quantity !== null && item.unitPrice !== null,
       ),
     notes: invoice.notes,
-    reverseCharge: invoice.reverseCharge,
     taxRate: normalizeDbNumber(invoice.taxRate),
+    taxTreatment: invoice.taxTreatment,
   };
 }
 
@@ -466,6 +467,7 @@ export function buildChatSystemPrompt(
 
   return [
     "You are Nota, an internal invoicing copilot.",
+    `Answer in the language the user writes in. If the user has not written anything yet, answer in ${auth.user.locale === "de" ? "German" : "English"}. Keep invoice numbers, amounts, dates and tool results exactly as given; do not translate or reformat them.`,
     `Today's date is ${new Date().toISOString().slice(0, 10)}.`,
     `Workspace: ${auth.org.businessName ?? auth.org.name}.`,
     `User role: ${auth.role}. Respect permissions; if a tool fails, explain the failure plainly.`,
@@ -555,7 +557,9 @@ export function createChatTools(auth: ChatToolContext) {
               ...toInvoiceSummary(invoice),
               lineItems: invoice.lineItems,
               taxRate: invoice.taxRate,
-              reverseCharge: invoice.reverseCharge,
+              taxTreatment: invoice.taxTreatment,
+              servicePeriodStart: invoice.servicePeriodStart,
+              servicePeriodEnd: invoice.servicePeriodEnd,
               notes: invoice.notes,
             })),
         };
@@ -594,12 +598,18 @@ export function createChatTools(auth: ChatToolContext) {
             .insert(clients)
             .values({
               address: input.address,
+              city: input.city,
               company: input.company,
+              countryCode: input.countryCode?.toUpperCase(),
+              defaultBuyerReference: input.defaultBuyerReference,
               defaultCurrency: input.defaultCurrency ?? auth.org.defaultCurrency ?? "EUR",
               email: input.email.trim().toLowerCase(),
               name: input.name.trim(),
               notes: input.notes,
               orgId: auth.org.id,
+              postalCode: input.postalCode,
+              publicSector: input.publicSector ?? false,
+              street: input.street,
               userId: auth.user.id,
               ...(await clientTaxIdentifierFields(input.taxIdentifier)),
             })
@@ -619,12 +629,34 @@ export function createChatTools(auth: ChatToolContext) {
           };
         }, MUTATION_RETRIES),
       inputSchema: z.object({
-        address: z.string().trim().optional(),
+        address: z
+          .string()
+          .trim()
+          .describe("Legacy free text. Prefer the structured fields.")
+          .optional(),
+        city: z.string().trim().optional(),
         company: z.string().trim().optional(),
+        countryCode: z
+          .string()
+          .trim()
+          .regex(/^[A-Za-z]{2}$/)
+          .describe("ISO 3166-1 alpha-2, e.g. DE")
+          .optional(),
+        defaultBuyerReference: z
+          .string()
+          .trim()
+          .describe("Leitweg-ID for public-sector clients, or a standing PO reference.")
+          .optional(),
         defaultCurrency: z.string().trim().optional(),
         email: z.string().email(),
         name: z.string().trim().min(1),
         notes: z.string().trim().optional(),
+        postalCode: z.string().trim().optional(),
+        publicSector: z
+          .boolean()
+          .describe("German public authority; needs a Leitweg-ID.")
+          .optional(),
+        street: z.string().trim().optional(),
         taxIdentifier: z
           .object({
             countryCode: z.string().length(2).nullable().optional(),
@@ -697,7 +729,33 @@ export function createChatTools(auth: ChatToolContext) {
             throw error;
           }
 
+          // An explicit "not reverse charge" skips the copied template and takes the workspace default.
+          const taxTreatment =
+            input.taxTreatment ??
+            (input.reverseCharge === true
+              ? "reverse_charge"
+              : input.reverseCharge === false
+                ? undefined
+                : useTemplateDefaults
+                  ? latestInvoiceTemplate?.taxTreatment
+                  : undefined);
+          const serviceMonth = input.serviceMonth?.match(/^(\d{4})-(\d{2})$/);
+          const servicePeriod =
+            input.servicePeriodStart || input.servicePeriodEnd
+              ? {
+                  end: input.servicePeriodEnd ?? input.servicePeriodStart,
+                  start: input.servicePeriodStart ?? input.servicePeriodEnd,
+                }
+              : serviceMonth
+                ? {
+                    end: new Date(Date.UTC(Number(serviceMonth[1]), Number(serviceMonth[2]), 0))
+                      .toISOString()
+                      .slice(0, 10),
+                    start: `${serviceMonth[1]}-${serviceMonth[2]}-01`,
+                  }
+                : null;
           const mutationInput: InvoiceMutationInput = {
+            buyerReference: input.buyerReference,
             clientId: client.id,
             currency:
               input.currency ??
@@ -716,15 +774,10 @@ export function createChatTools(auth: ChatToolContext) {
             notes:
               input.notes ??
               (input.copyPreviousInvoice ? (latestInvoiceTemplate?.notes ?? undefined) : undefined),
-            reverseCharge:
-              input.reverseCharge === undefined
-                ? useTemplateDefaults
-                  ? (latestInvoiceTemplate?.reverseCharge ?? "false")
-                  : "false"
-                : input.reverseCharge
-                  ? "true"
-                  : "false",
+            servicePeriodEnd: servicePeriod?.end,
+            servicePeriodStart: servicePeriod?.start,
             taxRate,
+            taxTreatment,
           };
 
           const result = await createInvoice(buildServiceContext(auth), mutationInput);
@@ -732,13 +785,19 @@ export function createChatTools(auth: ChatToolContext) {
             throw new Error(result.error);
           }
 
-          const invoice = await loadInvoiceSummary(auth, result.invoiceId);
+          const invoice = await getInvoiceDetail(auth.org.id, result.invoiceId);
+          if (!invoice) {
+            throw new Error("Invoice could not be loaded");
+          }
           revalidateInvoiceViews(invoice.id);
 
           return {
             invoice: toInvoiceSummary(invoice),
+            issueProblems: invoice.issueProblems,
             kind: "invoice",
-            message: `Created draft invoice ${invoice.number}.`,
+            message: invoice.issueProblems.length
+              ? `Created draft invoice ${invoice.number}. Before it can be sent: ${invoice.issueProblems.join(" ")}`
+              : `Created draft invoice ${invoice.number}.`,
           };
         }, MUTATION_RETRIES),
       inputSchema: z.object({
@@ -770,8 +829,28 @@ export function createChatTools(auth: ChatToolContext) {
           .optional(),
         lineItemsText: z.string().trim().optional(),
         notes: z.string().trim().optional(),
-        reverseCharge: z.boolean().optional(),
+        buyerReference: z
+          .string()
+          .trim()
+          .describe("Leitweg-ID or PO number the client asked for. Defaults to the client's.")
+          .optional(),
+        reverseCharge: z
+          .boolean()
+          .describe("Deprecated. Use taxTreatment: reverse_charge.")
+          .optional(),
+        servicePeriodEnd: z.string().trim().describe("YYYY-MM-DD").optional(),
+        servicePeriodStart: z
+          .string()
+          .trim()
+          .describe("YYYY-MM-DD. Same as the end for a single service day.")
+          .optional(),
         taxRate: z.number().min(0).max(100).optional(),
+        taxTreatment: z
+          .enum(TAX_TREATMENTS)
+          .describe(
+            "standard (VAT at taxRate), zero_rated (genuine 0% supply), exempt_small_business (§ 19 UStG Kleinunternehmer), reverse_charge (business customer abroad, § 13b UStG). Defaults to the workspace setting.",
+          )
+          .optional(),
         totalAmount: z.number().positive().optional(),
       }),
     }),

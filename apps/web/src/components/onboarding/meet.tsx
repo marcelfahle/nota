@@ -1,6 +1,7 @@
 "use client";
 
 import { Check, Loader2 } from "lucide-react";
+import { useTranslations } from "next-intl";
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -33,6 +34,7 @@ function Chip({
   placeholder?: string;
   value: string;
 }) {
+  const t = useTranslations("onboarding.chips");
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(value);
   const input = useRef<HTMLInputElement>(null);
@@ -75,7 +77,7 @@ function Chip({
   }
   return (
     <button
-      aria-label={`${label}: ${value || "not set"}. Change`}
+      aria-label={t("change", { label, value: value || t("notSet") })}
       className={cn("onboarding-chip", !value && "onboarding-chip-empty")}
       data-testid={`onboarding-chip-${field}`}
       onClick={() => {
@@ -105,15 +107,9 @@ function Pending({ children }: { children: ReactNode }) {
   );
 }
 
-const VAT_MESSAGES: Record<Exclude<VatReply, "valid-with-details">, string> = {
-  invalid: "The registry doesn't know that number. Check it, or carry on and fix it later.",
-  "tax-id": "Saved as your tax ID.",
-  unavailable:
-    "The registry isn't answering right now. We've kept the number and you can verify it later.",
-  valid: "Valid. This registry keeps names and addresses to itself, so add yours here.",
-};
-
 function VatStep({ profile, read }: { profile: SiteProfile; read: SiteRead }) {
+  const t = useTranslations("onboarding.vat");
+  const tChips = useTranslations("onboarding.chips");
   const fields = profile.fields;
   const [value, setValue] = useState(profile.taxIdentifier?.value ?? fields.vatNumber?.value ?? "");
   const [pending, setPending] = useState(false);
@@ -149,20 +145,19 @@ function VatStep({ profile, read }: { profile: SiteProfile; read: SiteRead }) {
       <p>
         {fromRegistry ? (
           <>
-            The EU VAT registry has you as{" "}
+            {t("registryHasYou")}
             <Chip
               field="legalName"
-              label="Legal name"
+              label={tChips("legalName")}
               onCommit={(next) => read.edit("legalName", next)}
               value={fields.legalName?.value ?? ""}
             />
             {fields.street ? (
               <>
-                {" "}
-                at{" "}
+                {t("at")}
                 <Chip
                   field="street"
-                  label="Street"
+                  label={tChips("street")}
                   onCommit={(next) => read.edit("street", next)}
                   value={fields.street.value}
                 />
@@ -172,26 +167,23 @@ function VatStep({ profile, read }: { profile: SiteProfile; read: SiteRead }) {
           </>
         ) : hasLegal ? (
           <>
-            {type === "us_ein" ? "Your EIN" : type === "eu_vat" ? "Your VAT ID" : "Your tax ID"}
+            {type === "us_ein" ? t("yourEin") : type === "eu_vat" ? t("yourVatId") : t("yourTaxId")}
             {fields.vatNumber
               ? type === "eu_vat"
-                ? " was on your site. Check it against the EU registry if you like."
-                : " was on your site. Confirm it here if you use it."
-              : " wasn’t on your site. Add it here if you have one."}
+                ? t("onSiteCheck")
+                : t("onSiteConfirm")
+              : t("notOnSite")}
           </>
         ) : outsideEu ? (
-          <>Your legal name and tax ID aren&rsquo;t on your site. Add your tax ID if you use one.</>
+          <>{t("outsideEu")}</>
         ) : (
-          <>
-            Your legal name, address and VAT ID aren&rsquo;t public anywhere. Paste your VAT ID and,
-            where the registry shares them, it fills in the rest.
-          </>
+          <>{t("nothingPublic")}</>
         )}
       </p>
 
       <form className="flex flex-wrap items-center gap-2 font-sans" onSubmit={onSubmit}>
         <label className="sr-only" htmlFor="onboarding-tax-id-type">
-          Tax identifier type
+          {t("typeLabel")}
         </label>
         <select
           className="h-11 rounded-md border border-input bg-card px-3 text-sm"
@@ -202,12 +194,12 @@ function VatStep({ profile, read }: { profile: SiteProfile; read: SiteRead }) {
           }}
           value={type}
         >
-          <option value="eu_vat">EU VAT ID</option>
-          <option value="us_ein">US EIN</option>
-          <option value="tax_id">Tax ID</option>
+          <option value="eu_vat">{t("euVat")}</option>
+          <option value="us_ein">{t("usEin")}</option>
+          <option value="tax_id">{t("taxId")}</option>
         </select>
         <label className="sr-only" htmlFor="onboarding-vat-input">
-          {type === "us_ein" ? "EIN" : type === "eu_vat" ? "VAT ID" : "Tax ID"}
+          {type === "us_ein" ? t("ein") : type === "eu_vat" ? t("vatId") : t("taxId")}
         </label>
         <Input
           autoCapitalize="characters"
@@ -224,7 +216,7 @@ function VatStep({ profile, read }: { profile: SiteProfile; read: SiteRead }) {
               ? "12-3456789"
               : type === "eu_vat"
                 ? "ESB12345678"
-                : "Tax ID (optional)"
+                : t("taxIdOptional")
           }
           spellCheck={false}
           value={value}
@@ -237,14 +229,14 @@ function VatStep({ profile, read }: { profile: SiteProfile; read: SiteRead }) {
           variant="outline"
         >
           {pending ? <Loader2 className="animate-spin" /> : null}
-          {type === "eu_vat" ? "Check" : "Save"}
+          {type === "eu_vat" ? t("check") : t("save")}
         </Button>
       </form>
 
       {reply === "valid-with-details" ? (
         <p className="flex items-start gap-2 font-sans text-sm" data-testid="onboarding-vat-result">
           <Check aria-hidden="true" className="mt-0.5 size-4 shrink-0" />
-          Valid. We used the registry details you hadn&rsquo;t already confirmed.
+          {t("validWithDetails")}
         </p>
       ) : reply ? (
         <p
@@ -257,42 +249,42 @@ function VatStep({ profile, read }: { profile: SiteProfile; read: SiteRead }) {
           {reply === "valid" || reply === "tax-id" ? (
             <Check aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-foreground" />
           ) : null}
-          {VAT_MESSAGES[reply]}
+          {t(`messages.${reply}`)}
         </p>
       ) : null}
       {error ? <p className="font-sans text-sm text-destructive">{error}</p> : null}
 
       {reply === "valid" && !hasLegal ? (
         <p>
-          Legal name{" "}
+          {t("legalName")}
           <Chip
             field="legalName"
-            label="Legal name"
+            label={tChips("legalName")}
             onCommit={(next) => read.edit("legalName", next)}
-            placeholder="Your Company S.L."
+            placeholder={t("companyPlaceholder")}
             value={fields.legalName?.value ?? ""}
           />
-          , registered at{" "}
+          {t("registeredAt")}
           <Chip
             field="street"
-            label="Street and number"
+            label={tChips("streetNumber")}
             onCommit={(next) => read.edit("street", next)}
-            placeholder="Street and number"
+            placeholder={tChips("streetNumber")}
             value={fields.street?.value ?? ""}
           />
           ,{" "}
           <Chip
             field="postalCode"
-            label="Postcode"
+            label={tChips("postcode")}
             onCommit={(next) => read.edit("postalCode", next)}
-            placeholder="Postcode"
+            placeholder={tChips("postcode")}
             value={fields.postalCode?.value ?? ""}
           />{" "}
           <Chip
             field="city"
-            label="City"
+            label={tChips("city")}
             onCommit={(next) => read.edit("city", next)}
-            placeholder="City"
+            placeholder={tChips("city")}
             value={fields.city?.value ?? ""}
           />
           .
@@ -307,6 +299,8 @@ function VatStep({ profile, read }: { profile: SiteProfile; read: SiteRead }) {
  * lands; the faint lines below are the work still in flight.
  */
 export function Meet({ read }: { read: SiteRead }) {
+  const t = useTranslations("onboarding.sentences");
+  const tChips = useTranslations("onboarding.chips");
   const { profile, status, steps } = read;
   if (!profile) {
     return null;
@@ -330,28 +324,23 @@ export function Meet({ read }: { read: SiteRead }) {
         <Sentence testId="onboarding-summary">{fields.summary.value}</Sentence>
       ) : null}
 
-      {guessed && !reading ? (
-        <Sentence>
-          Your site didn&rsquo;t tell us much, so we started with a name from your address. Change
-          anything that&rsquo;s off.
-        </Sentence>
-      ) : null}
+      {guessed && !reading ? <Sentence>{t("guessed")}</Sentence> : null}
 
       {fields.name ? (
         <Sentence testId="onboarding-identity">
-          Your invoices go out as{" "}
+          {t("goOutAs")}
           <Chip
             field="name"
-            label="Business name"
+            label={tChips("businessName")}
             onCommit={edit("name")}
             value={fields.name.value}
           />
           {fields.email ? (
             <>
-              , with replies to{" "}
+              {t("repliesTo")}
               <Chip
                 field="email"
-                label="Contact email"
+                label={tChips("contactEmail")}
                 onCommit={edit("email")}
                 value={fields.email.value}
               />
@@ -363,11 +352,11 @@ export function Meet({ read }: { read: SiteRead }) {
 
       {profile.colors.length > 0 ? (
         <Sentence testId="onboarding-colors">
-          Working with a{" "}
+          {t("workingWith")}
           <span className="mx-1.5 inline-flex translate-y-[0.2em] items-center gap-2">
             {profile.colors.map((color) => (
               <button
-                aria-label={`Use ${color.hex} as your invoice colour`}
+                aria-label={tChips("colour", { hex: color.hex })}
                 aria-pressed={profile.brandColor === color.hex}
                 className="onboarding-dot"
                 data-testid="onboarding-color"
@@ -377,24 +366,22 @@ export function Meet({ read }: { read: SiteRead }) {
                 type="button"
               />
             ))}
-          </span>{" "}
-          palette.{" "}
-          {profile.colors.length > 1
-            ? "Pick the one that’s most you."
-            : "That’s your invoice colour."}
+          </span>
+          {t("palette")}
+          {profile.colors.length > 1 ? t("pickOne") : t("thatsYourColour")}
         </Sentence>
       ) : null}
 
       {location ? (
         <Sentence testId="onboarding-location">
           {foundElsewhere
-            ? `${location.detail ?? "A public profile"} says you’re in `
-            : "You’re based in "}
+            ? t("saysIn", { source: location.detail ?? t("publicProfile") })
+            : t("basedIn")}
           {fields.street && !hasLegal ? (
             <>
               <Chip
                 field="street"
-                label="Street"
+                label={tChips("street")}
                 onCommit={edit("street")}
                 value={fields.street.value}
               />
@@ -404,7 +391,7 @@ export function Meet({ read }: { read: SiteRead }) {
           {fields.city ? (
             <Chip
               field="city"
-              label="City"
+              label={tChips("city")}
               onCommit={(next) => read.editAddress("city", next)}
               value={fields.city.value}
             />
@@ -414,7 +401,7 @@ export function Meet({ read }: { read: SiteRead }) {
               ,{" "}
               <Chip
                 field="region"
-                label="State or region"
+                label={tChips("region")}
                 onCommit={(next) => read.editAddress("region", next)}
                 value={fields.region?.value ?? ""}
               />
@@ -425,7 +412,7 @@ export function Meet({ read }: { read: SiteRead }) {
               {" "}
               <Chip
                 field="postalCode"
-                label="Postal code"
+                label={tChips("postalCode")}
                 onCommit={(next) => read.editAddress("postalCode", next)}
                 value={fields.postalCode?.value ?? ""}
               />
@@ -437,15 +424,12 @@ export function Meet({ read }: { read: SiteRead }) {
           {fields.country || reviewLocation ? (
             <Chip
               field="country"
-              label="Country"
+              label={tChips("country")}
               onCommit={(next) => read.editAddress("country", next)}
               value={fields.country?.value ?? ""}
             />
           ) : null}
-          .{" "}
-          {fields.region?.detail === "split from your city entry" ? (
-            <>We split your city and state so you can check each one. </>
-          ) : null}
+          . {fields.region?.detail === "split from your city entry" ? <>{t("splitCity")}</> : null}
           {reviewLocation ? (
             <button
               className="onboarding-confirm"
@@ -453,7 +437,7 @@ export function Meet({ read }: { read: SiteRead }) {
               onClick={() => read.confirm(locationKeys)}
               type="button"
             >
-              Check the full address, then confirm
+              {t("confirmAddress")}
             </button>
           ) : null}
         </Sentence>
@@ -461,17 +445,17 @@ export function Meet({ read }: { read: SiteRead }) {
 
       {hasLegal && fields.legalName?.source !== "registry" ? (
         <Sentence testId="onboarding-legal">
-          {fields.legalName!.detail ? `From ${fields.legalName!.detail}: ` : ""}
+          {fields.legalName!.detail ? t("from", { detail: fields.legalName!.detail }) : ""}
           <Chip
             field="legalName"
-            label="Legal name"
+            label={tChips("legalName")}
             onCommit={edit("legalName")}
             value={fields.legalName!.value}
           />
           ,{" "}
           <Chip
             field="street"
-            label="Street"
+            label={tChips("street")}
             onCommit={edit("street")}
             value={fields.street!.value}
           />
@@ -480,7 +464,7 @@ export function Meet({ read }: { read: SiteRead }) {
               ,{" "}
               <Chip
                 field="postalCode"
-                label="Postcode"
+                label={tChips("postcode")}
                 onCommit={edit("postalCode")}
                 value={fields.postalCode.value}
               />
@@ -492,12 +476,10 @@ export function Meet({ read }: { read: SiteRead }) {
 
       {reading ? (
         <div className="space-y-2.5 pt-1">
-          {steps.legal === "active" ? <Pending>Reading your footer and legal pages</Pending> : null}
-          {steps.colors === "active" ? <Pending>Pulling out your logo and colours</Pending> : null}
-          {steps.location === "active" ? (
-            <Pending>Looking for where you&rsquo;re based</Pending>
-          ) : null}
-          {!steps.legal && !steps.colors ? <Pending>Opening your homepage</Pending> : null}
+          {steps.legal === "active" ? <Pending>{t("pending.legal")}</Pending> : null}
+          {steps.colors === "active" ? <Pending>{t("pending.colors")}</Pending> : null}
+          {steps.location === "active" ? <Pending>{t("pending.location")}</Pending> : null}
+          {!steps.legal && !steps.colors ? <Pending>{t("pending.homepage")}</Pending> : null}
         </div>
       ) : (
         <VatStep key={profile.domain} profile={profile} read={read} />

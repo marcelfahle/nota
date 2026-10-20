@@ -1,4 +1,6 @@
 import type { Metadata, Viewport } from "next";
+import { NextIntlClientProvider } from "next-intl";
+import { getLocale } from "next-intl/server";
 import { Archivo, Geist_Mono, Newsreader } from "next/font/google";
 
 import { APP_NAME } from "@/lib/app-brand";
@@ -44,10 +46,10 @@ export default async function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  const context = await getCurrentUserOrNull();
+  const [context, locale] = await Promise.all([getCurrentUserOrNull(), getLocale()]);
   const theme = context?.user.theme ?? "light";
   return (
-    <html data-theme={theme} lang="en">
+    <html data-theme={theme} lang={locale}>
       <head>
         {theme === "system" ? (
           <>
@@ -59,7 +61,7 @@ export default async function RootLayout({
         )}
       </head>
       <body className={`${sans.variable} ${mono.variable} ${voice.variable} antialiased`}>
-        {children}
+        <NextIntlClientProvider>{children}</NextIntlClientProvider>
       </body>
     </html>
   );

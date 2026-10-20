@@ -167,13 +167,25 @@ Request body:
   "name": "Acme GmbH",
   "email": "billing@acme.test",
   "company": "Acme GmbH",
-  "address": "Main Street 1\nBerlin",
+  "street": "Main Street 1",
+  "postalCode": "10115",
+  "city": "Berlin",
+  "countryCode": "DE",
+  "publicSector": false,
+  "defaultBuyerReference": null,
   "defaultCurrency": "EUR",
   "notes": "Preferred customer",
-  "vatNumber": "DE123456789",
+  "taxIdentifier": { "type": "eu_vat", "value": "DE123456789" },
   "bankAccountId": null
 }
 ```
+
+Address fields:
+
+- `street`, `postalCode`, `city`, `countryCode` (ISO 3166-1 alpha-2) are the structured address. German invoices and XRechnung need all four.
+- `address` is the legacy free-text address. It is kept as entered and only used when no structured field is set.
+- `publicSector: true` marks a German public authority. Every invoice for it needs a Leitweg-ID as `buyerReference`.
+- `defaultBuyerReference` is copied onto new invoices for this client as `buyerReference` (a Leitweg-ID or a standing PO number).
 
 ```bash
 curl "$NOTA_API_BASE_URL/clients" \
@@ -253,10 +265,13 @@ Request body:
   "currency": "EUR",
   "issuedAt": "2026-03-06",
   "dueAt": "2026-04-05",
+  "servicePeriodStart": "2026-02-01",
+  "servicePeriodEnd": "2026-02-28",
+  "buyerReference": null,
   "notes": "Thanks for your business",
   "internalNotes": "Internal note",
-  "reverseCharge": false,
-  "taxRate": 21,
+  "taxTreatment": "standard",
+  "taxRate": 19,
   "lineItems": [
     {
       "description": "Consulting",
@@ -276,8 +291,8 @@ curl "$NOTA_API_BASE_URL/invoices" \
     "currency": "EUR",
     "issuedAt": "2026-03-06",
     "dueAt": "2026-04-05",
-    "taxRate": 21,
-    "reverseCharge": false,
+    "taxTreatment": "standard",
+    "taxRate": 19,
     "lineItems": [
       {
         "description": "Consulting",
@@ -288,10 +303,26 @@ curl "$NOTA_API_BASE_URL/invoices" \
   }'
 ```
 
+Tax treatment (`taxTreatment`), one per invoice:
+
+- `standard`: VAT at `taxRate` (for example 19 or 7). UNTDID category S.
+- `zero_rated`: a genuine 0% supply. Category Z. Not an exemption.
+- `exempt_small_business`: Kleinunternehmer, § 19 UStG. Category E. The document carries "Gemäß § 19 UStG wird keine Umsatzsteuer berechnet."
+- `reverse_charge`: business customer abroad, § 13b UStG / Art. 196. Category AE. The client needs a VAT ID when it is in the EU.
+
+Rules:
+
+- Every treatment except `standard` needs `taxRate: 0`. Anything else is rejected with `409`.
+- When `taxTreatment` is omitted the workspace default applies. `reverseCharge: true` is still accepted and means `taxTreatment: "reverse_charge"`.
+- One VAT rate per invoice. Mixed rates need separate invoices.
+- `servicePeriodStart` and `servicePeriodEnd` (YYYY-MM-DD) are the date or period of supply. A single day has start equal to end. When omitted, the month all line items name is used, otherwise the issue date. German invoices need this before they can be issued.
+- `buyerReference` defaults to the client's `defaultBuyerReference`. Public-sector clients need a Leitweg-ID here. Without a reference, the XRechnung export uses the invoice number as the buyer reference for non-public-sector clients.
+
 Notes:
 
 - invoice numbers are auto-generated from the organization's invoice numbering settings
 - response includes the full nested invoice payload
+- `issueProblems` on a draft lists what must be fixed before it can be sent (empty when nothing blocks it). See `docs/german-invoices.md` in the repository for the full set of rules.
 
 ### GET /invoices/:id
 
@@ -300,6 +331,11 @@ Returns one invoice with:
 - `client`
 - `lineItems`
 - `activityLog`
+- `documents`: the originals stored at issuance, one entry per file with `kind` (`pdf` or
+  `xrechnung`), `sha256`, `byteSize`, `filename` and `createdAt`. Empty for drafts and for invoices
+  issued before originals were kept.
+- `issuedSnapshot`: seller, buyer, bank and totals exactly as rendered at issuance; `null` on drafts
+  and on older issued invoices.
 
 ### PATCH /invoices/:id
 
@@ -309,6 +345,7 @@ Notes:
 
 - returns `409` if the invoice is no longer a draft
 - request body matches `POST /invoices`
+- `taxTreatment`, `servicePeriodStart`/`servicePeriodEnd` and `buyerReference` keep their stored values when omitted; send `buyerReference: null` to clear it
 
 ### PATCH /invoices/:id/due-date
 
@@ -364,6 +401,7 @@ Notes:
 
 - requires `admin` or `owner`
 - returns `409` if the invoice is not a draft
+- returns `422` with `{ "error": "...", "problems": ["..."] }` when the draft is incomplete; `problems` is the same list as `issueProblems` on the invoice
 - may return `500` if Stripe link creation fails
 
 ### POST /invoices/:id/remind
@@ -397,7 +435,10 @@ Notes:
 
 ### GET /invoices/:id/pdf
 
-Downloads the invoice PDF.
+Downloads the invoice PDF. For an issued invoice this is the original stored at issuance, byte for
+byte what the customer received; later changes to the client, the workspace, bank details or the
+template do not affect it. A draft is rendered live. Invoices issued before originals were kept
+(no `documents` entry on `GET /invoices/:id`) are rendered from the current data.
 
 ```bash
 curl "$NOTA_API_BASE_URL/invoices/invoice_uuid/pdf" \
@@ -407,13 +448,19 @@ curl "$NOTA_API_BASE_URL/invoices/invoice_uuid/pdf" \
 
 ### GET /invoices/:id/xrechnung
 
-Downloads the XRechnung XML export.
+Downloads the XRechnung 3.0 (UBL) XML export. For an issued invoice with a stored XML original
+(the workspace attached it, or the export validated at issuance) this is that original; otherwise
+the XML is rendered live.
 
 ```bash
 curl "$NOTA_API_BASE_URL/invoices/invoice_uuid/xrechnung" \
   -H "Authorization: Bearer $NOTA_API_KEY" \
   -o invoice.xml
 ```
+
+Returns `422` with `{ "error": "...", "problems": ["..."] }` when the invoice, the workspace or the client is missing something the XRechnung needs (country codes, seller contact with phone, Leitweg-ID for public-sector buyers, a service period, a bank account with a valid IBAN). No file is produced in that case.
+
+The generator is checked against the official KoSIT validator (XRechnung 3.0.2) for a fixed set of scenarios; see `docs/german-invoices.md`, section "Validation", for what that covers and what it does not. It is format conformance, not legal or tax advice.
 
 ## Common Status Codes
 
@@ -448,8 +495,8 @@ invoice_id=$(curl -s "$NOTA_API_BASE_URL/invoices" \
     \"currency\": \"EUR\",
     \"issuedAt\": \"2026-03-06\",
     \"dueAt\": \"2026-04-05\",
-    \"taxRate\": 21,
-    \"reverseCharge\": false,
+    \"taxTreatment\": \"standard\",
+    \"taxRate\": 19,
     \"lineItems\": [{
       \"description\": \"Consulting\",
       \"quantity\": 2,

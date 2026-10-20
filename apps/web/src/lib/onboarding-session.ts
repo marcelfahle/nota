@@ -5,6 +5,7 @@ import { eq, lt } from "drizzle-orm";
 import { appSecret } from "@/lib/app-secret";
 import { db } from "@/lib/db";
 import { onboardingSessions, orgs } from "@/lib/db/schema";
+import { defaultEInvoiceDelivery } from "@/lib/e-invoice-delivery";
 import { storeOrgImage } from "@/lib/logo-storage";
 import { fromDataUrl } from "@/lib/site-reader/data-url";
 import {
@@ -20,6 +21,7 @@ import {
   taxIdentifierFromLegacyVatNumber,
   type TaxIdentifier,
 } from "@/lib/tax-identifier";
+import { toCountryCode } from "@/lib/xrechnung";
 
 // A website read is only a preview: anyone can type anyone's domain. It lives
 // here, under a random cookie, for a day, and reaches an account only when its
@@ -312,6 +314,9 @@ export function orgValuesFromProfile(profile: SiteProfile, now = new Date()) {
   }
   values.website = profile.website;
   sources.website = { at, confirmed: true, source: "user" };
+  values.eInvoiceDelivery = defaultEInvoiceDelivery(
+    values.country ? toCountryCode(values.country) : null,
+  );
   if (profile.brandColor) {
     values.brandColor = profile.brandColor;
     sources.brandColor = { at, confirmed: true, detail: "your website", source: "site" };

@@ -1,29 +1,23 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import { useEffect, useState, type ReactNode } from "react";
 
 import { cn } from "@/lib/utils";
 
-const tabs = [
-  ["account", "Account"],
-  ["brand", "Brand"],
-  ["numbering", "Numbering and tax"],
-  ["payments", "Getting paid"],
-  ["email", "Email"],
-  ["team", "Team"],
-  ["api", "API"],
-] as const;
+const tabs = ["account", "brand", "numbering", "payments", "email", "team", "api"] as const;
 
-type Tab = (typeof tabs)[number][0];
+type Tab = (typeof tabs)[number];
 
 export function SettingsTabs({ panels }: { panels: Record<Tab, ReactNode> }) {
+  const t = useTranslations("settings");
   const [active, setActive] = useState<Tab>("brand");
 
   useEffect(() => {
     function syncHash() {
       const hash = window.location.hash.slice(1);
       const mapped = hash === "connected-apps" ? "api" : hash;
-      if (tabs.some(([id]) => id === mapped)) {
+      if (tabs.some((id) => id === mapped)) {
         setActive(mapped as Tab);
       }
     }
@@ -34,8 +28,8 @@ export function SettingsTabs({ panels }: { panels: Record<Tab, ReactNode> }) {
 
   return (
     <div className="space-y-7">
-      <div aria-label="Settings sections" className="flex flex-wrap border-b" role="tablist">
-        {tabs.map(([id, label]) => (
+      <div aria-label={t("sections")} className="flex flex-wrap border-b" role="tablist">
+        {tabs.map((id) => (
           <button
             aria-controls={`settings-panel-${id}`}
             aria-selected={active === id}
@@ -53,11 +47,11 @@ export function SettingsTabs({ panels }: { panels: Record<Tab, ReactNode> }) {
             role="tab"
             type="button"
           >
-            {label}
+            {t(`tabs.${id}`)}
           </button>
         ))}
       </div>
-      {tabs.map(([id]) => (
+      {tabs.map((id) => (
         <section
           aria-labelledby={`settings-tab-${id}`}
           hidden={active !== id}

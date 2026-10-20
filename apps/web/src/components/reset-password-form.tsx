@@ -1,5 +1,6 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import { useState, type FormEvent } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -8,6 +9,7 @@ import { Label } from "@/components/ui/label";
 import { authClient } from "@/lib/auth-client";
 
 export function ResetPasswordForm({ token }: { token: string }) {
+  const t = useTranslations("auth.reset");
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
 
@@ -25,11 +27,7 @@ export function ResetPasswordForm({ token }: { token: string }) {
 
     if (resetError) {
       setPending(false);
-      setError(
-        resetError.code === "PASSWORD_TOO_SHORT"
-          ? "Password must be at least 8 characters"
-          : "Reset link is invalid or expired",
-      );
+      setError(resetError.code === "PASSWORD_TOO_SHORT" ? t("passwordShort") : t("invalid"));
       return;
     }
 
@@ -39,7 +37,7 @@ export function ResetPasswordForm({ token }: { token: string }) {
   return (
     <form className="space-y-4" onSubmit={onSubmit}>
       <div className="space-y-2">
-        <Label htmlFor="password">New password</Label>
+        <Label htmlFor="password">{t("newPassword")}</Label>
         <Input
           autoComplete="new-password"
           autoFocus
@@ -54,7 +52,7 @@ export function ResetPasswordForm({ token }: { token: string }) {
       {error ? <p className="text-sm text-red-500">{error}</p> : null}
 
       <Button className="w-full" disabled={pending} type="submit">
-        {pending ? "Updating..." : "Update password"}
+        {pending ? t("updating") : t("update")}
       </Button>
     </form>
   );

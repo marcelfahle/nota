@@ -1,4 +1,5 @@
-import { InvoicePdfDataError, renderInvoicePdfForOrg } from "@/lib/invoice-pdf-service";
+import { loadInvoicePdf } from "@/lib/invoice-documents";
+import { InvoicePdfDataError } from "@/lib/invoice-pdf-service";
 import { getPublicInvoice } from "@/lib/public-invoice";
 
 export async function GET(_request: Request, { params }: { params: Promise<{ token: string }> }) {
@@ -10,7 +11,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ tok
   }
 
   try {
-    const pdf = await renderInvoicePdfForOrg(invoice.organization, invoice.id);
+    const pdf = await loadInvoicePdf(invoice.organization, invoice.id);
     return new Response(pdf.buffer, {
       headers: {
         "Cache-Control": "private, no-store",

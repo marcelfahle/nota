@@ -2,7 +2,10 @@ import { and, desc, eq } from "drizzle-orm";
 
 import { db } from "@/lib/db";
 import { activityLog, bankAccounts, clients, invoices, orgs } from "@/lib/db/schema";
+import { attachesXRechnung } from "@/lib/e-invoice-delivery";
+import { complianceInput, validateForXRechnung } from "@/lib/invoice-compliance";
 import { getInvoiceDetail } from "@/lib/invoice-service";
+import { displayedBuyer, frozenSnapshot } from "@/lib/issued-snapshot";
 
 const VIEW_DEDUPE_MS = 30 * 60 * 1000;
 
@@ -81,11 +84,52 @@ export async function getPublicInvoice(token: string, recordView = false) {
       .limit(1);
   }
 
+  const [original] = invoice.creditsInvoiceId
+    ? await db
+        .select({ number: invoices.number })
+        .from(invoices)
+        .where(and(eq(invoices.id, invoice.creditsInvoiceId), eq(invoices.orgId, identity.orgId)))
+        .limit(1)
+    : [];
+
+  // The page shows what the stored documents say: an issued invoice keeps the
+  // addresses, the buyer and the bank details frozen at issuance. Branding
+  // (name shown in the header, logo, colour) stays live; it is not document content.
+  const frozen = frozenSnapshot(invoice);
   return {
     ...invoice,
-    bankAccount: bankAccount ?? null,
-    client: context.client,
-    organization: context.organization,
+    bankAccount: frozen
+      ? frozen.bank && { ...(bankAccount ?? {}), ...frozen.bank }
+      : (bankAccount ?? null),
+    client: displayedBuyer(invoice, context.client),
+    organization: frozen
+      ? {
+          ...context.organization,
+          // The frozen lines as one block; the structured columns are what `formatOrgAddress` reads first.
+          businessAddress: frozen.seller.address,
+          city: null,
+          country: null,
+          postalCode: null,
+          region: null,
+          street: null,
+        }
+      : context.organization,
+    originalNumber: original?.number ?? null,
+    // A frozen invoice offers the XML only when one was stored at issuance; what
+    // it lacked then cannot be fixed now. An invoice issued before originals were
+    // kept offers it where the email carried it and the export is complete today.
+    xrechnungAvailable: frozen
+      ? invoice.documents.some((document) => document.kind === "xrechnung")
+      : attachesXRechnung(context.organization.eInvoiceDelivery) &&
+        validateForXRechnung(
+          complianceInput(
+            context.organization,
+            context.client,
+            invoice,
+            invoice.lineItems.length,
+            bankAccount,
+          ),
+        ).length === 0,
   };
 }
 

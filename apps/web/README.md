@@ -37,7 +37,7 @@ bun install
 2. Copy the sample environment file and fill in real values.
 
 ```bash
-cp .env.example .env
+cp .env.example .env.local
 ```
 
 3. Run database migrations.
@@ -46,17 +46,17 @@ cp .env.example .env
 bun run db:migrate
 ```
 
-4. Seed an owner account.
+4. Seed an owner account. The seed refuses to run without `SEED_CONFIRM=disposable`.
 
 ```bash
-bun run db:seed
+SEED_CONFIRM=disposable bun run db:seed
 ```
 
 By default the seed command creates:
 
-- email: `admin@nota.app`
-- password: `changeme`
-- workspace: `Admin's Workspace`
+- email: `admin@nota.test`
+- password: `nota-demo-password`
+- workspace: `Nota Demo Studio`, with two demo clients and the API key `nota_seed_disposable_only`
 
 Override those with `SEED_EMAIL`, `SEED_NAME`, and `SEED_PASSWORD`.
 

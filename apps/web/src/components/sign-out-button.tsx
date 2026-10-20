@@ -1,6 +1,7 @@
 "use client";
 
 import { LogOut } from "lucide-react";
+import { useTranslations } from "next-intl";
 import posthog from "posthog-js";
 import { useState } from "react";
 
@@ -11,6 +12,7 @@ import { authClient } from "@/lib/auth-client";
  * client-side one: every cached page of the signed-in app is dropped with it.
  */
 export function SignOutButton() {
+  const t = useTranslations("shell");
   const [pending, setPending] = useState(false);
 
   async function signOut() {
@@ -25,12 +27,12 @@ export function SignOutButton() {
 
   return (
     <button
-      aria-label="Sign out"
+      aria-label={t("signOut")}
       className="grid size-11 shrink-0 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-card hover:text-foreground active:bg-card disabled:opacity-50 md:size-9"
       data-testid="logout-button"
       disabled={pending}
       onClick={signOut}
-      title="Sign out"
+      title={t("signOut")}
       type="button"
     >
       <LogOut className="size-4" />

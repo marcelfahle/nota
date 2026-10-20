@@ -1,5 +1,12 @@
 # Nota engineering invariants
 
+## Working in this repo
+
+- `bun run test` runs the unit tests for web, CLI, and MCP. `bun run check` type-checks every
+  package and runs oxlint and oxfmt over `apps/web`. `bun run --cwd apps/web format` fixes
+  formatting. CI runs the same commands.
+- Setup, PR conventions, and the full workflow are in [CONTRIBUTING.md](./CONTRIBUTING.md).
+
 ## Invoice numbering
 
 - An invoice number is an external reference only once the document is issued (`sent`, `paid`,

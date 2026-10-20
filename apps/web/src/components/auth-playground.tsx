@@ -1,7 +1,9 @@
 "use client";
 
+import { useLocale, useTranslations } from "next-intl";
 import { useEffect, useRef, useState, type PointerEvent } from "react";
 
+import { isAppLocale, toIntlLocale } from "@/lib/i18n";
 import { formatCurrency } from "@/lib/utils";
 
 const SPACING = 18;
@@ -26,6 +28,9 @@ function locate(event: PointerEvent<HTMLDivElement>) {
  * motion is unwelcome.
  */
 export function AuthPlayground() {
+  const t = useTranslations("auth.playground");
+  const requestLocale = useLocale();
+  const locale = toIntlLocale(isAppLocale(requestLocale) ? requestLocale : "en");
   const root = useRef<HTMLDivElement>(null);
   const canvas = useRef<HTMLCanvasElement>(null);
   const paper = useRef<HTMLDivElement>(null);
@@ -182,18 +187,18 @@ export function AuthPlayground() {
               N
             </span>
             <div className="text-right">
-              <p className="text-2xl font-bold tracking-[-0.04em]">Invoice</p>
+              <p className="text-2xl font-bold tracking-[-0.04em]">{t("invoice")}</p>
               <p className="font-mono text-[11px] text-[#6b655c]">INV-0042</p>
             </div>
           </div>
           <div className="flex items-end justify-between gap-4 py-5">
-            <p className="nota-label text-[#6b655c]">Total due</p>
+            <p className="nota-label text-[#6b655c]">{t("totalDue")}</p>
             <p className="font-mono text-2xl font-bold tracking-[-0.04em]">
-              {formatCurrency(INVOICE_TOTAL, "EUR")}
+              {formatCurrency(INVOICE_TOTAL, "EUR", locale)}
             </p>
           </div>
           <div className="flex h-10 items-center justify-between bg-[#d1fd39] px-3.5 text-sm font-bold">
-            <span>Pay {formatCurrency(INVOICE_TOTAL, "EUR")}</span>
+            <span>{t("pay", { amount: formatCurrency(INVOICE_TOTAL, "EUR", locale) })}</span>
             <span className="font-mono text-xs">→</span>
           </div>
         </div>
@@ -209,18 +214,18 @@ export function AuthPlayground() {
             top: stamp.y,
           }}
         >
-          Paid
+          {t("paid")}
         </span>
       ))}
 
       <p className="pointer-events-none absolute top-6 right-6 text-right font-mono text-xs text-[#fbf9f4]/70">
-        <span className="nota-label block text-[#fbf9f4]/50">Paid today</span>
+        <span className="nota-label block text-[#fbf9f4]/50">{t("paidToday")}</span>
         <span className="mt-1 block text-lg font-bold text-[#d1fd39] tabular-nums" key={paid}>
-          {formatCurrency(paid * INVOICE_TOTAL, "EUR")}
+          {formatCurrency(paid * INVOICE_TOTAL, "EUR", locale)}
         </span>
       </p>
       <p className="pointer-events-none absolute bottom-6 left-6 font-voice text-lg text-[#fbf9f4]/75">
-        {paid === 0 ? "Click anywhere to get paid." : "Feels good. Now do it for real."}
+        {paid === 0 ? t("clickAnywhere") : t("feelsGood")}
       </p>
     </div>
   );

@@ -166,8 +166,36 @@
     {
       "idx": 23,
       "version": "7",
-      "when": 1792433096626,
-      "tag": "0023_admin-audit-log",
+      "when": 1792433184027,
+      "tag": "0023_german-invoice-model",
+      "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1792436441178,
+      "tag": "0024_einvoice-delivery",
+      "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1792439736863,
+      "tag": "0025_issued-originals",
+      "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1792443205041,
+      "tag": "0026_locales",
+      "breakpoints": true
+    },
+    {
+      "idx": 27,
+      "version": "7",
+      "when": 1792484728718,
+      "tag": "0027_admin-audit-log",
       "breakpoints": true
     }
   ]
