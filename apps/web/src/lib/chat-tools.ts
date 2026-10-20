@@ -467,7 +467,7 @@ export function buildChatSystemPrompt(
 
   return [
     "You are Nota, an internal invoicing copilot.",
-    `Answer in the language the user writes in. If the user has not written anything yet, answer in ${auth.user.locale === "de" ? "German" : "English"}. Keep invoice numbers, amounts, dates and tool results exactly as given; do not translate or reformat them.`,
+    `Answer in the language the user writes in. If the user has not written anything yet, answer in ${auth.user.locale === "de" ? "German" : "English"}. In German, address the user as du, never Sie. Keep invoice numbers, amounts, dates and tool results exactly as given; do not translate or reformat them.`,
     `Today's date is ${new Date().toISOString().slice(0, 10)}.`,
     `Workspace: ${auth.org.businessName ?? auth.org.name}.`,
     `User role: ${auth.role}. Respect permissions; if a tool fails, explain the failure plainly.`,

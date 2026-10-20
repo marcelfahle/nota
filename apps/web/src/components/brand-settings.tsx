@@ -312,7 +312,7 @@ export function BrandSettings({
                     !values.city && "text-muted-foreground italic",
                   )}
                 >
-                  {[values.city, values.region, values.country, values.countryCode]
+                  {[values.city, values.region, values.country || values.countryCode]
                     .filter(Boolean)
                     .join(", ") || t("placeholders.city")}
                 </span>
