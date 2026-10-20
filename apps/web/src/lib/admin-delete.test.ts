@@ -14,7 +14,7 @@ let selectAnswers: Array<Array<Record<string, unknown>>> = [];
 
 function query(result: Array<Record<string, unknown>>) {
   const step: Record<string, unknown> = {};
-  for (const name of ["from", "innerJoin", "limit", "returning", "set", "where"]) {
+  for (const name of ["from", "innerJoin", "limit", "returning", "set", "values", "where"]) {
     step[name] = () => query(result);
   }
   step.then = (resolve: (value: unknown) => unknown) => Promise.resolve(result).then(resolve);
@@ -22,6 +22,7 @@ function query(result: Array<Record<string, unknown>>) {
 }
 const database = {
   delete: () => query([]),
+  insert: () => query([]),
   select: () => query(selectAnswers.shift() ?? []),
   transaction: async (callback: (tx: unknown) => Promise<unknown>) => callback(database),
   update: () => query([]),
@@ -47,7 +48,7 @@ test("deleting a workspace removes the stored originals of its invoices", async 
     [{ id: "inv-1" }, { id: "inv-2" }],
     storedKeys.map((storageKey) => ({ storageKey })),
   ];
-  const result = await deleteWorkspace(orgId);
+  const result = await deleteWorkspace(orgId, "admin-1");
   expect(result).toEqual({ deleted: { clients: 0, invoices: 2, users: 1 } });
   expect(await storedFileCount()).toBe(0);
 });
@@ -55,14 +56,14 @@ test("deleting a workspace removes the stored originals of its invoices", async 
 test("a workspace without invoices touches no files", async () => {
   await putPrivateFile(storedKeys[0], Buffer.from("someone else's"), "application/octet-stream");
   selectAnswers = [[{ faviconUrl: null, id: orgId, logoUrl: null }], [], []];
-  const result = await deleteWorkspace(orgId);
+  const result = await deleteWorkspace(orgId, "admin-1");
   expect(result).toEqual({ deleted: { clients: 0, invoices: 0, users: 0 } });
   expect(await storedFileCount()).toBe(1);
 });
 
 test("a workspace with a live subscription is left alone", async () => {
   selectAnswers = [[{ id: orgId, stripeSubscriptionStatus: "active" }]];
-  expect(await deleteWorkspace(orgId)).toEqual({
+  expect(await deleteWorkspace(orgId, "admin-1")).toEqual({
     error: "This workspace has a live subscription. Cancel it in Stripe first.",
   });
   expect(await storedFileCount()).toBe(1);
