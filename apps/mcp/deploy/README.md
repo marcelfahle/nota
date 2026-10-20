@@ -5,7 +5,7 @@ The server runs on the same Hetzner host as Bold MCP:
 - Host: `91.99.49.152`; SSH uses the existing `~/.ssh/id_ed25519_mf2024` key.
 - Source: `/opt/nota_mcp`; Compose project: `nota_mcp`; container: `nota-mcp`.
 - Endpoint: `https://nota-mcp.91-99-49-152.sslip.io/mcp`.
-- Nota API: `https://nota-weld.vercel.app/api/v1`.
+- Nota API: `https://app.withnota.com/api/v1`.
 - Runtime: non-root Node 22, 256 MB memory limit, one process.
 - OAuth state: Docker volume `nota_mcp_nota_oauth`, `/data/oauth.enc`, mode 600.
 - Secrets: `/opt/nota_mcp/apps/mcp/deploy/.env`, mode 600. Keep the encryption secret stable; no global Nota API key is needed.

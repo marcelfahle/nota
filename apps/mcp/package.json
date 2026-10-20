@@ -10,6 +10,7 @@
     "directory": "apps/mcp"
   },
   "homepage": "https://github.com/marcelfahle/nota/tree/main/apps/mcp",
+  "bugs": "https://github.com/marcelfahle/nota/issues",
   "keywords": [
     "nota",
     "mcp",
