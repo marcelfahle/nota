@@ -103,6 +103,7 @@ export const getAppEnv = createEnvGetter(
 export const getStorageEnv = createEnvGetter(
   z
     .object({
+      BLOB_PRIVATE_READ_WRITE_TOKEN: optionalString,
       BLOB_READ_WRITE_TOKEN: optionalString,
       LOCAL_STORAGE_PATH: z.string().min(1).default("/data/storage"),
       S3_ACCESS_KEY_ID: optionalString,

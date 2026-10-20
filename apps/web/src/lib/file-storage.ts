@@ -13,6 +13,14 @@ import { del, get, put } from "@vercel/blob";
 import { getStorageEnv } from "@/lib/env";
 
 /**
+ * Originals live in a private Blob store. Logos stay in the public one, so a
+ * hosted install sets a second token; a single private store needs only the first.
+ */
+function privateToken(env: ReturnType<typeof getStorageEnv>) {
+  return env.BLOB_PRIVATE_READ_WRITE_TOKEN ?? env.BLOB_READ_WRITE_TOKEN!;
+}
+
+/**
  * Private files on the configured backend (Vercel Blob, S3, or the local
  * directory). Nothing here is ever reachable by URL: callers read the bytes
  * and serve them behind their own authorization. Logos, which are public, live
@@ -59,7 +67,7 @@ export async function putPrivateFile(key: string, content: Buffer, contentType: 
       addRandomSuffix: false,
       allowOverwrite: true,
       contentType,
-      token: env.BLOB_READ_WRITE_TOKEN!,
+      token: privateToken(env),
     });
     return;
   }
@@ -87,7 +95,7 @@ export async function readPrivateFile(key: string): Promise<Buffer | null> {
   if (env.STORAGE === "vercel-blob") {
     const result = await get(key, {
       access: "private",
-      token: env.BLOB_READ_WRITE_TOKEN!,
+      token: privateToken(env),
       useCache: false,
     });
     if (!result?.stream) {
@@ -118,7 +126,7 @@ export async function deletePrivateFiles(keys: Array<string>) {
   }
   const env = getStorageEnv();
   if (env.STORAGE === "vercel-blob") {
-    await del(keys, { token: env.BLOB_READ_WRITE_TOKEN! });
+    await del(keys, { token: privateToken(env) });
     return;
   }
   for (const key of keys) {
