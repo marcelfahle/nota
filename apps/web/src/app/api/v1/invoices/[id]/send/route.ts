@@ -10,7 +10,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   const { id } = await params;
   const result = await sendInvoiceFromApi(authResult.auth, id);
   if ("error" in result) {
-    return error(result.error, result.status);
+    return result.problems
+      ? json({ error: result.error, problems: result.problems }, result.status)
+      : error(result.error, result.status);
   }
 
   return json({ data: result.invoice, warning: result.warning });

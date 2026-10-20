@@ -1,6 +1,7 @@
 "use client";
 
 import { ArrowLeft, ArrowRight, Check, Globe } from "lucide-react";
+import { useTranslations } from "next-intl";
 import Link from "next/link";
 import posthog from "posthog-js";
 import { useEffect, useRef, useState, type FormEvent } from "react";
@@ -25,11 +26,7 @@ import { useTypedFavicon } from "./use-typed-favicon";
 
 type Step = "ask" | "meet" | "save";
 
-const TRAIL: Array<{ id: Step; label: string }> = [
-  { id: "ask", label: "Your website" },
-  { id: "meet", label: "Your invoice" },
-  { id: "save", label: "Your account" },
-];
+const TRAIL: Array<Step> = ["ask", "meet", "save"];
 
 /** Morphs the invoice between screens where the browser can; otherwise just switches. */
 function transition(update: () => void) {
@@ -42,11 +39,12 @@ function transition(update: () => void) {
 }
 
 function Trail({ step }: { step: Step }) {
-  const index = TRAIL.findIndex((entry) => entry.id === step);
+  const t = useTranslations("onboarding");
+  const index = TRAIL.indexOf(step);
   return (
-    <ol aria-label="Progress" className="hidden items-center gap-2.5 sm:flex">
+    <ol aria-label={t("progress")} className="hidden items-center gap-2.5 sm:flex">
       {TRAIL.map((entry, position) => (
-        <li className="flex items-center gap-2.5" key={entry.id}>
+        <li className="flex items-center gap-2.5" key={entry}>
           {position > 0 ? <span aria-hidden="true" className="h-px w-5 bg-border" /> : null}
           <span
             aria-current={position === index ? "step" : undefined}
@@ -60,7 +58,7 @@ function Trail({ step }: { step: Step }) {
             )}
           >
             {position < index ? <Check aria-hidden="true" className="size-3" /> : null}
-            {entry.label}
+            {t(`trail.${entry}`)}
           </span>
         </li>
       ))}
@@ -79,6 +77,7 @@ function SaveForm({
   onBack: () => void;
   settle: () => Promise<void>;
 }) {
+  const t = useTranslations("onboarding.save");
   const [error, setError] = useState<string | null>(initialError ?? null);
   const [pending, setPending] = useState(false);
 
@@ -101,10 +100,10 @@ function SaveForm({
       setError(
         signUpError.code === "USER_ALREADY_EXISTS" ||
           signUpError.code === "USER_ALREADY_EXISTS_USE_ANOTHER_EMAIL"
-          ? "An account already exists for that email. Sign in instead."
+          ? t("exists")
           : signUpError.code === "PASSWORD_TOO_SHORT"
-            ? "Password must be at least 8 characters."
-            : (signUpError.message ?? "Could not create your account."),
+            ? t("passwordShort")
+            : (signUpError.message ?? t("failed")),
       );
       return;
     }
@@ -122,7 +121,7 @@ function SaveForm({
     <form className="space-y-4" data-testid="onboarding-save-form" onSubmit={onSubmit}>
       {googleEnabled && <GoogleSignIn beforeSignIn={settle} disabled={pending} />}
       <div className="space-y-1.5">
-        <Label htmlFor="onboarding-name">Your name</Label>
+        <Label htmlFor="onboarding-name">{t("name")}</Label>
         <Input
           autoComplete="name"
           autoFocus
@@ -134,7 +133,7 @@ function SaveForm({
         />
       </div>
       <div className="space-y-1.5">
-        <Label htmlFor="onboarding-email">Email</Label>
+        <Label htmlFor="onboarding-email">{t("email")}</Label>
         <Input
           autoComplete="email"
           className={input}
@@ -146,7 +145,7 @@ function SaveForm({
         />
       </div>
       <div className="space-y-1.5">
-        <Label htmlFor="onboarding-password">Password</Label>
+        <Label htmlFor="onboarding-password">{t("password")}</Label>
         <Input
           autoComplete="new-password"
           className={input}
@@ -154,7 +153,7 @@ function SaveForm({
           id="onboarding-password"
           minLength={8}
           name="password"
-          placeholder="At least 8 characters"
+          placeholder={t("passwordPlaceholder")}
           required
           type="password"
         />
@@ -170,7 +169,7 @@ function SaveForm({
         disabled={pending}
         type="submit"
       >
-        {pending ? "Saving your invoice…" : "Create my account"}
+        {pending ? t("saving") : t("create")}
       </Button>
       <div className="flex items-center justify-between text-sm text-muted-foreground">
         <button
@@ -178,12 +177,12 @@ function SaveForm({
           onClick={onBack}
           type="button"
         >
-          <ArrowLeft aria-hidden="true" className="size-4" /> Back
+          <ArrowLeft aria-hidden="true" className="size-4" /> {t("back")}
         </button>
         <span>
-          Already with Nota?{" "}
+          {t("already")}{" "}
           <Link className="font-medium text-foreground underline underline-offset-4" href="/login">
-            Sign in
+            {t("signIn")}
           </Link>
         </span>
       </div>
@@ -200,6 +199,7 @@ export function Onboarding({
   initialError?: string | null;
   initialProfile: SiteProfile | null;
 }) {
+  const t = useTranslations("onboarding");
   const read = useSiteRead(initialProfile);
   const [step, setStep] = useState<Step>(initialError ? "save" : initialProfile ? "meet" : "ask");
   const [website, setWebsite] = useState("");
@@ -246,7 +246,7 @@ export function Onboarding({
       data-theme="system"
     >
       <header className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-5 py-5 sm:px-8">
-        <a aria-label="Nota home" className="flex items-center gap-2" href={HOME_URL}>
+        <a aria-label="Nota" className="flex items-center gap-2" href={HOME_URL}>
           <NotaGlyph />
           <span className="text-lg font-bold tracking-tight">Nota.</span>
         </a>
@@ -255,7 +255,7 @@ export function Onboarding({
           className="inline-flex min-h-11 items-center text-sm text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
           href="/login"
         >
-          Sign in
+          {t("signIn")}
         </Link>
       </header>
 
@@ -263,15 +263,17 @@ export function Onboarding({
         <main className="mx-auto flex max-w-6xl flex-col items-center px-5 pt-[8vh] sm:px-8 sm:pt-[11vh]">
           <div className="w-full max-w-[40rem] text-center">
             <h1 className="onboarding-title" ref={heading} tabIndex={-1}>
-              What&rsquo;s your <HighlighterSwipe>website?</HighlighterSwipe>
+              {t.rich("ask.title", {
+                highlight: (chunks) => <HighlighterSwipe>{chunks}</HighlighterSwipe>,
+              })}
             </h1>
             <p className="mx-auto mt-5 max-w-[30rem] font-voice text-xl text-muted-foreground">
-              Nota reads it and hands you your first invoice, already in your name and colours.
+              {t("ask.lead")}
             </p>
 
             <form className="mt-9" data-testid="onboarding-ask-form" onSubmit={onAsk}>
               <label className="sr-only" htmlFor="onboarding-website">
-                Your website address
+                {t("ask.websiteLabel")}
               </label>
               <div className="flex flex-col gap-2 rounded-xl border border-border bg-card p-2 shadow-[0_1px_0_var(--line)] focus-within:border-foreground sm:flex-row">
                 <div className="flex min-w-0 flex-1 items-center">
@@ -303,7 +305,7 @@ export function Onboarding({
                     id="onboarding-website"
                     inputMode="url"
                     onChange={(event) => setWebsite(event.target.value)}
-                    placeholder="yourstudio.com"
+                    placeholder={t("ask.placeholder")}
                     spellCheck={false}
                     value={website}
                   />
@@ -314,7 +316,7 @@ export function Onboarding({
                   disabled={!website.trim()}
                   type="submit"
                 >
-                  Read my site <ArrowRight aria-hidden="true" />
+                  {t("ask.read")} <ArrowRight aria-hidden="true" />
                 </Button>
               </div>
             </form>
@@ -325,18 +327,18 @@ export function Onboarding({
                 data-testid="onboarding-error"
                 role="alert"
               >
-                {read.error} Check the address, or start with a blank invoice below.
+                {read.error} {t("ask.errorHint")}
               </p>
             ) : null}
 
             <p className="mt-5 text-sm text-muted-foreground">
-              No website?{" "}
+              {t("ask.noWebsite")}{" "}
               <Link
                 className="font-medium text-foreground underline underline-offset-4"
                 data-testid="onboarding-blank"
                 href="/register"
               >
-                Start with a blank invoice
+                {t("ask.blank")}
               </Link>
             </p>
           </div>
@@ -360,7 +362,9 @@ export function Onboarding({
               className="nota-label text-muted-foreground"
               data-testid="onboarding-status"
             >
-              {reading ? `Reading ${profile?.domain ?? "your website"}` : `From ${profile?.domain}`}
+              {reading
+                ? t("meet.reading", { domain: profile?.domain ?? t("meet.yourWebsite") })
+                : t("meet.from", { domain: profile?.domain ?? "" })}
               {reading ? <span className="onboarding-dots" /> : null}
             </p>
             <h1
@@ -369,13 +373,12 @@ export function Onboarding({
               ref={heading}
               tabIndex={-1}
             >
-              {name ? (
-                <>
-                  Nice to meet you, <HighlighterSwipe>{name}</HighlighterSwipe>.
-                </>
-              ) : (
-                <>Reading your website…</>
-              )}
+              {name
+                ? t.rich("meet.nice", {
+                    highlight: (chunks) => <HighlighterSwipe>{chunks}</HighlighterSwipe>,
+                    name,
+                  })
+                : t("meet.readingTitle")}
             </h1>
 
             {/* On a phone the invoice rides along at the top, so every edit below shows on it. */}
@@ -404,7 +407,7 @@ export function Onboarding({
                 onClick={() => transition(() => setStep("save"))}
                 type="button"
               >
-                Keep this invoice <ArrowRight aria-hidden="true" />
+                {t("meet.keep")} <ArrowRight aria-hidden="true" />
               </Button>
               <button
                 className="text-sm text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
@@ -412,11 +415,11 @@ export function Onboarding({
                 onClick={startOver}
                 type="button"
               >
-                Use a different website
+                {t("meet.different")}
               </button>
             </div>
             <p className="mt-5 hidden text-xs text-muted-foreground lg:block">
-              Nothing is saved until you create your account.
+              {t("meet.nothingSaved")}
             </p>
           </section>
 
@@ -434,14 +437,14 @@ export function Onboarding({
               onClick={() => transition(() => setStep("save"))}
               type="button"
             >
-              Keep this invoice <ArrowRight aria-hidden="true" />
+              {t("meet.keep")} <ArrowRight aria-hidden="true" />
             </Button>
             <button
               className="min-h-11 text-sm text-muted-foreground underline underline-offset-4"
               onClick={startOver}
               type="button"
             >
-              Different site
+              {t("meet.differentShort")}
             </button>
           </div>
         </main>
@@ -451,11 +454,14 @@ export function Onboarding({
         <main className="mx-auto grid max-w-6xl gap-10 px-5 pt-6 pb-16 sm:px-8 lg:grid-cols-[minmax(0,6fr)_minmax(0,5fr)] lg:gap-16 lg:pt-12">
           <section className="min-w-0">
             <h1 className="onboarding-title" ref={heading} tabIndex={-1}>
-              Save your <HighlighterSwipe>invoice.</HighlighterSwipe>
+              {t.rich("save.title", {
+                highlight: (chunks) => <HighlighterSwipe>{chunks}</HighlighterSwipe>,
+              })}
             </h1>
             <p className="mt-5 max-w-[30rem] font-voice text-xl text-muted-foreground">
-              Create your account and {name ? `${name}’s` : "your"} invoice is yours to send. Next,
-              tell Nota who the first one is for.
+              {t("save.lead", {
+                owner: name ? t("save.ownerNamed", { name }) : t("save.ownerYour"),
+              })}
             </p>
             <div className="mt-10 hidden max-w-[24rem] lg:block">
               <HalftoneShadow className="onboarding-invoice -rotate-2">
@@ -483,10 +489,7 @@ export function Onboarding({
                 settle={read.settle}
               />
             </div>
-            <p className="mt-4 text-sm text-muted-foreground">
-              Your website was only read, never changed. Details found elsewhere stay marked as
-              unconfirmed until you confirm them.
-            </p>
+            <p className="mt-4 text-sm text-muted-foreground">{t("save.onlyRead")}</p>
           </section>
         </main>
       ) : null}

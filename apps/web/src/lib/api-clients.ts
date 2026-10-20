@@ -11,13 +11,26 @@ import {
 } from "@/lib/tax-identifier";
 
 export const clientPayloadSchema = z.object({
+  /** Legacy free text. Prefer street, postalCode, city and countryCode. */
   address: z.string().trim().optional(),
   bankAccountId: z.string().uuid().nullable().optional(),
+  city: z.string().trim().max(250).nullable().optional(),
   company: z.string().trim().optional(),
+  countryCode: z
+    .string()
+    .trim()
+    .toUpperCase()
+    .regex(/^[A-Z]{2}$/, "countryCode must be a two-letter ISO code")
+    .nullable()
+    .optional(),
+  defaultBuyerReference: z.string().trim().max(200).nullable().optional(),
   defaultCurrency: z.string().trim().min(1).default("EUR"),
   email: z.email("Enter a valid email address"),
   name: z.string().trim().min(1, "Name is required"),
   notes: z.string().trim().optional(),
+  postalCode: z.string().trim().max(40).nullable().optional(),
+  publicSector: z.boolean().optional(),
+  street: z.string().trim().max(500).nullable().optional(),
   taxIdentifier: z
     .object({
       countryCode: z.string().trim().length(2).nullable().optional(),
@@ -35,6 +48,13 @@ export function getClientValidationError(result: z.ZodSafeParseError<ClientPaylo
   return result.error.issues[0]?.message ?? "Invalid client payload";
 }
 
+function nullableText(value: unknown) {
+  if (value === null) {
+    return null;
+  }
+  return typeof value === "string" ? value : undefined;
+}
+
 export function normalizeClientPayload(payload: Record<string, unknown>) {
   const bankAccountId = payload.bankAccountId;
 
@@ -47,8 +67,11 @@ export function normalizeClientPayload(payload: Record<string, unknown>) {
         : bankAccountId === null
           ? null
           : undefined,
+    city: nullableText(payload.city),
     company:
       typeof payload.company === "string" && payload.company.trim() ? payload.company : undefined,
+    countryCode: nullableText(payload.countryCode),
+    defaultBuyerReference: nullableText(payload.defaultBuyerReference),
     defaultCurrency:
       typeof payload.defaultCurrency === "string" && payload.defaultCurrency.trim()
         ? payload.defaultCurrency
@@ -56,6 +79,9 @@ export function normalizeClientPayload(payload: Record<string, unknown>) {
     email: typeof payload.email === "string" ? payload.email.trim().toLowerCase() : payload.email,
     name: typeof payload.name === "string" ? payload.name.trim() : payload.name,
     notes: typeof payload.notes === "string" && payload.notes.trim() ? payload.notes : undefined,
+    postalCode: nullableText(payload.postalCode),
+    publicSector: typeof payload.publicSector === "boolean" ? payload.publicSector : undefined,
+    street: nullableText(payload.street),
     taxIdentifier:
       payload.taxIdentifier && typeof payload.taxIdentifier === "object"
         ? payload.taxIdentifier

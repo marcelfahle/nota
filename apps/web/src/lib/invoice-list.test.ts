@@ -23,6 +23,7 @@ test("formats overdue dates relative to the current UTC day", () => {
   expect(formatInvoiceDueDate("2026-09-25", "overdue", today)).toBe("9 days ago");
   expect(formatInvoiceDueDate("2026-10-03", "overdue", today)).toBe("1 day ago");
   expect(formatInvoiceDueDate("2026-10-30", "sent", today)).toBe("Oct 30");
+  expect(formatInvoiceDueDate("2026-10-30", "sent", today, "de-DE")).toBe("30. Okt.");
 });
 
 test("searches client, number, raw amount, and formatted amount", () => {
@@ -36,5 +37,7 @@ test("searches client, number, raw amount, and formatted amount", () => {
   expect(matchesInvoiceSearch(invoice, "0042")).toBe(true);
   expect(matchesInvoiceSearch(invoice, "4800")).toBe(true);
   expect(matchesInvoiceSearch(invoice, "€4,800.00")).toBe(true);
+  expect(matchesInvoiceSearch(invoice, "4.800,00 €", "de-DE")).toBe(true);
+  expect(matchesInvoiceSearch(invoice, "€4,800.00", "de-DE")).toBe(false);
   expect(matchesInvoiceSearch(invoice, "lumen")).toBe(false);
 });

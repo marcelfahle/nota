@@ -3,6 +3,7 @@ import { resolve } from "node:path";
 import { withPostHogConfig } from "@posthog/nextjs-config";
 import { withBotId } from "botid/next/config";
 import type { NextConfig } from "next";
+import createNextIntlPlugin from "next-intl/plugin";
 
 const nextConfig: NextConfig = {
   output: "standalone",
@@ -30,7 +31,9 @@ const nextConfig: NextConfig = {
 
 // Runs during the actual Vercel/CI build so uploaded maps match deployed chunks.
 // The personal key is build-only; never prefix it with NEXT_PUBLIC_.
-const configuredNext = withBotId(nextConfig);
+// Messages and the request locale come from src/i18n/request.ts.
+const withNextIntl = createNextIntlPlugin();
+const configuredNext = withNextIntl(withBotId(nextConfig));
 export default process.env.POSTHOG_API_KEY && process.env.POSTHOG_PROJECT_ID
   ? withPostHogConfig(configuredNext, {
       host: process.env.NEXT_PUBLIC_POSTHOG_HOST,

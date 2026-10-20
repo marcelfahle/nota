@@ -11,6 +11,7 @@ import { clients, invoices } from "@/lib/db/schema";
 import { normalizeInvoiceStatus } from "@/lib/invoice-lifecycle";
 import { getInvoiceDetail } from "@/lib/invoice-service";
 import { formatStoredMoney } from "@/lib/money";
+import { TAX_TREATMENTS } from "@/lib/tax-treatment";
 
 const decimalInput = z.union([
   z.number().finite(),
@@ -26,7 +27,17 @@ export const apiLineItemSchema = z.object({
   unitPrice: decimalInput,
 });
 
+const isoDate = z
+  .string()
+  .trim()
+  .regex(/^\d{4}-\d{2}-\d{2}$/, "Use YYYY-MM-DD dates")
+  .refine(
+    (value) => new Date(`${value}T00:00:00Z`).toISOString().startsWith(value),
+    "Use a real calendar date",
+  );
+
 export const apiInvoicePayloadSchema = z.object({
+  buyerReference: z.string().trim().max(200).nullable().optional(),
   clientId: z.string().uuid("Invalid client"),
   currency: z.string().trim().min(1).default("EUR"),
   dueAt: z.string().min(1, "Due date is required"),
@@ -34,8 +45,12 @@ export const apiInvoicePayloadSchema = z.object({
   issuedAt: z.string().min(1, "Issue date is required"),
   lineItems: z.array(apiLineItemSchema).min(1, "At least one line item is required"),
   notes: z.string().trim().optional(),
+  /** @deprecated Use taxTreatment: "reverse_charge". */
   reverseCharge: z.enum(["false", "true"]).default("false"),
+  servicePeriodEnd: isoDate.nullable().optional(),
+  servicePeriodStart: isoDate.nullable().optional(),
   taxRate: decimalInput.default(0),
+  taxTreatment: z.enum(TAX_TREATMENTS).optional(),
 });
 
 export type ApiInvoicePayload = z.infer<typeof apiInvoicePayloadSchema>;
@@ -48,6 +63,12 @@ export function getInvoiceValidationError(result: z.ZodSafeParseError<ApiInvoice
 
 export function normalizeInvoicePayload(payload: Record<string, unknown>) {
   return {
+    buyerReference:
+      typeof payload.buyerReference === "string"
+        ? payload.buyerReference
+        : payload.buyerReference === null
+          ? null
+          : undefined,
     clientId: payload.clientId,
     currency:
       typeof payload.currency === "string" && payload.currency.trim()
@@ -63,7 +84,16 @@ export function normalizeInvoicePayload(payload: Record<string, unknown>) {
     notes: typeof payload.notes === "string" && payload.notes.trim() ? payload.notes : undefined,
     reverseCharge:
       payload.reverseCharge === true || payload.reverseCharge === "true" ? "true" : "false",
+    servicePeriodEnd:
+      typeof payload.servicePeriodEnd === "string" && payload.servicePeriodEnd.trim()
+        ? payload.servicePeriodEnd
+        : undefined,
+    servicePeriodStart:
+      typeof payload.servicePeriodStart === "string" && payload.servicePeriodStart.trim()
+        ? payload.servicePeriodStart
+        : undefined,
     taxRate: payload.taxRate,
+    taxTreatment: payload.taxTreatment ?? undefined,
   };
 }
 

@@ -4,6 +4,7 @@ import { and, asc, count, desc, eq, inArray, sql } from "drizzle-orm";
 
 import type { AuthenticatedRole } from "@/lib/auth";
 import { billingMonth, canSendOnPlan, paymentAccount, UPGRADE_MESSAGE } from "@/lib/billing-policy";
+import { getPdfLogoSrc } from "@/lib/branding";
 import { db } from "@/lib/db";
 import {
   activityLog,
@@ -19,7 +20,20 @@ import {
   proposals,
   users,
 } from "@/lib/db/schema";
+import { invoiceAttachmentsFor } from "@/lib/e-invoice-delivery";
 import { getDeploymentEnv, getStripeMode } from "@/lib/env";
+import {
+  complianceInput,
+  taxTreatmentConflict,
+  validateForIssuance,
+  validateForSending,
+} from "@/lib/invoice-compliance";
+import { loadInvoiceBankAccount } from "@/lib/invoice-document";
+import {
+  deleteInvoiceDocumentFiles,
+  listInvoiceDocuments,
+  storeIssuedDocuments,
+} from "@/lib/invoice-documents";
 import { resolveDueDateChange } from "@/lib/invoice-due-date";
 import {
   canCancelInvoice as canCancelInvoiceStatus,
@@ -31,6 +45,7 @@ import {
   normalizeInvoiceStatus,
 } from "@/lib/invoice-lifecycle";
 import { formatInvoiceNumber } from "@/lib/invoice-number";
+import { buildIssuedSnapshot, displayedBuyer } from "@/lib/issued-snapshot";
 import { processPendingEmailJobs } from "@/lib/jobs";
 import {
   absoluteDecimal,
@@ -57,8 +72,10 @@ import {
   canSendInvoiceReminder as canSendInvoiceReminderRole,
   getInsufficientPermissionsError,
 } from "@/lib/roles";
+import { defaultServicePeriod } from "@/lib/service-period";
 import { createPaymentLink, deactivatePaymentLink } from "@/lib/stripe";
 import { invoiceTaxIdentifier } from "@/lib/tax-identifier";
+import { legacyReverseCharge, type TaxTreatment } from "@/lib/tax-treatment";
 
 export type InvoiceServiceContext = {
   orgId: string;
@@ -75,6 +92,8 @@ export type InvoiceLineItemInput = {
 };
 
 export type InvoiceMutationInput = {
+  /** Leitweg-ID or the reference the buyer asked for. Defaults to the client's. */
+  buyerReference?: string | null;
   clientId: string;
   currency: string;
   dueAt: string;
@@ -82,12 +101,20 @@ export type InvoiceMutationInput = {
   issuedAt: string;
   lineItems: Array<InvoiceLineItemInput>;
   notes?: string;
-  reverseCharge: string;
+  /** @deprecated Legacy flag. `taxTreatment: "reverse_charge"` wins when both are given. */
+  reverseCharge?: string;
+  /** Leistungsdatum or Leistungszeitraum. A single date has start = end. */
+  servicePeriodEnd?: string | null;
+  servicePeriodStart?: string | null;
   taxRate: DecimalInput;
+  /** Defaults to the workspace's default treatment. */
+  taxTreatment?: TaxTreatment;
 };
 
 export type InvoiceMutationError = {
   error: string;
+  /** Each thing to fix, when the error lists several. */
+  problems?: Array<string>;
 };
 
 export type InvoiceMutationSuccess = {
@@ -316,6 +343,69 @@ function draftIdentifier(id: string) {
   return `DRAFT-${id}`;
 }
 
+function isCalendarDate(value: string) {
+  return (
+    /^\d{4}-\d{2}-\d{2}$/.test(value) &&
+    new Date(`${value}T00:00:00Z`).toISOString().startsWith(value)
+  );
+}
+
+type LegalFields = {
+  buyerReference: string | null;
+  servicePeriodEnd: string | null;
+  servicePeriodStart: string | null;
+  taxTreatment: TaxTreatment;
+};
+
+/**
+ * The legal fields of a draft: treatment, service period and buyer reference.
+ * Whatever the input leaves out comes from `fallback`: the workspace and client
+ * defaults on create, the stored draft on update. Every surface (web, API,
+ * chat, MCP) therefore ends up with the same document.
+ */
+function resolveLegalFields(
+  input: InvoiceMutationInput,
+  fallback: LegalFields,
+): { error: string } | (LegalFields & { reverseCharge: string }) {
+  const taxTreatment =
+    input.taxTreatment ??
+    (input.reverseCharge === "true" ? "reverse_charge" : fallback.taxTreatment);
+  const conflict = taxTreatmentConflict(taxTreatment, input.taxRate);
+  if (conflict) {
+    return { error: conflict };
+  }
+  const start = input.servicePeriodStart?.trim() || input.servicePeriodEnd?.trim() || null;
+  const end = input.servicePeriodEnd?.trim() || start;
+  if ((start && !isCalendarDate(start)) || (end && !isCalendarDate(end))) {
+    return { error: "Service period dates must be real dates in YYYY-MM-DD format" };
+  }
+  if (start && end && end < start) {
+    return { error: "The service period must end on or after it starts" };
+  }
+  return {
+    buyerReference:
+      input.buyerReference === undefined
+        ? fallback.buyerReference
+        : input.buyerReference?.trim() || null,
+    reverseCharge: legacyReverseCharge(taxTreatment),
+    servicePeriodEnd: end ?? fallback.servicePeriodEnd,
+    servicePeriodStart: start ?? fallback.servicePeriodStart,
+    taxTreatment,
+  };
+}
+
+function issuanceError(problems: Array<string>): InvoiceMutationError {
+  return {
+    error: `Fix before issuing: ${problems.join(" ")}`,
+    problems,
+  };
+}
+
+async function getOwnedOrg(orgId: string) {
+  const [org] = await db.select().from(orgs).where(eq(orgs.id, orgId)).limit(1);
+  return org ?? null;
+}
+
 export async function getOwnedInvoice(orgId: string, invoiceId: string) {
   const [invoice] = await db
     .select()
@@ -357,66 +447,75 @@ export async function getInvoiceDetail(orgId: string, invoiceId: string) {
     return null;
   }
 
-  const [client, items, activities, paymentRows, [creditRow], [viewRow]] = await Promise.all([
-    db
-      .select({
-        address: clients.address,
-        company: clients.company,
-        defaultCurrency: clients.defaultCurrency,
-        email: clients.email,
-        id: clients.id,
-        name: clients.name,
-        taxIdentifierCanonicalValue: clients.taxIdentifierCanonicalValue,
-        taxIdentifierCountryCode: clients.taxIdentifierCountryCode,
-        taxIdentifierType: clients.taxIdentifierType,
-        taxIdentifierValue: clients.taxIdentifierValue,
-        vatNumber: clients.vatNumber,
-        vatStatus: clients.vatStatus,
-      })
-      .from(clients)
-      .where(and(eq(clients.id, invoice.clientId), eq(clients.orgId, orgId)))
-      .limit(1)
-      .then((rows) => rows[0] ?? null),
-    db
-      .select()
-      .from(lineItems)
-      .where(eq(lineItems.invoiceId, invoiceId))
-      .orderBy(asc(lineItems.sortOrder)),
-    db
-      .select({
-        action: activityLog.action,
-        createdAt: activityLog.createdAt,
-        id: activityLog.id,
-        metadata: activityLog.metadata,
-        source: activityLog.source,
-        sourceClient: activityLog.sourceClient,
-      })
-      .from(activityLog)
-      .where(eq(activityLog.invoiceId, invoiceId))
-      .orderBy(desc(activityLog.createdAt)),
-    db
-      .select()
-      .from(payments)
-      .where(and(eq(payments.invoiceId, invoiceId), eq(payments.orgId, orgId)))
-      .orderBy(desc(payments.receivedAt)),
-    db
-      .select({ total: sql<string>`coalesce(sum(${invoices.total}::numeric), 0)` })
-      .from(invoices)
-      .where(
-        and(
-          eq(invoices.creditsInvoiceId, invoiceId),
-          eq(invoices.kind, "credit_note"),
-          inArray(invoices.status, ["sent", "overdue", "paid"]),
+  const [client, items, activities, paymentRows, [creditRow], [viewRow], org, documents] =
+    await Promise.all([
+      db
+        .select({
+          address: clients.address,
+          bankAccountId: clients.bankAccountId,
+          city: clients.city,
+          company: clients.company,
+          countryCode: clients.countryCode,
+          defaultCurrency: clients.defaultCurrency,
+          email: clients.email,
+          id: clients.id,
+          name: clients.name,
+          postalCode: clients.postalCode,
+          publicSector: clients.publicSector,
+          street: clients.street,
+          taxIdentifierCanonicalValue: clients.taxIdentifierCanonicalValue,
+          taxIdentifierCountryCode: clients.taxIdentifierCountryCode,
+          taxIdentifierType: clients.taxIdentifierType,
+          taxIdentifierValue: clients.taxIdentifierValue,
+          vatNumber: clients.vatNumber,
+          vatStatus: clients.vatStatus,
+        })
+        .from(clients)
+        .where(and(eq(clients.id, invoice.clientId), eq(clients.orgId, orgId)))
+        .limit(1)
+        .then((rows) => rows[0] ?? null),
+      db
+        .select()
+        .from(lineItems)
+        .where(eq(lineItems.invoiceId, invoiceId))
+        .orderBy(asc(lineItems.sortOrder)),
+      db
+        .select({
+          action: activityLog.action,
+          createdAt: activityLog.createdAt,
+          id: activityLog.id,
+          metadata: activityLog.metadata,
+          source: activityLog.source,
+          sourceClient: activityLog.sourceClient,
+        })
+        .from(activityLog)
+        .where(eq(activityLog.invoiceId, invoiceId))
+        .orderBy(desc(activityLog.createdAt)),
+      db
+        .select()
+        .from(payments)
+        .where(and(eq(payments.invoiceId, invoiceId), eq(payments.orgId, orgId)))
+        .orderBy(desc(payments.receivedAt)),
+      db
+        .select({ total: sql<string>`coalesce(sum(${invoices.total}::numeric), 0)` })
+        .from(invoices)
+        .where(
+          and(
+            eq(invoices.creditsInvoiceId, invoiceId),
+            eq(invoices.kind, "credit_note"),
+            inArray(invoices.status, ["sent", "overdue", "paid"]),
+          ),
         ),
-      ),
-    db
-      .select({
-        count: sql<number>`count(*)::int`,
-        lastViewedAt: sql<Date | null>`max(${activityLog.createdAt})`,
-      })
-      .from(activityLog)
-      .where(and(eq(activityLog.invoiceId, invoiceId), eq(activityLog.action, "viewed"))),
-  ]);
+      db
+        .select({
+          count: sql<number>`count(*)::int`,
+          lastViewedAt: sql<Date | null>`max(${activityLog.createdAt})`,
+        })
+        .from(activityLog)
+        .where(and(eq(activityLog.invoiceId, invoiceId), eq(activityLog.action, "viewed"))),
+      getOwnedOrg(orgId),
+      listInvoiceDocuments(orgId, invoiceId),
+    ]);
 
   const currency = invoice.currency ?? "EUR";
   const settlement = reconcileStoredInvoiceAmounts(
@@ -432,18 +531,35 @@ export async function getInvoiceDetail(orgId: string, invoiceId: string) {
           compareDecimals(settlement.creditedAmount, 0, 4) > 0
         ? "partially_paid"
         : "unpaid";
+  // Drafts list what still blocks sending; issued documents already passed.
+  const issueProblems =
+    invoice.status === "draft" && client && org
+      ? validateForSending(
+          complianceInput(
+            org,
+            client,
+            invoice,
+            items.length,
+            await loadInvoiceBankAccount(db, orgId, client.bankAccountId),
+          ),
+          org.eInvoiceDelivery,
+        )
+      : [];
 
   return {
     ...invoice,
     activityLog: activities,
     balance: settlement.balance,
+    // An issued invoice shows the buyer as it was issued to; a draft shows the client as they are.
     client: client
       ? {
-          ...client,
+          ...displayedBuyer(invoice, client),
           taxIdentifier: invoiceTaxIdentifier(invoice.status, invoice.clientTaxIdentifier, client),
         }
       : null,
     creditedAmount: settlement.creditedAmount,
+    documents,
+    issueProblems,
     lastViewedAt: viewRow?.lastViewedAt ?? null,
     lineItems: items.map((item) => ({
       ...item,
@@ -482,10 +598,26 @@ export async function createInvoice(
     return { error: error instanceof Error ? error.message : "Invalid invoice amount" };
   }
   const { lineAmounts, ...totals } = calculation;
-  const client = await getOwnedClient(context.orgId, invoiceData.clientId);
+  const [client, org] = await Promise.all([
+    getOwnedClient(context.orgId, invoiceData.clientId),
+    getOwnedOrg(context.orgId),
+  ]);
 
   if (!client) {
     return { error: "Client not found" };
+  }
+  if (!org) {
+    return { error: "Organization not found" };
+  }
+  const period = defaultServicePeriod(items, input.issuedAt);
+  const legal = resolveLegalFields(input, {
+    buyerReference: client.defaultBuyerReference,
+    servicePeriodEnd: period?.end ?? null,
+    servicePeriodStart: period?.start ?? null,
+    taxTreatment: org.defaultTaxTreatment,
+  });
+  if ("error" in legal) {
+    return legal;
   }
 
   const insertedInvoice = await db.transaction(async (tx) => {
@@ -495,6 +627,7 @@ export async function createInvoice(
       .insert(invoices)
       .values({
         ...invoiceData,
+        ...legal,
         ...totals,
         id,
         number,
@@ -565,10 +698,26 @@ export async function updateInvoice(
     return { error: error instanceof Error ? error.message : "Invalid invoice amount" };
   }
   const { lineAmounts, ...totals } = calculation;
-  const client = await getOwnedClient(context.orgId, invoiceData.clientId);
+  const [client, org] = await Promise.all([
+    getOwnedClient(context.orgId, invoiceData.clientId),
+    getOwnedOrg(context.orgId),
+  ]);
 
   if (!client) {
     return { error: "Client not found" };
+  }
+  if (!org) {
+    return { error: "Organization not found" };
+  }
+  // An edit keeps what the draft already says unless the caller changes it.
+  const legal = resolveLegalFields(input, {
+    buyerReference: invoice.buyerReference,
+    servicePeriodEnd: invoice.servicePeriodEnd,
+    servicePeriodStart: invoice.servicePeriodStart,
+    taxTreatment: invoice.taxTreatment,
+  });
+  if ("error" in legal) {
+    return legal;
   }
 
   await db.transaction(async (tx) => {
@@ -576,6 +725,7 @@ export async function updateInvoice(
       .update(invoices)
       .set({
         ...invoiceData,
+        ...legal,
         ...totals,
         revision: sql`${invoices.revision} + 1`,
         updatedAt: new Date(),
@@ -721,8 +871,11 @@ export async function sendInvoice(
   }
 
   const sentAt = new Date();
+  // Fetched before the transaction so no network wait happens under the row locks.
+  const logoSrc = await getPdfLogoSrc((await getOwnedOrg(context.orgId))?.logoUrl);
   let createdLink: { accountId: string | null; id: string } | null = null;
   let creditedLink: { accountId: string | null; id: string; invoiceId: string } | null = null;
+  let storedKeys: Array<string> = [];
   try {
     const result = await db.transaction(async (tx): Promise<InvoiceMutationResult> => {
       // Keep quota, invoice state and the email job atomic, including on request interruption.
@@ -786,12 +939,37 @@ export async function sendInvoice(
           return { error: "Assigned bank account not found" };
         }
       }
+      const [{ lineItemCount }] = await tx
+        .select({ lineItemCount: count() })
+        .from(lineItems)
+        .where(eq(lineItems.invoiceId, invoiceId));
+      // The XML is validated here, before anything is queued, so the email job
+      // only ever renders a document that is known to be complete.
+      const bankAccount = await loadInvoiceBankAccount(tx, context.orgId, client.bankAccountId);
+      const problems = validateForSending(
+        complianceInput(org, client, invoice, lineItemCount, bankAccount),
+        org.eInvoiceDelivery,
+      );
+      if (problems.length) {
+        return issuanceError(problems);
+      }
+      const attachments = invoiceAttachmentsFor(org.eInvoiceDelivery);
       const account =
         deployment.PAYMENT_MODE === "stripe"
           ? paymentAccount(mode, org.stripeAccountId, org.stripeChargesEnabled)
           : null;
       const accountId = account === "platform" ? null : account;
       const issuedNumber = await issueDocumentNumber(tx, context, invoice);
+      const sellerTaxIdentifier = invoiceTaxIdentifier(
+        invoice.status,
+        invoice.sellerTaxIdentifier,
+        org,
+      );
+      const clientTaxIdentifier = invoiceTaxIdentifier(
+        invoice.status,
+        invoice.clientTaxIdentifier,
+        client,
+      );
       const paymentLink =
         account && invoice.kind === "invoice"
           ? await createPaymentLink({
@@ -809,18 +987,20 @@ export async function sendInvoice(
       await tx
         .update(invoices)
         .set({
-          clientTaxIdentifier: invoiceTaxIdentifier(
-            invoice.status,
-            invoice.clientTaxIdentifier,
+          clientTaxIdentifier,
+          // The document keeps the language it was issued in, whatever the workspace picks later.
+          documentLocale: invoice.documentLocale ?? org.documentLocale,
+          issuedSnapshot: buildIssuedSnapshot({
+            bankAccount,
             client,
-          ),
+            clientTaxIdentifier,
+            invoice,
+            org,
+            sellerTaxIdentifier,
+          }),
           publicToken: invoice.publicToken ?? randomBytes(24).toString("base64url"),
           revision: sql`${invoices.revision} + 1`,
-          sellerTaxIdentifier: invoiceTaxIdentifier(
-            invoice.status,
-            invoice.sellerTaxIdentifier,
-            org,
-          ),
+          sellerTaxIdentifier,
           sentAt,
           status: "sent",
           stripeAccountId: accountId,
@@ -829,12 +1009,23 @@ export async function sendInvoice(
           updatedAt: sentAt,
         })
         .where(eq(invoices.id, invoiceId));
+      // What the customer receives is rendered and stored now, from the frozen
+      // row, so the email job and every later download carry the same bytes.
+      storedKeys = (
+        await storeIssuedDocuments(
+          tx,
+          org,
+          { id: invoiceId, number: issuedNumber },
+          { attachXml: attachments.includes("xml"), logoSrc },
+        )
+      ).map((row) => row.storageKey);
       await tx
         .insert(invoiceSends)
         .values({ invoiceId, month: billingMonth(sentAt), orgId: org.id });
       await tx.insert(activityLog).values({
         action: "sent",
         invoiceId,
+        metadata: { attachments },
         ...sourceFields(context),
       });
       if (!org.firstRunCompletedAt) {
@@ -876,6 +1067,14 @@ export async function sendInvoice(
           });
           await expireInvoiceProposals(tx, original.id);
         }
+        if (original) {
+          await tx.insert(activityLog).values({
+            action: "credited",
+            invoiceId: original.id,
+            metadata: { creditNoteId: invoiceId, creditNoteNumber: issuedNumber },
+            ...sourceFields(context),
+          });
+        }
         if (original?.stripePaymentLinkId) {
           creditedLink = {
             accountId: original.stripeAccountId,
@@ -887,18 +1086,22 @@ export async function sendInvoice(
       await expireInvoiceProposals(tx, invoiceId);
       await tx
         .insert(jobs)
-        .values({ invoiceId, payload: { invoiceId }, type: "send_invoice_email" });
+        .values({ invoiceId, payload: { attachments, invoiceId }, type: "send_invoice_email" });
       return { invoiceId, success: true };
     });
     if ("error" in result) {
       return result;
     }
-  } catch {
-    // A link created before a database failure has never been sent to the client.
+  } catch (error) {
+    // eslint-disable-next-line no-console -- The UI only says "try again"; the cause must reach the server logs.
+    console.error("[invoices] issuance failed", { error, invoiceId });
+    // A link created before a database failure has never been sent to the client,
+    // and a file stored before it belongs to no issued document.
     const orphan = createdLink as { accountId: string | null; id: string } | null;
     if (orphan) {
       await deactivatePaymentLink(orphan.id, orphan.accountId).catch(() => null);
     }
+    await deleteInvoiceDocumentFiles(storedKeys).catch(() => null);
     return { error: "Invoice could not be sent. Please try again." };
   }
   let warning: string | undefined;
@@ -973,6 +1176,7 @@ export async function duplicateInvoice(
     const [invoice] = await tx
       .insert(invoices)
       .values({
+        buyerReference: original.buyerReference,
         clientId: original.clientId,
         currency: original.currency,
         dueAt: dueDate,
@@ -983,9 +1187,13 @@ export async function duplicateInvoice(
         number,
         orgId: context.orgId,
         reverseCharge: original.reverseCharge,
+        // A copy covers new work, so the period is left for the editor to set.
+        servicePeriodEnd: null,
+        servicePeriodStart: null,
         subtotal: original.subtotal,
         taxAmount: original.taxAmount,
         taxRate: original.taxRate,
+        taxTreatment: original.taxTreatment,
         total: original.total,
         ...sourceFields(context),
         userId: context.userId,
@@ -1080,6 +1288,7 @@ export async function createCreditNote(
     const [credit] = await tx
       .insert(invoices)
       .values({
+        buyerReference: original.buyerReference,
         clientId: original.clientId,
         creditsInvoiceId: original.id,
         currency: original.currency,
@@ -1092,9 +1301,12 @@ export async function createCreditNote(
         number,
         orgId: context.orgId,
         reverseCharge: original.reverseCharge,
+        servicePeriodEnd: original.servicePeriodEnd,
+        servicePeriodStart: original.servicePeriodStart,
         subtotal: negateDecimal(absoluteDecimal(original.subtotal ?? "0", exponent), exponent),
         taxAmount: negateDecimal(absoluteDecimal(original.taxAmount ?? "0", exponent), exponent),
         taxRate: original.taxRate,
+        taxTreatment: original.taxTreatment,
         total: negateDecimal(absoluteDecimal(original.total ?? "0", exponent), exponent),
         ...sourceFields(context),
         userId: context.userId,
@@ -1407,9 +1619,11 @@ export async function markInvoiceSent(
     return { error: getInsufficientPermissionsError() };
   }
 
-  return db.transaction(async (tx) => {
+  const logoSrc = await getPdfLogoSrc((await getOwnedOrg(context.orgId))?.logoUrl);
+  let storedKeys: Array<string> = [];
+  const issue = db.transaction(async (tx): Promise<InvoiceMutationResult> => {
     const [organization] = await tx
-      .select({ id: orgs.id })
+      .select()
       .from(orgs)
       .where(eq(orgs.id, context.orgId))
       .for("update");
@@ -1427,25 +1641,90 @@ export async function markInvoiceSent(
     if (!canSendInvoiceStatus(invoice.status)) {
       return { error: "Only draft invoices can be marked as sent" };
     }
+    const [client] = await tx
+      .select()
+      .from(clients)
+      .where(and(eq(clients.id, invoice.clientId), eq(clients.orgId, context.orgId)));
+    if (!client) {
+      return { error: "Client not found" };
+    }
+    const [{ lineItemCount }] = await tx
+      .select({ lineItemCount: count() })
+      .from(lineItems)
+      .where(eq(lineItems.invoiceId, invoiceId));
+    const bankAccount = await loadInvoiceBankAccount(tx, context.orgId, client.bankAccountId);
+    const problems = validateForIssuance(
+      complianceInput(organization, client, invoice, lineItemCount, bankAccount),
+    );
+    if (problems.length) {
+      return issuanceError(problems);
+    }
 
-    await issueDocumentNumber(tx, context, invoice);
+    const issuedNumber = await issueDocumentNumber(tx, context, invoice);
     const sentAt = new Date();
+    const sellerTaxIdentifier = invoiceTaxIdentifier(
+      invoice.status,
+      invoice.sellerTaxIdentifier,
+      organization,
+    );
+    const clientTaxIdentifier = invoiceTaxIdentifier(
+      invoice.status,
+      invoice.clientTaxIdentifier,
+      client,
+    );
     await tx
       .update(invoices)
       .set({
+        clientTaxIdentifier,
+        documentLocale: invoice.documentLocale ?? organization.documentLocale,
+        issuedSnapshot: buildIssuedSnapshot({
+          bankAccount,
+          client,
+          clientTaxIdentifier,
+          invoice,
+          org: organization,
+          sellerTaxIdentifier,
+        }),
         revision: sql`${invoices.revision} + 1`,
+        sellerTaxIdentifier,
         sentAt,
         status: "sent",
         updatedAt: sentAt,
       })
       .where(eq(invoices.id, invoiceId));
+    // Nothing leaves Nota, but the original the owner sent by hand is kept all
+    // the same. Only the issuance rules applied, so the XML is stored when it
+    // validates and skipped otherwise; it is never required here.
+    storedKeys = (
+      await storeIssuedDocuments(
+        tx,
+        organization,
+        { id: invoiceId, number: issuedNumber },
+        { attachXml: false, logoSrc },
+      )
+    ).map((row) => row.storageKey);
     await tx.insert(activityLog).values({
       action: "sent",
       invoiceId,
       metadata: { manual: true },
       ...sourceFields(context),
     });
+    if (invoice.kind === "credit_note" && invoice.creditsInvoiceId) {
+      await tx.insert(activityLog).values({
+        action: "credited",
+        invoiceId: invoice.creditsInvoiceId,
+        metadata: { creditNoteId: invoiceId, creditNoteNumber: issuedNumber },
+        ...sourceFields(context),
+      });
+    }
     await tx.update(orgs).set({ firstRunCompletedAt: sentAt }).where(eq(orgs.id, context.orgId));
     return { invoiceId, success: true };
   });
+  try {
+    return await issue;
+  } catch {
+    // Rolled back: the number is free again and a stored file belongs to nothing.
+    await deleteInvoiceDocumentFiles(storedKeys).catch(() => null);
+    return { error: "Invoice could not be marked as sent. Please try again." };
+  }
 }

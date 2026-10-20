@@ -1,11 +1,14 @@
 import { asc, desc, eq } from "drizzle-orm";
+import { getTranslations } from "next-intl/server";
 
 import { listMembers } from "@/actions/members";
 import { ApiKeysSettings } from "@/components/api-keys-settings";
 import { BillingSettings } from "@/components/billing-settings";
 import { BrandSettings } from "@/components/brand-settings";
 import { ConnectedApps } from "@/components/connected-apps";
+import { EmailSettings } from "@/components/email-settings";
 import { GoogleAccount } from "@/components/google-account";
+import { LanguageSettings } from "@/components/language-settings";
 import { BankAccountsSettings, NumberingSettings } from "@/components/settings-form";
 import { SettingsTabs } from "@/components/settings-tabs";
 import { TeamSettings } from "@/components/team-settings";
@@ -31,7 +34,11 @@ export default async function SettingsPage({
   searchParams: Promise<{ billing?: string; connect?: string; google?: string }>;
 }) {
   const { org, role, user } = await getCurrentUser();
-  const [billing, params] = await Promise.all([billingStatus(org.id), searchParams]);
+  const [billing, params, t] = await Promise.all([
+    billingStatus(org.id),
+    searchParams,
+    getTranslations("settings"),
+  ]);
   const [connections, userAccounts] = await Promise.all([
     listConnectedApps(user.id),
     db
@@ -40,15 +47,15 @@ export default async function SettingsPage({
       .where(eq(accounts.userId, user.id)),
   ]);
   const connectNotices: Record<string, string> = {
-    cancelled: "Stripe connection was cancelled.",
-    expired: "The Stripe link expired. Continue Stripe setup to get a fresh link.",
-    failed: "Stripe could not be connected. Please try again as the workspace owner.",
-    returned: "Welcome back. Refresh your Stripe status to check whether setup is complete.",
-    success: "Your Stripe account is connected.",
+    cancelled: t("notices.connectCancelled"),
+    expired: t("notices.connectExpired"),
+    failed: t("notices.connectFailed"),
+    returned: t("notices.connectReturned"),
+    success: t("notices.connectSuccess"),
   };
   const notice =
     params.billing === "success"
-      ? "Your payment is being confirmed. Refresh shortly to see your updated plan."
+      ? t("notices.billingSuccess")
       : connectNotices[params.connect ?? ""];
 
   const [lastInvoice] = await db
@@ -93,7 +100,11 @@ export default async function SettingsPage({
     businessName: org.businessName,
     city: org.city,
     contactEmail: org.contactEmail,
+    contactName: org.contactName,
+    contactPhone: org.contactPhone,
     country: org.country,
+    countryCode: org.countryCode,
+    defaultTaxTreatment: org.defaultTaxTreatment,
     faviconUrl: org.faviconUrl,
     invoiceLayout: org.invoiceLayout,
     legalName: org.legalName,
@@ -117,23 +128,20 @@ export default async function SettingsPage({
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <p className="nota-label mb-2.5">
-            Settings
+            {t("title")}
             {org.website ? (
               <span className="font-normal tracking-normal normal-case opacity-60">
                 {" "}
-                / profile from {org.website.replace(/^https?:\/\//, "").replace(/\/$/, "")}
+                {t("profileFrom", {
+                  domain: org.website.replace(/^https?:\/\//, "").replace(/\/$/, ""),
+                })}
               </span>
             ) : null}
           </p>
           <h1>{org.businessName || org.name}</h1>
         </div>
-        <Button
-          disabled
-          title="Website reading is not available yet"
-          type="button"
-          variant="outline"
-        >
-          Read my site again
+        <Button disabled title={t("readAgainUnavailable")} type="button" variant="outline">
+          {t("readAgain")}
         </Button>
       </div>
 
@@ -141,11 +149,11 @@ export default async function SettingsPage({
         panels={{
           account: (
             <div className="space-y-8">
+              <LanguageSettings locale={user.locale} />
               <ThemeSettings theme={user.theme} />
               {params.google === "failed" && (
                 <p className="text-sm text-destructive" role="alert">
-                  Google could not be connected. Use the same email as your Nota account and try
-                  again.
+                  {t("notices.googleFailed")}
                 </p>
               )}
               {googleCredentials() && (
@@ -162,20 +170,17 @@ export default async function SettingsPage({
               {canManageApiKeys(role) ? (
                 <ApiKeysSettings apiKeys={apiKeyRecords} />
               ) : (
-                <p className="text-sm text-muted-foreground">
-                  Only organization owners can manage API keys.
-                </p>
+                <p className="text-sm text-muted-foreground">{t("onlyOwnersApiKeys")}</p>
               )}
             </div>
           ),
           brand: <BrandSettings canManage={canManage} settings={brandSettings} />,
           email: (
-            <section className="space-y-2">
-              <h2 className="text-lg font-semibold">Email</h2>
-              <p className="text-sm text-muted-foreground">
-                Invoice email settings will appear here when custom sending is available.
-              </p>
-            </section>
+            <EmailSettings
+              canManage={canManage}
+              documentLocale={org.documentLocale}
+              eInvoiceDelivery={org.eInvoiceDelivery}
+            />
           ),
           numbering: (
             <NumberingSettings
@@ -209,9 +214,7 @@ export default async function SettingsPage({
                 }))}
               />
             ) : (
-              <p className="text-sm text-muted-foreground">
-                Only organization owners can manage the team.
-              </p>
+              <p className="text-sm text-muted-foreground">{t("onlyOwnersTeam")}</p>
             ),
         }}
       />

@@ -291,8 +291,12 @@ function detail(invoice: InvoiceDetail) {
     totals.append(row);
   }
   content.append(totals);
-  if (invoice.reverseCharge === true || invoice.reverseCharge === "true")
+  if (invoice.taxTreatment === "reverse_charge")
     content.append(el("p", "Reverse charge applies.", "notes"));
+  else if (invoice.taxTreatment === "exempt_small_business")
+    content.append(el("p", "No VAT charged under § 19 UStG.", "notes"));
+  if (invoice.issueProblems?.length)
+    content.append(el("p", `Before it can be sent: ${invoice.issueProblems.join(" ")}`, "notes"));
   if (invoice.notes) content.append(el("h2", "Notes"), el("p", invoice.notes, "notes"));
   if (invoice.activityLog?.length) {
     const activity = el("ul", undefined, "activity");

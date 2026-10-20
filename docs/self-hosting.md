@@ -35,7 +35,12 @@ intent (recipient, subject, and attachment metadata, not message bodies) to
 
 Local storage is the default. To use S3-compatible storage, set `STORAGE=s3`, `S3_BUCKET`,
 `S3_REGION`, and `S3_PUBLIC_URL`; set endpoint, path-style, and credentials when the service needs
-them. Stored keys are restricted to `orgs/<tenant UUID>/logo|favicon.<safe extension>`.
+them. Logos and favicons live under `orgs/<tenant UUID>/logo|favicon.<safe extension>` and are
+served publicly from `S3_PUBLIC_URL`. Issued invoice originals live under
+`invoices/<workspace UUID>/<invoice UUID>/<number>.pdf|.xml` and must never be publicly readable:
+scope any anonymous-read bucket policy to the `orgs/` prefix (or serve logos through a CDN that
+only forwards that prefix). Nota always reads originals with the bucket credentials and serves
+them behind its own authorization.
 
 Add `ANTHROPIC_API_KEY` to enable chat. Without it, the UI explains that chat is unavailable while
 invoicing, PDF export, CLI/API access, and sending continue normally. To run MCP, set

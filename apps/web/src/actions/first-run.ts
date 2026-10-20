@@ -9,6 +9,7 @@ import { auth } from "@/lib/better-auth";
 import { formatOrgAddress } from "@/lib/branding";
 import { db } from "@/lib/db";
 import { bankAccounts, invoices, jobs, orgs } from "@/lib/db/schema";
+import { defaultEInvoiceDelivery } from "@/lib/e-invoice-delivery";
 import { formatIban, formatIbanDisplay, validateIban } from "@/lib/iban";
 import { EMAIL_VERIFICATION_REQUIRED, getOwnedInvoice, sendInvoice } from "@/lib/invoice-service";
 import { processPendingEmailJobs } from "@/lib/jobs";
@@ -20,6 +21,7 @@ import {
 } from "@/lib/roles";
 import { TAX_IDENTIFIER_TYPES, TaxIdentifierValidationError } from "@/lib/tax-identifier";
 import { clientTaxIdentifierFields } from "@/lib/vat";
+import { toCountryCode } from "@/lib/xrechnung";
 
 const MAX_UNCONFIRMED_TEST_COPIES = 3;
 
@@ -83,10 +85,17 @@ export async function saveFirstRunProfile(
   }
   try {
     const { taxIdentifierType, taxIdentifierValue, ...profile } = parsed.data;
+    // The free text stays as typed; the ISO code is what invoices need.
+    const countryCode = toCountryCode(profile.country) ?? org.countryCode;
     await db
       .update(orgs)
       .set({
         ...profile,
+        countryCode,
+        // A new country brings its delivery default; a confirmed one keeps the user's choice.
+        ...(countryCode !== org.countryCode
+          ? { eInvoiceDelivery: defaultEInvoiceDelivery(countryCode) }
+          : {}),
         ...(await clientTaxIdentifierFields({
           type: taxIdentifierType,
           value: taxIdentifierValue,

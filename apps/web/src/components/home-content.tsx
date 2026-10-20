@@ -1,20 +1,23 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import { useEffect, useRef, useState } from "react";
 
 import { ChatPanel } from "@/components/chat-panel";
-
-const FIRST_INVOICE_PROMPTS = ["Send your first invoice"] as const;
+import type { Locale } from "@/lib/utils";
 
 export function HomeContent({
   children,
   empty = false,
+  locale,
   summary,
 }: {
   children?: React.ReactNode;
   empty?: boolean;
+  locale?: Locale;
   summary: React.ReactNode;
 }) {
+  const t = useTranslations("home");
   const [chatOpen, setChatOpen] = useState(false);
   const chatInput = useRef<HTMLTextAreaElement>(null);
 
@@ -35,10 +38,11 @@ export function HomeContent({
       </div>
       <ChatPanel
         inputRef={chatInput}
+        locale={locale}
         mode="home"
         onOpenChange={setChatOpen}
         open={chatOpen}
-        starterPrompts={empty ? FIRST_INVOICE_PROMPTS : undefined}
+        starterPrompts={empty ? [t("firstInvoicePrompt")] : undefined}
       />
       {children ? (
         <div className="mx-auto mt-11 max-w-[700px] space-y-11" hidden={chatOpen}>

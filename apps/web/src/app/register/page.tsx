@@ -1,3 +1,4 @@
+import { getTranslations } from "next-intl/server";
 import Link from "next/link";
 
 import { AuthShell } from "@/components/auth-shell";
@@ -19,7 +20,10 @@ export default async function RegisterPage({
   );
   const googleEnabled = Boolean(googleCredentials());
   const socialError = googleErrorMessage(params.error ?? null);
-  const activeInvite = invite ? await getActiveInviteByToken(invite) : null;
+  const [activeInvite, t] = await Promise.all([
+    invite ? getActiveInviteByToken(invite) : null,
+    getTranslations("auth.register"),
+  ]);
 
   return (
     <AuthShell
@@ -28,10 +32,10 @@ export default async function RegisterPage({
           className="font-medium text-zinc-900 underline underline-offset-4"
           href={`/login${query.size ? `?${query}` : ""}`}
         >
-          Back to sign in
+          {t("backToSignIn")}
         </Link>
       }
-      title={activeInvite ? `Join ${activeInvite.orgName}` : "Create account"}
+      title={activeInvite ? t("join", { org: activeInvite.orgName }) : t("createAccount")}
     >
       {socialError && (
         <p className="text-sm text-destructive" role="alert">
@@ -41,8 +45,7 @@ export default async function RegisterPage({
       {invite && !activeInvite ? (
         <div className="space-y-4">
           <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-            This invite link is invalid or expired. Ask your organization owner to send a fresh one,
-            or create your own workspace instead.
+            {t("inviteInvalid")}
           </div>
           <RegisterForm googleEnabled={googleEnabled} />
         </div>

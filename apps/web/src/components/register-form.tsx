@@ -1,5 +1,6 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import posthog from "posthog-js";
 import { useState, type FormEvent } from "react";
 
@@ -24,6 +25,7 @@ export function RegisterForm({
   googleEnabled?: boolean;
   invite?: RegisterInvite | null;
 }) {
+  const t = useTranslations("auth.register");
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
   const isInviteFlow = Boolean(invite);
@@ -53,12 +55,12 @@ export function RegisterForm({
       setError(
         signUpError.code === "USER_ALREADY_EXISTS" ||
           signUpError.code === "USER_ALREADY_EXISTS_USE_ANOTHER_EMAIL"
-          ? "An account already exists for that email"
+          ? t("exists")
           : signUpError.status === 400 && invite
-            ? "This invite link is invalid, expired, or for a different email"
+            ? t("inviteBad")
             : signUpError.code === "PASSWORD_TOO_SHORT"
-              ? "Password must be at least 8 characters"
-              : (signUpError.message ?? "Could not create your account"),
+              ? t("passwordShort")
+              : (signUpError.message ?? t("failed")),
       );
       return;
     }
@@ -78,17 +80,21 @@ export function RegisterForm({
           className="rounded-xl border border-zinc-200 bg-zinc-50 px-4 py-3 text-left"
           data-testid="register-invite-banner"
         >
-          <p className="text-sm font-medium text-zinc-900">Join {invite.orgName}</p>
+          <p className="text-sm font-medium text-zinc-900">{t("join", { org: invite.orgName })}</p>
           <p className="mt-1 text-sm text-zinc-500">
-            This invite gives <span className="font-medium text-zinc-700">{invite.role}</span>{" "}
-            access for <span className="font-medium text-zinc-700">{invite.email}</span>.
+            {t.rich("inviteAccess", {
+              email: (chunks) => <span className="font-medium text-zinc-700">{chunks}</span>,
+              emailValue: invite.email,
+              role: (chunks) => <span className="font-medium text-zinc-700">{chunks}</span>,
+              roleValue: invite.role,
+            })}
           </p>
         </div>
       ) : null}
 
       {googleEnabled && <GoogleSignIn disabled={pending} inviteToken={invite?.token} />}
       <div className="space-y-2">
-        <Label htmlFor="name">Name</Label>
+        <Label htmlFor="name">{t("name")}</Label>
         <Input
           autoComplete="name"
           autoFocus
@@ -100,7 +106,7 @@ export function RegisterForm({
       </div>
 
       <div className="space-y-2">
-        <Label htmlFor="email">Email</Label>
+        <Label htmlFor="email">{t("email")}</Label>
         <Input
           autoComplete="email"
           data-testid="register-email"
@@ -111,13 +117,11 @@ export function RegisterForm({
           required
           type="email"
         />
-        {invite ? (
-          <p className="text-xs text-zinc-500">The invited email is fixed for this link.</p>
-        ) : null}
+        {invite ? <p className="text-xs text-zinc-500">{t("invitedEmail")}</p> : null}
       </div>
 
       <div className="space-y-2">
-        <Label htmlFor="password">Password</Label>
+        <Label htmlFor="password">{t("password")}</Label>
         <Input
           autoComplete="new-password"
           data-testid="register-password"
@@ -132,7 +136,7 @@ export function RegisterForm({
       {error ? <p className="text-sm text-red-500">{error}</p> : null}
 
       <Button className="w-full" data-testid="register-submit" disabled={pending} type="submit">
-        {pending ? "Creating..." : invite ? "Accept Invite" : "Create account"}
+        {pending ? t("creating") : invite ? t("acceptInvite") : t("createAccount")}
       </Button>
     </form>
   );

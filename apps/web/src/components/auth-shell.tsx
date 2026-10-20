@@ -1,3 +1,5 @@
+import { useTranslations } from "next-intl";
+
 import { AuthPlayground } from "@/components/auth-playground";
 import { NotaGlyph } from "@/components/nota-marks";
 import { HOME_URL } from "@/lib/app-brand";
@@ -18,6 +20,7 @@ export function AuthShell({
   subtitle?: React.ReactNode;
   title: React.ReactNode;
 }) {
+  const t = useTranslations("auth");
   return (
     <div
       className="auth-shell grid min-h-dvh bg-background pt-[env(safe-area-inset-top)] text-foreground lg:grid-cols-[minmax(0,5fr)_minmax(0,6fr)]"
@@ -25,7 +28,7 @@ export function AuthShell({
     >
       <div className="flex min-h-[calc(100dvh-env(safe-area-inset-top))] flex-col px-5 py-5 sm:px-10 lg:min-h-0">
         <header className="flex items-center justify-between gap-4">
-          <a aria-label="Nota home" className="flex items-center gap-2" href={HOME_URL}>
+          <a aria-label={t("home")} className="flex items-center gap-2" href={HOME_URL}>
             <NotaGlyph />
             <span className="text-lg font-bold tracking-tight">Nota.</span>
           </a>
@@ -38,7 +41,7 @@ export function AuthShell({
           <div className="mt-9">{children}</div>
         </main>
 
-        <p className="text-xs text-muted-foreground">Minimal invoicing for independent work.</p>
+        <p className="text-xs text-muted-foreground">{t("tagline")}</p>
       </div>
 
       <div className="hidden lg:block lg:p-3 lg:pl-0">

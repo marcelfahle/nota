@@ -1,18 +1,16 @@
 import { ArrowRight } from "lucide-react";
+import { useLocale, useTranslations } from "next-intl";
 
+import { isAppLocale, toIntlLocale } from "@/lib/i18n";
 import type { SiteProfile } from "@/lib/site-reader/types";
 import {
   formatTaxIdentifier,
   isViesCountry,
   taxIdentifierFromLegacyVatNumber,
 } from "@/lib/tax-identifier";
-import { cn, formatCurrency } from "@/lib/utils";
+import { cn, formatCurrency, formatDate } from "@/lib/utils";
 
 const INK = "#1F1B16";
-
-function formatDate(date: Date) {
-  return date.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
-}
 
 /** A value that has landed, or a highlighter block naming what is still missing. */
 function Slot({
@@ -59,11 +57,15 @@ export function InvoicePreview({
   reading: boolean;
   testId?: string;
 }) {
+  const t = useTranslations("onboarding.preview");
+  const requestLocale = useLocale();
+  const language = isAppLocale(requestLocale) ? requestLocale : "en";
+  const locale = toIntlLocale(language);
   const fields = profile?.fields ?? {};
   const taxIdentifier =
     profile?.taxIdentifier ?? taxIdentifierFromLegacyVatNumber(fields.vatNumber?.value);
   const missingTaxIdentifier =
-    fields.countryCode?.value && isViesCountry(fields.countryCode.value) ? "VAT ID" : "Tax ID";
+    fields.countryCode?.value && isViesCountry(fields.countryCode.value) ? t("vatId") : t("taxId");
   const name = fields.name?.value;
   const color = profile?.brandColor ?? null;
   const textOnColor =
@@ -72,11 +74,11 @@ export function InvoicePreview({
   const regionLine = fields.region?.value;
   const today = new Date();
   const due = new Date(today.getTime() + 14 * 86_400_000);
-  const amount = formatCurrency(1200, "EUR");
+  const amount = formatCurrency(1200, "EUR", locale);
 
   return (
     <article
-      aria-label="Your invoice preview"
+      aria-label={t("label")}
       className={cn(
         "invoice-paper border border-black/10 text-[#1f1b16]",
         compact ? "p-5 text-[11px]" : "p-6 sm:p-9",
@@ -126,15 +128,15 @@ export function InvoicePreview({
           )}
           <div className="min-w-0 space-y-0.5 text-xs leading-5 text-[#6b655c]">
             <p className="truncate text-sm font-bold text-[#1f1b16]">
-              <Slot missing="Your business" value={fields.legalName?.value ?? name} />
+              <Slot missing={t("yourBusiness")} value={fields.legalName?.value ?? name} />
             </p>
             {details ? (
               <>
                 <p>
-                  <Slot missing="Street and number" value={fields.street?.value} />
+                  <Slot missing={t("street")} value={fields.street?.value} />
                 </p>
                 <p>
-                  <Slot missing="Postcode, city" value={cityLine || null} />
+                  <Slot missing={t("postcodeCity")} value={cityLine || null} />
                   {fields.country?.value ? (
                     <span className="onboarding-land" key={fields.country.value}>
                       {cityLine || regionLine ? ", " : " "}
@@ -149,7 +151,10 @@ export function InvoicePreview({
                   ) : null}
                 </p>
                 <p>
-                  <Slot missing={missingTaxIdentifier} value={formatTaxIdentifier(taxIdentifier)} />
+                  <Slot
+                    missing={missingTaxIdentifier}
+                    value={formatTaxIdentifier(taxIdentifier, language)}
+                  />
                 </p>
               </>
             ) : null}
@@ -162,7 +167,7 @@ export function InvoicePreview({
               compact ? "text-2xl" : "text-3xl sm:text-4xl",
             )}
           >
-            Invoice
+            {t("invoice")}
           </p>
           <p className="mt-1 font-mono text-xs text-[#6b655c]">INV-0001</p>
         </div>
@@ -172,30 +177,30 @@ export function InvoicePreview({
         <>
           <section className="grid grid-cols-3 gap-4 border-b border-black/10 py-6">
             <div>
-              <p className="nota-label text-[#6b655c]">Billed to</p>
-              <p className="mt-2 text-sm font-bold">Your first client</p>
+              <p className="nota-label text-[#6b655c]">{t("billedTo")}</p>
+              <p className="mt-2 text-sm font-bold">{t("firstClient")}</p>
             </div>
             <div>
-              <p className="nota-label text-[#6b655c]">Issued</p>
-              <p className="mt-2 font-mono text-xs">{formatDate(today)}</p>
+              <p className="nota-label text-[#6b655c]">{t("issued")}</p>
+              <p className="mt-2 font-mono text-xs">{formatDate(today, locale)}</p>
             </div>
             <div>
-              <p className="nota-label text-[#6b655c]">Due</p>
-              <p className="mt-2 font-mono text-xs">{formatDate(due)}</p>
+              <p className="nota-label text-[#6b655c]">{t("due")}</p>
+              <p className="mt-2 font-mono text-xs">{formatDate(due, locale)}</p>
             </div>
           </section>
 
           <table className="mt-6 w-full border-collapse text-left text-sm">
             <thead>
               <tr className="border-b border-black/10 text-[#6b655c]">
-                <th className="nota-label pb-3 font-medium">Description</th>
-                <th className="nota-label w-12 pb-3 text-right font-medium">Qty</th>
-                <th className="nota-label w-24 pb-3 text-right font-medium">Amount</th>
+                <th className="nota-label pb-3 font-medium">{t("description")}</th>
+                <th className="nota-label w-12 pb-3 text-right font-medium">{t("qty")}</th>
+                <th className="nota-label w-24 pb-3 text-right font-medium">{t("amount")}</th>
               </tr>
             </thead>
             <tbody>
               <tr className="border-b border-black/10 align-top">
-                <td className="py-4 pr-3 font-medium">Your first project</td>
+                <td className="py-4 pr-3 font-medium">{t("firstProject")}</td>
                 <td className="py-4 text-right font-mono text-xs">1</td>
                 <td className="py-4 text-right font-mono text-xs font-medium">{amount}</td>
               </tr>
@@ -205,7 +210,7 @@ export function InvoicePreview({
       )}
 
       <div className={cn("flex items-end justify-between gap-5", brief ? "mt-4" : "mt-6")}>
-        <p className="nota-label pb-1">Total due</p>
+        <p className="nota-label pb-1">{t("totalDue")}</p>
         <p
           className={cn("font-mono font-bold tracking-[-0.04em]", compact ? "text-xl" : "text-3xl")}
         >
@@ -221,15 +226,15 @@ export function InvoicePreview({
         data-testid={`${testId}-pay`}
         style={{ backgroundColor: color ?? "var(--paper-2)", color: color ? textOnColor : INK }}
       >
-        <span>Pay {amount}</span>
+        <span>{t("pay", { amount })}</span>
         <span className="flex items-center gap-2 font-mono text-xs">
-          Secure payment <ArrowRight className="size-4" />
+          {t("securePayment")} <ArrowRight className="size-4" />
         </span>
       </div>
 
       {compact ? null : (
         <footer className="mt-7 flex items-center justify-between gap-4 border-t border-black/10 pt-4 font-mono text-xs text-[#6b655c]">
-          <Slot missing="you@yourbusiness.com" value={fields.email?.value} />
+          <Slot missing={t("emailPlaceholder")} value={fields.email?.value} />
           <span>{profile?.domain}</span>
         </footer>
       )}

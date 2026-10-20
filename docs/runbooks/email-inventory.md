@@ -11,15 +11,18 @@ Sender configured locally and in production: **Nota <hello@withnota.com>**, via 
 **Nota transactional** live channel. Production reset delivery was verified on 2026-10-05.
 This catalog describes implemented email paths, not proof of their delivery.
 
-| Email | Trigger | Recipient | Template | Delivery path |
-| --- | --- | --- | --- | --- |
-| Password reset | Forgot password | Account email | `password-reset.tsx` | Better Auth, immediate |
-| Email verification | Verification request | Account email | `verification.tsx` | Better Auth, immediate; not automatic on signup |
-| Workspace invitation | Owner/admin invites teammate | Invited email | `invite.tsx` | Immediate; returns a warning if sending fails |
-| Invoice | Send invoice | Client | `invoice-sent.tsx` | Job queue; PDF attached |
-| Invoice test copy | User requests preview | Explicit test recipient | `invoice-sent.tsx` | Job queue; PDF attached; test label |
-| Reminder | Reminder job / approved proposal | Client / proposal recipient | `invoice-sent.tsx` | Job queue; reminder variant |
-| Payment notification | Payment email job | Invoice owner's account email | `payment-received.tsx` | Job queue |
+| Email | Trigger | Recipient | Template | Delivery path | Attachments |
+| --- | --- | --- | --- | --- | --- |
+| Password reset | Forgot password | Account email | `password-reset.tsx` | Better Auth, immediate | None |
+| Email verification | Verification request | Account email | `verification.tsx` | Better Auth, immediate; not automatic on signup | None |
+| Workspace invitation | Owner/admin invites teammate | Invited email | `invite.tsx` | Immediate; returns a warning if sending fails | None |
+| Invoice | Send invoice | Client | `invoice-sent.tsx` | Job queue | PDF; plus the XRechnung XML (same base name, `.xml`) when the workspace setting `eInvoiceDelivery` is `pdf_and_xrechnung`. The list is fixed in the job payload at send time |
+| Invoice test copy | User requests preview | Explicit test recipient | `invoice-sent.tsx` | Job queue; test label | PDF only |
+| Reminder | Reminder job / approved proposal | Client / proposal recipient | `invoice-sent.tsx` | Job queue; reminder variant | None; links to the public page |
+| Payment notification | Payment email job | Invoice owner's account email | `payment-received.tsx` | Job queue | None |
+
+With `EMAIL_PROVIDER=log` each send is appended to `EMAIL_LOG_PATH` as one JSON line with the
+attachment names, types and sizes, and nothing is delivered.
 
 No welcome sequence, onboarding drip, newsletter, or win-back campaign is implemented.
 Marketing must use a separate Helo channel and broadcast sending; unsubscribing

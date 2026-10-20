@@ -28,14 +28,15 @@ mock.module("@/lib/auth", () => ({
   }),
 }));
 
+const realBranding = await import("@/lib/branding");
 mock.module("@/lib/branding", () => ({
+  ...realBranding,
   getPdfLogoSrc: async () => null,
 }));
 
-mock.module("@/lib/db/schema", () => ({
-  invoiceStatusEnum: {
-    enumValues: ["cancelled", "draft", "overdue", "paid", "sent"],
-  },
+// No stored originals in this workspace, so every invoice is rendered.
+mock.module("@/lib/db", () => ({
+  db: { select: () => ({ from: () => ({ where: () => ({ limit: async () => [] }) }) }) },
 }));
 
 mock.module("@/lib/invoice-export", () => ({

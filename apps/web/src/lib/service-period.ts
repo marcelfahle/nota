@@ -84,3 +84,28 @@ export function withServiceMonth(description: string, serviceMonth: string, issu
 export function getServiceMonthFilenameLabel(month: number) {
   return englishMonths[month].toLowerCase();
 }
+
+function isoDate(year: number, month: number, day: number) {
+  return new Date(Date.UTC(year, month, day)).toISOString().slice(0, 10);
+}
+
+/**
+ * The service period a draft gets when nobody stated one: the month every line
+ * item names, otherwise the issue date as a single day. Shown on the form so
+ * it is a visible default, not a hidden guess.
+ */
+export function defaultServicePeriod(items: Array<{ description: string }>, issuedAt: string) {
+  const issued = new Date(`${issuedAt}T12:00:00Z`);
+  if (Number.isNaN(issued.getTime())) {
+    return null;
+  }
+  const months = new Set(
+    items.map((item) => getDescriptionServiceMonth(item.description)).filter((m) => m !== null),
+  );
+  if (months.size === 1 && items.length > 0) {
+    const month = [...months][0];
+    const year = issued.getUTCFullYear() - (month > issued.getUTCMonth() ? 1 : 0);
+    return { end: isoDate(year, month + 1, 0), start: isoDate(year, month, 1) };
+  }
+  return { end: issuedAt, start: issuedAt };
+}

@@ -170,16 +170,22 @@ export function taxIdentifierFields(identifier: TaxIdentifier | null) {
   };
 }
 
-export function taxIdentifierLabel(identifier: Pick<TaxIdentifier, "type">) {
+export function taxIdentifierLabel(
+  identifier: Pick<TaxIdentifier, "type">,
+  locale: "de" | "en" = "en",
+) {
   if (identifier.type === "eu_vat") {
-    return "VAT ID";
+    return locale === "de" ? "USt-IdNr." : "VAT ID";
   }
   if (identifier.type === "us_ein") {
     return "EIN";
   }
-  return "Tax ID";
+  return locale === "de" ? "Steuernummer" : "Tax ID";
 }
 
-export function formatTaxIdentifier(identifier: TaxIdentifier | null | undefined) {
-  return identifier ? `${taxIdentifierLabel(identifier)}: ${identifier.value}` : null;
+export function formatTaxIdentifier(
+  identifier: TaxIdentifier | null | undefined,
+  locale: "de" | "en" = "en",
+) {
+  return identifier ? `${taxIdentifierLabel(identifier, locale)}: ${identifier.value}` : null;
 }

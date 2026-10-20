@@ -11,27 +11,34 @@ import {
 } from "@react-email/components";
 
 import { APP_NAME } from "@/lib/app-brand";
+import { getTranslator, toIntlLocale, type AppLocale } from "@/lib/i18n";
+import { formatCurrency, formatDate, type Locale } from "@/lib/utils";
 
 type PaymentReceivedEmailProps = {
   clientName: string;
   currency: string;
   invoiceNumber: string;
+  /** The recipient is the workspace member, so this is their UI language. */
+  locale?: AppLocale;
   paidAt: string;
   total: string;
 };
 
-function formatCurrencyEmail(amount: string, currency: string): string {
-  return new Intl.NumberFormat("en-US", {
-    currency,
-    style: "currency",
-  }).format(Number.parseFloat(amount));
+function formatCurrencyEmail(amount: string, currency: string, locale: Locale): string {
+  return formatCurrency(Number.parseFloat(amount), currency, locale);
 }
 
-function formatDateEmail(dateStr: string): string {
-  return new Date(dateStr).toLocaleDateString("en-US", {
-    day: "numeric",
-    month: "long",
-    year: "numeric",
+function formatDateEmail(dateStr: string, locale: Locale): string {
+  return formatDate(dateStr, locale, { day: "numeric", month: "long", year: "numeric" });
+}
+
+export function paymentReceivedSubject(
+  props: Pick<PaymentReceivedEmailProps, "currency" | "invoiceNumber" | "locale" | "total">,
+) {
+  const language = props.locale ?? "en";
+  return getTranslator(language, "emails.paymentReceived")("subject", {
+    amount: formatCurrencyEmail(props.total, props.currency, toIntlLocale(language)),
+    number: props.invoiceNumber,
   });
 }
 
@@ -39,10 +46,13 @@ export function PaymentReceivedEmail({
   clientName,
   currency,
   invoiceNumber,
+  locale: language = "en",
   paidAt,
   total,
 }: PaymentReceivedEmailProps) {
-  const subject = `Payment received: ${invoiceNumber} — ${formatCurrencyEmail(total, currency)}`;
+  const locale = toIntlLocale(language);
+  const t = getTranslator(language, "emails.paymentReceived");
+  const subject = paymentReceivedSubject({ currency, invoiceNumber, locale: language, total });
 
   return (
     <Html>
@@ -54,22 +64,24 @@ export function PaymentReceivedEmail({
             <Text style={styles.logo}>{APP_NAME}</Text>
           </Section>
 
-          <Heading style={styles.heading}>Payment Received</Heading>
+          <Heading style={styles.heading}>{t("heading")}</Heading>
 
           <Text style={styles.text}>
-            {clientName} has paid invoice {invoiceNumber}.
+            {t("body", { client: clientName, number: invoiceNumber })}
           </Text>
 
           <Section style={styles.invoiceBox}>
-            <Text style={styles.invoiceLabel}>Amount Paid</Text>
-            <Text style={styles.invoiceAmount}>{formatCurrencyEmail(total, currency)}</Text>
-            <Text style={styles.invoiceDetail}>Invoice {invoiceNumber}</Text>
-            <Text style={styles.invoiceDetail}>Paid on {formatDateEmail(paidAt)}</Text>
+            <Text style={styles.invoiceLabel}>{t("amountPaid")}</Text>
+            <Text style={styles.invoiceAmount}>{formatCurrencyEmail(total, currency, locale)}</Text>
+            <Text style={styles.invoiceDetail}>{t("invoice", { number: invoiceNumber })}</Text>
+            <Text style={styles.invoiceDetail}>
+              {t("paidOn", { date: formatDateEmail(paidAt, locale) })}
+            </Text>
           </Section>
 
           <Hr style={styles.hr} />
 
-          <Text style={styles.footer}>This is an automated notification from {APP_NAME}.</Text>
+          <Text style={styles.footer}>{t("footer", { app: APP_NAME })}</Text>
         </Container>
       </Body>
     </Html>

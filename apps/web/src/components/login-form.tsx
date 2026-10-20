@@ -1,5 +1,6 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import posthog from "posthog-js";
@@ -16,6 +17,7 @@ import { continueAfterAuth } from "@/lib/auth-redirect";
 import { googleErrorMessage } from "@/lib/social-auth";
 
 export function LoginForm({ googleEnabled }: { googleEnabled: boolean }) {
+  const t = useTranslations("auth.login");
   const searchParams = useSearchParams();
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
@@ -24,8 +26,7 @@ export function LoginForm({ googleEnabled }: { googleEnabled: boolean }) {
   // A plain visit starts with the website read; a pending authorization keeps the form.
   const registerHref = query ? `/register?${query}` : "/start";
   const socialError = googleErrorMessage(searchParams.get("error"));
-  const notice =
-    searchParams.get("reset") === "1" ? "Password updated. Sign in with your new password." : null;
+  const notice = searchParams.get("reset") === "1" ? t("reset") : null;
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -42,11 +43,7 @@ export function LoginForm({ googleEnabled }: { googleEnabled: boolean }) {
 
     if (signInError) {
       setPending(false);
-      setError(
-        signInError.status === 429
-          ? "Too many attempts. Try again in a minute."
-          : "Invalid email or password",
-      );
+      setError(signInError.status === 429 ? t("tooMany") : t("invalid"));
       return;
     }
 
@@ -60,24 +57,22 @@ export function LoginForm({ googleEnabled }: { googleEnabled: boolean }) {
 
   return (
     <AuthShell
-      lead="Your invoices are right where you left them."
+      lead={t("lead")}
       subtitle={
         <>
-          New here?{" "}
+          {t("newHere")}{" "}
           <Link
             className="font-medium text-foreground underline underline-offset-4"
             data-testid="login-start"
             href={registerHref}
           >
-            Start free
+            {t("startFree")}
           </Link>
         </>
       }
-      title={
-        <>
-          Welcome <HighlighterSwipe>back.</HighlighterSwipe>
-        </>
-      }
+      title={t.rich("title", {
+        highlight: (chunks) => <HighlighterSwipe>{chunks}</HighlighterSwipe>,
+      })}
     >
       <form className="space-y-4" data-testid="login-form" onSubmit={onSubmit}>
         {googleEnabled && <GoogleSignIn disabled={pending} />}
@@ -87,7 +82,7 @@ export function LoginForm({ googleEnabled }: { googleEnabled: boolean }) {
           </p>
         )}
         <div className="space-y-2">
-          <Label htmlFor="email">Email</Label>
+          <Label htmlFor="email">{t("email")}</Label>
           <Input
             autoComplete="email"
             autoFocus
@@ -101,7 +96,7 @@ export function LoginForm({ googleEnabled }: { googleEnabled: boolean }) {
         </div>
 
         <div className="space-y-2">
-          <Label htmlFor="password">Password</Label>
+          <Label htmlFor="password">{t("password")}</Label>
           <Input
             autoComplete="current-password"
             className="h-12 bg-card md:text-base"
@@ -126,7 +121,7 @@ export function LoginForm({ googleEnabled }: { googleEnabled: boolean }) {
           disabled={pending}
           type="submit"
         >
-          {pending ? "Signing in…" : "Sign in"}
+          {pending ? t("signingIn") : t("signIn")}
         </Button>
 
         <div className="text-sm">
@@ -134,7 +129,7 @@ export function LoginForm({ googleEnabled }: { googleEnabled: boolean }) {
             className="inline-flex min-h-11 items-center text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
             href="/forgot-password"
           >
-            Forgot your password?
+            {t("forgot")}
           </Link>
         </div>
       </form>

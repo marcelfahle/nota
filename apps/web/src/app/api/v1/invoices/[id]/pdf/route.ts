@@ -1,5 +1,6 @@
 import { error as apiError, requireAuth } from "@/lib/api-response";
-import { InvoicePdfDataError, renderInvoicePdfForOrg } from "@/lib/invoice-pdf-service";
+import { loadInvoicePdf } from "@/lib/invoice-documents";
+import { InvoicePdfDataError } from "@/lib/invoice-pdf-service";
 
 export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const authResult = await requireAuth(request);
@@ -8,7 +9,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   }
   const { id } = await params;
   try {
-    const pdf = await renderInvoicePdfForOrg(authResult.auth.org, id);
+    const pdf = await loadInvoicePdf(authResult.auth.org, id);
     return new Response(pdf.buffer, {
       headers: {
         "Content-Disposition": `attachment; filename="${pdf.filename}"`,

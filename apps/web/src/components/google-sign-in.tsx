@@ -1,5 +1,6 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -14,6 +15,7 @@ export function GoogleSignIn({
   disabled?: boolean;
   inviteToken?: string;
 }) {
+  const t = useTranslations("auth.google");
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -38,7 +40,7 @@ export function GoogleSignIn({
         throw new Error("Google sign-in is unavailable. Please try again.");
       }
     } catch {
-      setError("Google sign-in is unavailable. Please try again, or use email and password.");
+      setError(t("unavailable"));
       setPending(false);
     }
   }
@@ -71,7 +73,7 @@ export function GoogleSignIn({
             fill="#EA4335"
           />
         </svg>
-        {pending ? "Opening Google…" : "Continue with Google"}
+        {pending ? t("opening") : t("continueWith")}
       </Button>
       {error ? (
         <p className="text-sm text-destructive" role="alert">
@@ -80,7 +82,7 @@ export function GoogleSignIn({
       ) : null}
       <div className="flex items-center gap-3 text-xs text-muted-foreground">
         <span className="h-px flex-1 bg-border" />
-        or use email
+        {t("orEmail")}
         <span className="h-px flex-1 bg-border" />
       </div>
     </div>

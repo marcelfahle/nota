@@ -1,7 +1,10 @@
 import { Document, Font, Image, Link, Page, StyleSheet, Text, View } from "@react-pdf/renderer";
 
+import { getTranslator, toIntlLocale, type AppLocale } from "@/lib/i18n";
 import { formatIbanDisplay } from "@/lib/iban";
 import { formatTaxIdentifier, type TaxIdentifier } from "@/lib/tax-identifier";
+import { type TaxTreatment, taxTreatmentNote } from "@/lib/tax-treatment";
+import { formatCurrency, formatDate, formatNumber, formatQuantity, type Locale } from "@/lib/utils";
 
 // ---------------------------------------------------------------------------
 // Register Inter font family
@@ -56,6 +59,7 @@ type InvoicePdfProps = {
     taxIdentifier?: TaxIdentifier | null;
   };
   invoice: {
+    buyerReference?: string | null;
     currency: string;
     dueAt: string;
     issuedAt: string;
@@ -65,12 +69,16 @@ type InvoicePdfProps = {
     number: string;
     originalNumber?: string | null;
     paymentLinkUrl?: string | null;
-    reverseCharge?: string | null;
+    servicePeriodEnd?: string | null;
+    servicePeriodStart?: string | null;
     subtotal: string;
     taxAmount: string;
     taxRate: string;
+    taxTreatment: TaxTreatment;
     total: string;
   };
+  /** The language the document is written in, with its number and date formats. */
+  locale?: AppLocale;
 };
 
 // ---------------------------------------------------------------------------
@@ -131,7 +139,8 @@ const styles = StyleSheet.create({
   dateLabel: {
     color: c.tertiary,
     fontSize: 9,
-    width: 64,
+    marginRight: 10,
+    width: 92,
   },
   dateRow: {
     flexDirection: "row" as const,
@@ -168,7 +177,7 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: 600,
     textAlign: "right" as const,
-    width: 80,
+    width: 120,
   },
   grandTotalValue: {
     color: c.black,
@@ -250,7 +259,8 @@ const styles = StyleSheet.create({
   paymentLabel: {
     color: c.tertiary,
     fontSize: 9,
-    width: 72,
+    marginRight: 10,
+    width: 100,
   },
   paymentLink: {
     color: c.text,
@@ -274,11 +284,6 @@ const styles = StyleSheet.create({
     color: c.text,
     fontSize: 9,
     fontWeight: 500,
-  },
-  reverseCharge: {
-    color: c.tertiary,
-    fontSize: 8,
-    marginTop: 12,
   },
   section: {
     flexDirection: "row" as const,
@@ -315,11 +320,21 @@ const styles = StyleSheet.create({
     fontSize: 9,
     paddingVertical: 12,
   },
+  taxNote: {
+    color: c.tertiary,
+    fontSize: 8,
+    marginTop: 12,
+  },
+  thanks: {
+    color: c.secondary,
+    fontSize: 9,
+    marginTop: 24,
+  },
   totalLabel: {
     color: c.tertiary,
     fontSize: 9,
     textAlign: "right" as const,
-    width: 80,
+    width: 120,
   },
   totalRow: {
     flexDirection: "row" as const,
@@ -335,7 +350,7 @@ const styles = StyleSheet.create({
     marginBottom: 8,
     marginLeft: "auto" as const,
     marginTop: 4,
-    width: 170,
+    width: 210,
   },
   totalValue: {
     color: c.text,
@@ -349,31 +364,50 @@ const styles = StyleSheet.create({
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-function formatCurrencyPdf(amount: number | string, currency: string): string {
+function formatCurrencyPdf(amount: number | string, currency: string, locale: Locale): string {
   const num = typeof amount === "string" ? Number.parseFloat(amount) : amount;
-  return new Intl.NumberFormat("en-US", {
-    currency,
-    style: "currency",
-  }).format(num);
+  return formatCurrency(num, currency, locale);
 }
 
-function formatDatePdf(dateStr: string): string {
-  return new Date(dateStr).toLocaleDateString("en-US", {
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-  });
+function formatServicePeriod(
+  start: string | null | undefined,
+  end: string | null | undefined,
+  locale: Locale,
+): string | null {
+  if (!start || !end) {
+    return null;
+  }
+  return start === end
+    ? formatDate(start, locale)
+    : `${formatDate(start, locale)} – ${formatDate(end, locale)}`;
 }
 
 // ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
-export function InvoicePdf({ business, client, invoice }: InvoicePdfProps) {
+export function InvoicePdf({
+  business,
+  client,
+  invoice,
+  locale: language = "en",
+}: InvoicePdfProps) {
   const currency = invoice.currency;
+  const locale = toIntlLocale(language);
+  const t = getTranslator(language, "pdf");
   const taxRate = Number.parseFloat(invoice.taxRate);
   const hasPaymentDetails = business.iban || business.bankDetails || invoice.paymentLinkUrl;
   const accent = /^#[\da-f]{6}$/i.test(business.brandColor ?? "") ? business.brandColor! : c.text;
   const isCreditNote = invoice.kind === "credit_note";
+  const servicePeriod = formatServicePeriod(
+    invoice.servicePeriodStart,
+    invoice.servicePeriodEnd,
+    locale,
+  );
+  const taxNote = taxTreatmentNote(invoice.taxTreatment, language);
+  // A § 19 UStG invoice carries no VAT line at all, only the statutory note.
+  const showVat =
+    invoice.taxTreatment !== "exempt_small_business" &&
+    (taxRate > 0 || invoice.taxTreatment !== "standard");
 
   return (
     <Document>
@@ -392,9 +426,11 @@ export function InvoicePdf({ business, client, invoice }: InvoicePdfProps) {
           </View>
           <View style={styles.headerRight}>
             <Text style={[styles.invoiceNumber, { color: accent }]}>{invoice.number}</Text>
-            <Text style={styles.invoiceLabel}>{isCreditNote ? "Credit note" : "Invoice"}</Text>
+            <Text style={styles.invoiceLabel}>{isCreditNote ? t("creditNote") : t("invoice")}</Text>
             {invoice.originalNumber ? (
-              <Text style={styles.invoiceLabel}>For invoice {invoice.originalNumber}</Text>
+              <Text style={styles.invoiceLabel}>
+                {t("forInvoice", { number: invoice.originalNumber })}
+              </Text>
             ) : null}
           </View>
         </View>
@@ -402,7 +438,7 @@ export function InvoicePdf({ business, client, invoice }: InvoicePdfProps) {
         {/* ── Bill To + Dates ── */}
         <View style={styles.section}>
           <View style={{ maxWidth: 260 }}>
-            <Text style={styles.sectionLabel}>Bill To</Text>
+            <Text style={styles.sectionLabel}>{t("billTo")}</Text>
             <Text style={styles.clientName}>{client.name}</Text>
             {client.company && client.company !== client.name && (
               <Text style={styles.clientCompany}>{client.company}</Text>
@@ -415,35 +451,57 @@ export function InvoicePdf({ business, client, invoice }: InvoicePdfProps) {
                 </Text>
               ))}
             {client.taxIdentifier && (
-              <Text style={styles.clientVat}>{formatTaxIdentifier(client.taxIdentifier)}</Text>
+              <Text style={styles.clientVat}>
+                {formatTaxIdentifier(client.taxIdentifier, language)}
+              </Text>
             )}
           </View>
           <View>
             <View style={styles.dateRow}>
-              <Text style={styles.dateLabel}>Issued</Text>
-              <Text style={styles.dateValue}>{formatDatePdf(invoice.issuedAt)}</Text>
+              <Text style={styles.dateLabel}>{t("issued")}</Text>
+              <Text style={styles.dateValue}>{formatDate(invoice.issuedAt, locale)}</Text>
             </View>
             <View style={styles.dateRow}>
-              <Text style={styles.dateLabel}>Due</Text>
-              <Text style={styles.dateValueDue}>{formatDatePdf(invoice.dueAt)}</Text>
+              <Text style={styles.dateLabel}>{t("due")}</Text>
+              <Text style={styles.dateValueDue}>{formatDate(invoice.dueAt, locale)}</Text>
             </View>
+            {servicePeriod ? (
+              <View style={styles.dateRow}>
+                <Text style={styles.dateLabel}>
+                  {invoice.servicePeriodStart === invoice.servicePeriodEnd
+                    ? t("serviceDate")
+                    : t("servicePeriod")}
+                </Text>
+                <Text style={styles.dateValue}>{servicePeriod}</Text>
+              </View>
+            ) : null}
+            {invoice.buyerReference ? (
+              <View style={styles.dateRow}>
+                <Text style={styles.dateLabel}>{t("buyerReference")}</Text>
+                <Text style={styles.dateValue}>{invoice.buyerReference}</Text>
+              </View>
+            ) : null}
           </View>
         </View>
 
         {/* ── Line Items ── */}
         <View>
           <View style={styles.tableHeader}>
-            <Text style={styles.tableHeaderDesc}>Description</Text>
-            <Text style={styles.tableHeaderQty}>Qty</Text>
-            <Text style={styles.tableHeaderRate}>Rate</Text>
-            <Text style={styles.tableHeaderAmount}>Amount</Text>
+            <Text style={styles.tableHeaderDesc}>{t("description")}</Text>
+            <Text style={styles.tableHeaderQty}>{t("quantity")}</Text>
+            <Text style={styles.tableHeaderRate}>{t("rate")}</Text>
+            <Text style={styles.tableHeaderAmount}>{t("amount")}</Text>
           </View>
           {invoice.lineItems.map((item, index) => (
             <View key={index} style={styles.tableRow}>
               <Text style={styles.lineItemDesc}>{item.description}</Text>
-              <Text style={styles.lineItemQty}>{item.quantity}</Text>
-              <Text style={styles.lineItemRate}>{formatCurrencyPdf(item.unitPrice, currency)}</Text>
-              <Text style={styles.lineItemAmount}>{formatCurrencyPdf(item.amount, currency)}</Text>
+              <Text style={styles.lineItemQty}>{formatQuantity(item.quantity, locale)}</Text>
+              <Text style={styles.lineItemRate}>
+                {formatCurrencyPdf(item.unitPrice, currency, locale)}
+              </Text>
+              <Text style={styles.lineItemAmount}>
+                {formatCurrencyPdf(item.amount, currency, locale)}
+              </Text>
             </View>
           ))}
         </View>
@@ -451,38 +509,44 @@ export function InvoicePdf({ business, client, invoice }: InvoicePdfProps) {
         {/* ── Totals ── */}
         <View style={styles.totals}>
           <View style={styles.totalRow}>
-            <Text style={styles.totalLabel}>Subtotal</Text>
-            <Text style={styles.totalValue}>{formatCurrencyPdf(invoice.subtotal, currency)}</Text>
+            <Text style={styles.totalLabel}>{t("subtotal")}</Text>
+            <Text style={styles.totalValue}>
+              {formatCurrencyPdf(invoice.subtotal, currency, locale)}
+            </Text>
           </View>
-          {taxRate > 0 && (
+          {showVat && (
             <View style={styles.totalRow}>
-              <Text style={styles.totalLabel}>Tax ({invoice.taxRate}%)</Text>
+              <Text style={styles.totalLabel}>
+                {t("vat", { rate: formatNumber(taxRate, locale) })}
+              </Text>
               <Text style={styles.totalValue}>
-                {formatCurrencyPdf(invoice.taxAmount, currency)}
+                {formatCurrencyPdf(invoice.taxAmount, currency, locale)}
               </Text>
             </View>
           )}
           <View style={styles.totalSeparator} />
           <View style={styles.totalRow}>
-            <Text style={styles.grandTotalLabel}>Total</Text>
-            <Text style={styles.grandTotalValue}>{formatCurrencyPdf(invoice.total, currency)}</Text>
+            <Text style={styles.grandTotalLabel}>{t("total")}</Text>
+            <Text style={styles.grandTotalValue}>
+              {formatCurrencyPdf(invoice.total, currency, locale)}
+            </Text>
           </View>
         </View>
 
-        {/* ── Reverse Charge ── */}
-        {invoice.reverseCharge === "true" && (
-          <Text style={styles.reverseCharge}>
-            Reverse charge — VAT not applicable per Article 196 of the EU VAT Directive
-          </Text>
-        )}
+        {/* ── Tax treatment note (§ 14 Abs. 4 Nr. 8 UStG) ── */}
+        {taxNote ? <Text style={styles.taxNote}>{taxNote}</Text> : null}
 
         {/* ── Payment Details ── */}
         {hasPaymentDetails && !isCreditNote && (
           <View style={styles.paymentDetails}>
-            <Text style={styles.paymentSectionLabel}>Payment Details</Text>
+            <Text style={styles.paymentSectionLabel}>{t("paymentDetails")}</Text>
+            <View style={styles.paymentRow}>
+              <Text style={styles.paymentLabel}>{t("payableBy")}</Text>
+              <Text style={styles.paymentValue}>{formatDate(invoice.dueAt, locale)}</Text>
+            </View>
             {invoice.paymentLinkUrl && (
               <View style={styles.paymentRow}>
-                <Text style={styles.paymentLabel}>Pay online</Text>
+                <Text style={styles.paymentLabel}>{t("payOnline")}</Text>
                 <Link src={invoice.paymentLinkUrl} style={styles.paymentLink}>
                   {invoice.paymentLinkUrl}
                 </Link>
@@ -491,33 +555,37 @@ export function InvoicePdf({ business, client, invoice }: InvoicePdfProps) {
             {business.iban ? (
               <View>
                 <View style={styles.paymentRow}>
-                  <Text style={styles.paymentLabel}>IBAN</Text>
+                  <Text style={styles.paymentLabel}>{t("iban")}</Text>
                   <Text style={styles.paymentValue}>{formatIbanDisplay(business.iban)}</Text>
                 </View>
                 {business.bic && (
                   <View style={styles.paymentRow}>
-                    <Text style={styles.paymentLabel}>BIC</Text>
+                    <Text style={styles.paymentLabel}>{t("bic")}</Text>
                     <Text style={styles.paymentValue}>{business.bic}</Text>
                   </View>
                 )}
               </View>
             ) : business.bankDetails ? (
               <View style={styles.paymentRow}>
-                <Text style={styles.paymentLabel}>Bank transfer</Text>
+                <Text style={styles.paymentLabel}>{t("bankTransfer")}</Text>
                 <Text style={styles.paymentValue}>{business.bankDetails}</Text>
               </View>
             ) : null}
             <View style={[styles.paymentRow, { marginBottom: 0 }]}>
-              <Text style={styles.paymentLabel}>Reference</Text>
-              <Text style={styles.paymentValue}>Invoice {invoice.number}</Text>
+              <Text style={styles.paymentLabel}>{t("reference")}</Text>
+              <Text style={styles.paymentValue}>
+                {t("referenceValue", { number: invoice.number })}
+              </Text>
             </View>
           </View>
         )}
 
+        {!isCreditNote && <Text style={styles.thanks}>{t("thanks")}</Text>}
+
         {/* ── Notes ── */}
         {invoice.notes && (
           <View style={styles.notes}>
-            <Text style={styles.notesLabel}>Notes</Text>
+            <Text style={styles.notesLabel}>{t("notes")}</Text>
             <Text style={styles.notesText}>{invoice.notes}</Text>
           </View>
         )}
@@ -526,7 +594,9 @@ export function InvoicePdf({ business, client, invoice }: InvoicePdfProps) {
         <View fixed style={styles.footer}>
           <View>
             {business.taxIdentifier && (
-              <Text style={styles.footerText}>{formatTaxIdentifier(business.taxIdentifier)}</Text>
+              <Text style={styles.footerText}>
+                {formatTaxIdentifier(business.taxIdentifier, language)}
+              </Text>
             )}
             {business.name && <Text style={styles.footerText}>{business.name}</Text>}
           </View>
