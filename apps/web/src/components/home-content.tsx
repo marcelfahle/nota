@@ -7,11 +7,14 @@ import { ChatPanel } from "@/components/chat-panel";
 import type { Locale } from "@/lib/utils";
 
 export function HomeContent({
+  chat = true,
   children,
   empty = false,
   locale,
   summary,
 }: {
+  /** Off while a super admin views the workspace for support. */
+  chat?: boolean;
   children?: React.ReactNode;
   empty?: boolean;
   locale?: Locale;
@@ -23,27 +26,32 @@ export function HomeContent({
 
   useEffect(() => {
     function openChat() {
+      if (!chat) {
+        return;
+      }
       setChatOpen(true);
       requestAnimationFrame(() => chatInput.current?.focus());
     }
 
     window.addEventListener("nota:open-home-chat", openChat);
     return () => window.removeEventListener("nota:open-home-chat", openChat);
-  }, []);
+  }, [chat]);
 
   return (
     <div>
       <div className="mx-auto max-w-[700px]" hidden={chatOpen}>
         {summary}
       </div>
-      <ChatPanel
-        inputRef={chatInput}
-        locale={locale}
-        mode="home"
-        onOpenChange={setChatOpen}
-        open={chatOpen}
-        starterPrompts={empty ? [t("firstInvoicePrompt")] : undefined}
-      />
+      {chat ? (
+        <ChatPanel
+          inputRef={chatInput}
+          locale={locale}
+          mode="home"
+          onOpenChange={setChatOpen}
+          open={chatOpen}
+          starterPrompts={empty ? [t("firstInvoicePrompt")] : undefined}
+        />
+      ) : null}
       {children ? (
         <div className="mx-auto mt-11 max-w-[700px] space-y-11" hidden={chatOpen}>
           {children}

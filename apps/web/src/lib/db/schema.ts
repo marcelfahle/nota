@@ -572,6 +572,30 @@ export const aiModelChanges = pgTable(
   (table) => [index("ai_model_changes_changed_at_idx").on(table.changedAt)],
 );
 
+/**
+ * What operators did in the private admin area, and to whom. A workspace
+ * deleted afterwards leaves its id and name in metadata; the row stays.
+ */
+export const adminAuditLog = pgTable(
+  "admin_audit_log",
+  {
+    action: text().notNull(),
+    adminUserId: uuid("admin_user_id")
+      .notNull()
+      .references(() => users.id),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+    expiresAt: timestamp("expires_at"),
+    id: uuid().defaultRandom().primaryKey(),
+    metadata: jsonb().$type<Record<string, unknown>>(),
+    targetOrgId: uuid("target_org_id").references(() => orgs.id, { onDelete: "set null" }),
+    targetUserId: uuid("target_user_id").references(() => users.id, { onDelete: "set null" }),
+  },
+  (table) => [
+    index("admin_audit_log_created_at_idx").on(table.createdAt),
+    index("admin_audit_log_target_org_idx").on(table.targetOrgId, table.createdAt),
+  ],
+);
+
 export const chatThreads = pgTable(
   "chat_threads",
   {

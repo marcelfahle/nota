@@ -1,6 +1,8 @@
 import { getSessionCookie } from "better-auth/cookies";
 import { NextRequest, NextResponse } from "next/server";
 
+import { refusesWhileViewingAs, VIEW_AS_COOKIE } from "@/lib/admin-view-as";
+
 const PUBLIC_PATHS = [
   "/.well-known",
   // Vercel BotID's challenge script and proxy.
@@ -32,21 +34,29 @@ const PUBLIC_PATHS = [
 
 export function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
-
   // Email clients fetch this brand asset without a Nota session.
-  if (
-    pathname === "/email/nota-mark.png" ||
-    PUBLIC_PATHS.some((path) => pathname.startsWith(path))
-  ) {
-    return NextResponse.next();
-  }
-
+  const isPublic =
+    pathname === "/email/nota-mark.png" || PUBLIC_PATHS.some((path) => pathname.startsWith(path));
   // Optimistic cookie check only; pages verify the session against the database.
-  if (!getSessionCookie(request)) {
-    return NextResponse.redirect(new URL("/login", request.url));
+  const hasSession = Boolean(getSessionCookie(request));
+  const viewingAs = request.cookies.has(VIEW_AS_COOKIE);
+
+  // A super admin viewing a workspace as its owner is read-only. Server actions
+  // and API routes are all POSTs, so this one check refuses every write.
+  if (viewingAs && hasSession && refusesWhileViewingAs(request.method, pathname)) {
+    return NextResponse.json({ error: "Read-only while viewing as support." }, { status: 403 });
   }
 
-  return NextResponse.next();
+  const response =
+    isPublic || hasSession
+      ? NextResponse.next()
+      : NextResponse.redirect(new URL("/login", request.url));
+  if (viewingAs && !hasSession) {
+    // Signed out: the grant goes with the session, so whoever signs in next
+    // on this browser is not read-only.
+    response.cookies.delete(VIEW_AS_COOKIE);
+  }
+  return response;
 }
 
 export const config = {

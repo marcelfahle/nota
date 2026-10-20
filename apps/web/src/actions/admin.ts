@@ -1,12 +1,19 @@
 "use server";
 
-import { and, eq, ne } from "drizzle-orm";
+import { and, asc, eq, ne } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
-import { headers } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 
+import { recordAdminAction } from "@/lib/admin-audit";
 import { deleteWorkspace } from "@/lib/admin-delete";
+import {
+  signViewAs,
+  VIEW_AS_COOKIE,
+  VIEW_AS_TTL_SECONDS,
+  viewAsCookieOptions,
+} from "@/lib/admin-view-as";
 import { isAllowedModel, MODEL_FEATURES } from "@/lib/ai-usage";
 import { requireSuperAdmin } from "@/lib/auth";
 import { auth } from "@/lib/better-auth";
@@ -16,6 +23,7 @@ import {
   aiModelChanges,
   aiModelSettings,
   aiWorkspaceModelOverrides,
+  orgMembers,
   orgs,
   sessions,
   users,
@@ -64,6 +72,7 @@ export async function changeTemporaryPassword(
     await tx
       .delete(sessions)
       .where(and(eq(sessions.userId, user.id), ne(sessions.id, currentSession.session.id)));
+    await recordAdminAction({ action: "password.changed", adminUserId: user.id }, tx);
   });
   redirect("/admin");
 }
@@ -90,6 +99,14 @@ export async function setGlobalModel(formData: FormData) {
     await tx
       .insert(aiModelChanges)
       .values({ changedBy: admin.id, feature, modelId: modelId === "fallback" ? null : modelId });
+    await recordAdminAction(
+      {
+        action: "model.global",
+        adminUserId: admin.id,
+        metadata: { feature, modelId: modelId === "fallback" ? null : modelId },
+      },
+      tx,
+    );
   });
   revalidatePath("/admin/ai");
 }
@@ -130,6 +147,15 @@ export async function setWorkspaceModel(formData: FormData) {
       modelId: modelId === "fallback" ? null : modelId,
       orgId,
     });
+    await recordAdminAction(
+      {
+        action: "model.workspace",
+        adminUserId: admin.id,
+        metadata: { feature, modelId: modelId === "fallback" ? null : modelId },
+        targetOrgId: orgId,
+      },
+      tx,
+    );
   });
   revalidatePath("/admin");
   revalidatePath(`/admin/workspaces/${orgId}`);
@@ -162,7 +188,7 @@ export async function deleteWorkspaceAsAdmin(
 
   let result: Awaited<ReturnType<typeof deleteWorkspace>>;
   try {
-    result = await deleteWorkspace(orgId.data);
+    result = await deleteWorkspace(orgId.data, admin.id);
   } catch (error) {
     // eslint-disable-next-line no-console -- A failed deletion must be visible in server logs.
     console.error("[admin] workspace deletion failed", error);
@@ -171,7 +197,7 @@ export async function deleteWorkspaceAsAdmin(
   if ("error" in result) {
     return { error: result.error };
   }
-  // eslint-disable-next-line no-console -- The only record that a workspace was removed, and by whom.
+  // eslint-disable-next-line no-console -- Server logs keep a copy of what the audit log records.
   console.info(
     `[admin] ${admin.email} deleted workspace "${workspace.name}" (${orgId.data}):`,
     JSON.stringify(result.deleted),
@@ -191,11 +217,57 @@ export async function setWorkspaceActive(formData: FormData) {
     .where(eq(orgs.id, orgId))
     .returning({ name: orgs.name });
   if (workspace) {
-    // eslint-disable-next-line no-console -- The record of who locked or unlocked a workspace.
+    // eslint-disable-next-line no-console -- Server logs keep a copy of what the audit log records.
     console.info(
       `[admin] ${admin.email} ${active ? "reactivated" : "deactivated"} workspace "${workspace.name}" (${orgId})`,
     );
+    await recordAdminAction({
+      action: active ? "workspace.reactivated" : "workspace.deactivated",
+      adminUserId: admin.id,
+      targetOrgId: orgId,
+    });
   }
   revalidatePath("/admin");
   revalidatePath(`/admin/workspaces/${orgId}`);
+}
+
+/**
+ * Opens a workspace as its owner sees it, read-only, for 30 minutes. The grant
+ * is a signed cookie next to the admin's own session; the proxy refuses every
+ * write while it is set, and starting and leaving are both recorded.
+ */
+export async function startViewAs(formData: FormData) {
+  const admin = await requireSuperAdmin();
+  const orgId = z.string().uuid().parse(formData.get("orgId"));
+  const [owner] = await db
+    .select({ email: users.email, id: users.id, workspaceName: orgs.name })
+    .from(orgMembers)
+    .innerJoin(users, eq(users.id, orgMembers.userId))
+    .innerJoin(orgs, eq(orgs.id, orgMembers.orgId))
+    .where(and(eq(orgMembers.orgId, orgId), eq(orgMembers.role, "owner")))
+    .orderBy(asc(orgMembers.createdAt))
+    .limit(1);
+  if (!owner) {
+    throw new Error("This workspace has no owner to view as.");
+  }
+  const expiresAt = new Date(Date.now() + VIEW_AS_TTL_SECONDS * 1000);
+  await recordAdminAction({
+    action: "view-as.started",
+    adminUserId: admin.id,
+    expiresAt,
+    metadata: { ownerEmail: owner.email, workspaceName: owner.workspaceName },
+    targetOrgId: orgId,
+    targetUserId: owner.id,
+  });
+  (await cookies()).set(
+    VIEW_AS_COOKIE,
+    signViewAs({
+      adminUserId: admin.id,
+      exp: Math.floor(expiresAt.getTime() / 1000),
+      orgId,
+      userId: owner.id,
+    }),
+    viewAsCookieOptions(expiresAt),
+  );
+  redirect("/home");
 }

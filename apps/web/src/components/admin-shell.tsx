@@ -18,6 +18,9 @@ export function AdminShell({ children, email }: { children: React.ReactNode; ema
               <Link className="rounded-md px-3 py-2 hover:bg-muted" href="/admin/ai">
                 AI
               </Link>
+              <Link className="rounded-md px-3 py-2 hover:bg-muted" href="/admin/audit">
+                Audit
+              </Link>
             </nav>
           </div>
           <div className="flex min-w-0 items-center gap-2">

@@ -2,14 +2,14 @@ import { and, desc, eq, gt, isNotNull, isNull, or, sql } from "drizzle-orm";
 
 import { DashboardShell } from "@/components/dashboard-shell";
 import { APP_NAME } from "@/lib/app-brand";
-import { getCurrentUser } from "@/lib/auth";
+import { getCurrentUser, getViewAs } from "@/lib/auth";
 import { billingStatus } from "@/lib/billing";
 import { db } from "@/lib/db";
 import { clients, invoices, jobs, proposals } from "@/lib/db/schema";
 import { toIntlLocale } from "@/lib/i18n";
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
-  const { org, user } = await getCurrentUser();
+  const [{ org, user }, viewAs] = await Promise.all([getCurrentUser(), getViewAs()]);
   let domain: string | null = null;
   if (org.website) {
     try {
@@ -137,6 +137,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
       }))}
       usage={usage}
       userId={user.id}
+      viewAs={viewAs ? { workspaceName: org.name } : null}
     >
       {children}
     </DashboardShell>

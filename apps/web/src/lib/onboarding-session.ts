@@ -2,6 +2,7 @@ import { createHash, createHmac, randomBytes, timingSafeEqual } from "node:crypt
 
 import { eq, lt } from "drizzle-orm";
 
+import { appSecret } from "@/lib/app-secret";
 import { db } from "@/lib/db";
 import { onboardingSessions, orgs } from "@/lib/db/schema";
 import { defaultEInvoiceDelivery } from "@/lib/e-invoice-delivery";
@@ -29,19 +30,8 @@ import { toCountryCode } from "@/lib/xrechnung";
 export const ONBOARDING_COOKIE = "nota_onboarding";
 export const ONBOARDING_TTL_SECONDS = 24 * 60 * 60;
 
-// The same secret Better Auth signs with (see better-auth.ts), read directly
-// so signing a cookie never needs the rest of the auth config.
-function secret() {
-  const value =
-    process.env.BETTER_AUTH_SECRET ?? process.env.AUTH_SECRET ?? process.env.SESSION_SECRET;
-  if (!value || value.length < 32) {
-    throw new Error("Set BETTER_AUTH_SECRET, AUTH_SECRET or SESSION_SECRET (32+ characters)");
-  }
-  return value;
-}
-
 function sign(token: string) {
-  return createHmac("sha256", secret()).update(`onboarding:${token}`).digest("base64url");
+  return createHmac("sha256", appSecret()).update(`onboarding:${token}`).digest("base64url");
 }
 
 function hash(token: string) {

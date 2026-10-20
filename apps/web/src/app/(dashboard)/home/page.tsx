@@ -7,7 +7,7 @@ import { HomeContent } from "@/components/home-content";
 import { HomeProposal } from "@/components/home-proposal";
 import { HighlighterSwipe } from "@/components/nota-marks";
 import { StatusBadge } from "@/components/status-badge";
-import { getCurrentUser } from "@/lib/auth";
+import { getCurrentUser, getViewAs } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { bankAccounts, clients, invoices, jobs, payments, proposals } from "@/lib/db/schema";
 import { toIntlLocale } from "@/lib/i18n";
@@ -17,11 +17,26 @@ import { formatCurrency, type Locale } from "@/lib/utils";
 const balance = sql<string>`greatest(coalesce(${invoices.total}::numeric, 0) - coalesce((select sum(p.amount) from payments p where p.invoice_id = ${invoices.id}), 0) - abs(coalesce((select sum(c.total::numeric) from invoices c where c.credits_invoice_id = ${invoices.id} and c.kind = 'credit_note' and c.status in ('sent', 'overdue', 'paid')), 0)), 0)`;
 
 export default async function HomePage() {
-  const { org, user } = await getCurrentUser();
+  const [{ org, user }, viewAs] = await Promise.all([getCurrentUser(), getViewAs()]);
   const locale = toIntlLocale(user.locale);
   const t = await getTranslations("home");
 
   if (!org.firstRunCompletedAt) {
+    if (viewAs) {
+      return (
+        <HomeContent
+          chat={false}
+          summary={
+            <div className="space-y-2">
+              <h1>Not set up yet.</h1>
+              <p className="font-voice text-xl text-muted-foreground">
+                {org.name} has not finished its first run. There is nothing to show yet.
+              </p>
+            </div>
+          }
+        />
+      );
+    }
     const [firstInvoice, [bankAccount]] = await Promise.all([
       db
         .select({ id: invoices.id })
@@ -151,6 +166,7 @@ export default async function HomePage() {
   if (invoiceList.length === 0) {
     return (
       <HomeContent
+        chat={!viewAs}
         empty
         locale={locale}
         summary={
@@ -182,6 +198,7 @@ export default async function HomePage() {
 
   return (
     <HomeContent
+      chat={!viewAs}
       locale={locale}
       summary={
         <div className="space-y-2.5">

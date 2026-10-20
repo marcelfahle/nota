@@ -1,5 +1,7 @@
 import Link from "next/link";
 
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import {
   Table,
   TableBody,
@@ -18,9 +20,12 @@ function date(value: Date | null) {
 export default async function AdminAccountsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ sort?: string }>;
+  searchParams: Promise<{ q?: string | string[]; sort?: string }>;
 }) {
-  const [{ totals, workspaces }, params] = await Promise.all([getAdminOverview(), searchParams]);
+  const params = await searchParams;
+  // A repeated ?q= arrives as an array; the first one is the search.
+  const query = (Array.isArray(params.q) ? params.q[0] : params.q)?.trim() ?? "";
+  const { totals, workspaces } = await getAdminOverview(query);
   if (params.sort === "ai-cost") {
     workspaces.sort((left, right) => right.aiCost - left.aiCost);
   }
@@ -31,6 +36,9 @@ export default async function AdminAccountsPage({
     ["AI requests this month", totals.aiRequests],
     ["Estimated AI cost this month", formatEstimatedCost(totals.aiCost)],
   ];
+  const sortHref = query
+    ? `/admin?q=${encodeURIComponent(query)}&sort=ai-cost`
+    : "/admin?sort=ai-cost";
 
   return (
     <div className="space-y-8">
@@ -49,17 +57,50 @@ export default async function AdminAccountsPage({
       </dl>
 
       <section aria-labelledby="workspaces-heading" className="space-y-3">
-        <div className="flex items-end justify-between gap-4">
+        <div className="flex flex-wrap items-end justify-between gap-4">
           <div>
             <h2 className="text-lg font-semibold" id="workspaces-heading">
               Workspaces
             </h2>
             <p className="text-sm text-muted-foreground">Read-only account and usage state.</p>
           </div>
-          <Link className="text-sm underline underline-offset-4" href="/admin?sort=ai-cost">
+          <Link className="text-sm underline underline-offset-4" href={sortHref}>
             Sort by AI cost
           </Link>
         </div>
+        <form action="/admin" className="flex flex-wrap items-center gap-2" role="search">
+          <label className="sr-only" htmlFor="admin-search">
+            Find an account
+          </label>
+          <Input
+            autoComplete="off"
+            className="max-w-sm"
+            data-testid="admin-search"
+            defaultValue={query}
+            id="admin-search"
+            name="q"
+            placeholder="Email, name or workspace"
+            type="search"
+          />
+          <Button size="sm" type="submit" variant="outline">
+            Find
+          </Button>
+          {query ? (
+            <Link
+              className="text-sm text-muted-foreground underline-offset-4 hover:underline"
+              href="/admin"
+            >
+              Show all
+            </Link>
+          ) : null}
+        </form>
+        {query ? (
+          <p className="text-sm text-muted-foreground" data-testid="admin-search-summary">
+            {workspaces.length === 0
+              ? `Nothing matches “${query}”.`
+              : `${workspaces.length} ${workspaces.length === 1 ? "workspace matches" : "workspaces match"} “${query}”.`}
+          </p>
+        ) : null}
         <div className="rounded-md border" data-testid="admin-workspaces">
           <Table>
             <TableHeader>
@@ -89,6 +130,11 @@ export default async function AdminAccountsPage({
                     <span className="text-xs text-muted-foreground">
                       {workspace.ownerEmail ?? "No owner"}
                     </span>
+                    {workspace.matchedEmail && workspace.matchedEmail !== workspace.ownerEmail ? (
+                      <span className="block text-xs text-muted-foreground">
+                        Matched member {workspace.matchedEmail}
+                      </span>
+                    ) : null}
                   </TableCell>
                   <TableCell>{date(workspace.createdAt)}</TableCell>
                   <TableCell>{date(workspace.lastActive)}</TableCell>
