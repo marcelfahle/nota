@@ -59,45 +59,64 @@ export function createHeloSender(
       headers["X-Helo-Idempotency-Key"] = email.idempotencyKey;
     }
 
-    let response: Response;
-    let body: unknown;
-    try {
-      response = await fetcher("https://api.helohq.com/send/transactional", {
-        body: JSON.stringify({
-          attachments: email.attachments?.map(({ content, contentType, filename }) => ({
-            content: typeof content === "string" ? content : content.toString("base64"),
-            contentType,
-            disposition: "attachment",
-            fileName: filename,
-          })),
-          // `cc` and `replyTo` follow the shape of `to` and `from`; the Helo
-          // docs for them were not reachable, so the field names are unverified.
-          ...(email.cc?.length ? { cc: email.cc.map((address) => ({ email: address })) } : {}),
-          ...(email.replyTo ? { replyTo: parseAddress(email.replyTo) } : {}),
-          from: email.from
-            ? parseAddress(email.from)
-            : { email: config.EMAIL_FROM_ADDRESS, name: config.EMAIL_FROM_NAME },
-          html,
-          subject: email.subject,
-          text: toPlainText(html),
-          to: email.to.map((address) => ({ email: address })),
-          tracking: { links: false, opens: false },
-        }),
-        headers,
-        method: "POST",
-        redirect: "error",
-        signal: AbortSignal.timeout(15_000),
-      });
-      // Do not log provider response bodies: they may echo reset links or recipient data.
-      if (!response.ok) {
-        await response.body?.cancel();
-      } else {
-        body = await response.json();
+    const base = {
+      attachments: email.attachments?.map(({ content, contentType, filename }) => ({
+        content: typeof content === "string" ? content : content.toString("base64"),
+        contentType,
+        disposition: "attachment",
+        fileName: filename,
+      })),
+      from: email.from
+        ? parseAddress(email.from)
+        : { email: config.EMAIL_FROM_ADDRESS, name: config.EMAIL_FROM_NAME },
+      html,
+      subject: email.subject,
+      text: toPlainText(html),
+      to: email.to.map((address) => ({ email: address })),
+      tracking: { links: false, opens: false },
+    };
+    // `cc` and `replyTo` follow the shape of `to` and `from`; the Helo docs
+    // for them were not reachable, so the field names are unverified.
+    const personal = {
+      ...(email.cc?.length ? { cc: email.cc.map((address) => ({ email: address })) } : {}),
+      ...(email.replyTo ? { replyTo: parseAddress(email.replyTo) } : {}),
+    };
+    const hasPersonal = Object.keys(personal).length > 0;
+
+    async function post(payload: Record<string, unknown>) {
+      let response: Response;
+      let body: unknown;
+      try {
+        response = await fetcher("https://api.helohq.com/send/transactional", {
+          body: JSON.stringify(payload),
+          headers,
+          method: "POST",
+          redirect: "error",
+          signal: AbortSignal.timeout(15_000),
+        });
+        // Do not log provider response bodies: they may echo reset links or recipient data.
+        if (!response.ok) {
+          await response.body?.cancel();
+        } else {
+          body = await response.json();
+        }
+      } catch {
+        throw new Error(
+          "Helo email request failed or timed out. Check Helo activity before retrying.",
+        );
       }
-    } catch {
-      throw new Error(
-        "Helo email request failed or timed out. Check Helo activity before retrying.",
+      return { body, response };
+    }
+
+    let { body, response } = await post({ ...base, ...personal });
+    // Should Helo reject the unverified fields, the invoice still has to go
+    // out: once more without them, and say so in the logs.
+    if (hasPersonal && (response.status === 400 || response.status === 422)) {
+      // eslint-disable-next-line no-console -- Operators must learn that copies and the reply-to were dropped.
+      console.warn(
+        `[email] Helo rejected the payload (HTTP ${response.status}); retrying without cc and replyTo.`,
       );
+      ({ body, response } = await post(base));
     }
 
     if (!response.ok) {
