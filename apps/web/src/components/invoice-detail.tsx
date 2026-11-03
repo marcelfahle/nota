@@ -55,6 +55,7 @@ import {
   canSendInvoice,
   canSendInvoiceReminder,
 } from "@/lib/roles";
+import { parseCcInput, SEND_CC_MAX, SEND_MESSAGE_MAX_LENGTH } from "@/lib/send-options";
 import type { TaxTreatment } from "@/lib/tax-treatment";
 import { formatCurrency, formatDate, formatNumber, type Locale } from "@/lib/utils";
 
@@ -89,6 +90,9 @@ type InvoiceDetailProps = {
       company?: string | null;
       email: string;
       name: string;
+      /** What the last send to this client carried, offered again next time. */
+      sendCc?: Array<string> | null;
+      sendMessage?: string | null;
       taxIdentifier?: {
         canonicalValue: string;
         countryCode: string | null;
@@ -255,6 +259,9 @@ export function InvoiceDetailView({
   const [paymentAmount, setPaymentAmount] = useState(invoice.balance);
   const [paymentMethod, setPaymentMethod] = useState<"bank_transfer" | "other">("bank_transfer");
   const [paymentNote, setPaymentNote] = useState("");
+  const [sendOpen, setSendOpen] = useState(false);
+  const [sendMessage, setSendMessage] = useState(invoice.client.sendMessage ?? "");
+  const [sendCc, setSendCc] = useState((invoice.client.sendCc ?? []).join(", "));
   const [pending, setPending] = useState<string | null>(null);
   const [message, setMessage] = useState<{ kind: "error" | "notice"; text: string } | null>(null);
 
@@ -279,6 +286,20 @@ export function InvoiceDetailView({
       router.refresh();
     }
     setPending(null);
+  }
+
+  async function handleSend(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    await runAction("send", async () => {
+      const result = await sendInvoice(invoice.id, {
+        cc: parseCcInput(sendCc),
+        message: sendMessage,
+      });
+      if (!result.error) {
+        setSendOpen(false);
+      }
+      return result;
+    });
   }
 
   async function handlePayment(event: React.FormEvent<HTMLFormElement>) {
@@ -458,7 +479,7 @@ export function InvoiceDetailView({
                     <Button
                       data-testid="invoice-send"
                       disabled={pending !== null}
-                      onClick={() => runAction("send", () => sendInvoice(invoice.id))}
+                      onClick={() => setSendOpen(true)}
                       size="sm"
                     >
                       <Send /> {pending === "send" ? t("sending") : t("sendInvoice")}
@@ -697,6 +718,73 @@ export function InvoiceDetailView({
           </section>
         </aside>
       </div>
+
+      <Dialog onOpenChange={setSendOpen} open={sendOpen}>
+        <DialogContent>
+          <form onSubmit={handleSend}>
+            <DialogHeader>
+              <DialogTitle>{t("send.title", { number: invoice.number })}</DialogTitle>
+              <DialogDescription>
+                {t("send.description", { email: invoice.client.email })}
+              </DialogDescription>
+            </DialogHeader>
+            <div className="grid gap-5 py-6">
+              <div className="grid gap-2">
+                <Label htmlFor="send-message">
+                  {t("send.message")}{" "}
+                  <span className="font-normal text-muted-foreground">{t("payment.optional")}</span>
+                </Label>
+                <textarea
+                  autoFocus
+                  className="min-h-32 w-full rounded-md border border-input bg-transparent px-3 py-2 text-base shadow-xs outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 md:text-sm dark:bg-input/30"
+                  data-testid="invoice-send-message"
+                  id="send-message"
+                  maxLength={SEND_MESSAGE_MAX_LENGTH}
+                  onChange={(event) => setSendMessage(event.target.value)}
+                  placeholder={t("send.messagePlaceholder")}
+                  value={sendMessage}
+                />
+                <p className="text-xs text-muted-foreground">{t("send.messageHint")}</p>
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="send-cc">
+                  {t("send.cc")}{" "}
+                  <span className="font-normal text-muted-foreground">{t("payment.optional")}</span>
+                </Label>
+                <Input
+                  data-testid="invoice-send-cc"
+                  id="send-cc"
+                  inputMode="email"
+                  onChange={(event) => setSendCc(event.target.value)}
+                  placeholder="name@example.com, …"
+                  value={sendCc}
+                />
+                <p className="text-xs text-muted-foreground">
+                  {t("send.ccHint", { max: SEND_CC_MAX })}
+                </p>
+              </div>
+              {message?.kind === "error" && pending === null ? (
+                <p className="text-sm text-destructive" role="alert">
+                  {message.text}
+                </p>
+              ) : null}
+            </div>
+            <DialogFooter>
+              <Button
+                disabled={pending === "send"}
+                onClick={() => setSendOpen(false)}
+                type="button"
+                variant="outline"
+              >
+                {t("send.cancel")}
+              </Button>
+              <Button data-testid="invoice-send-submit" disabled={pending === "send"} type="submit">
+                <Send /> {pending === "send" ? t("send.sending") : t("send.submit")}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
 
       <Dialog onOpenChange={setPaymentOpen} open={paymentOpen}>
         <DialogContent>

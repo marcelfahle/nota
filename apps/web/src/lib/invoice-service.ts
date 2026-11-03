@@ -73,10 +73,17 @@ import {
   canSendInvoiceReminder as canSendInvoiceReminderRole,
   getInsufficientPermissionsError,
 } from "@/lib/roles";
+import {
+  normalizeSendOptions,
+  resolveSendOptions,
+  type SendInvoiceOptions,
+} from "@/lib/send-options";
 import { defaultServicePeriod } from "@/lib/service-period";
 import { createPaymentLink, deactivatePaymentLink } from "@/lib/stripe";
 import { invoiceTaxIdentifier } from "@/lib/tax-identifier";
 import { legacyReverseCharge, type TaxTreatment } from "@/lib/tax-treatment";
+
+export type { SendInvoiceOptions } from "@/lib/send-options";
 
 export type InvoiceServiceContext = {
   orgId: string;
@@ -459,6 +466,8 @@ export async function getInvoiceDetail(orgId: string, invoiceId: string) {
           name: clients.name,
           postalCode: clients.postalCode,
           publicSector: clients.publicSector,
+          sendCc: clients.sendCc,
+          sendMessage: clients.sendMessage,
           street: clients.street,
           taxIdentifierCanonicalValue: clients.taxIdentifierCanonicalValue,
           taxIdentifierCountryCode: clients.taxIdentifierCountryCode,
@@ -849,9 +858,15 @@ export async function deleteInvoice(
 export async function sendInvoice(
   context: InvoiceServiceContext,
   invoiceId: string,
+  options?: SendInvoiceOptions,
 ): Promise<InvoiceMutationResult> {
   if (!canSendInvoiceRole(context.role)) {
     return { error: getInsufficientPermissionsError() };
+  }
+  // Checked before any lock is taken: a typo in a CC address is the person's to fix.
+  const normalized = options === undefined ? undefined : normalizeSendOptions(options);
+  if (normalized && "error" in normalized) {
+    return normalized;
   }
 
   const existingInvoice = await getOwnedInvoice(context.orgId, invoiceId);
@@ -880,15 +895,13 @@ export async function sendInvoice(
       if (!org) {
         return { error: "Organization not found" };
       }
-      if (!org.firstRunCompletedAt) {
-        const [sender] = await tx
-          .select({ emailVerified: users.emailVerified })
-          .from(users)
-          .where(eq(users.id, context.userId))
-          .limit(1);
-        if (!sender?.emailVerified) {
-          return { error: EMAIL_VERIFICATION_REQUIRED };
-        }
+      const [sender] = await tx
+        .select({ email: users.email, emailVerified: users.emailVerified, name: users.name })
+        .from(users)
+        .where(eq(users.id, context.userId))
+        .limit(1);
+      if (!org.firstRunCompletedAt && !sender?.emailVerified) {
+        return { error: EMAIL_VERIFICATION_REQUIRED };
       }
       const [invoice] = await tx
         .select()
@@ -925,6 +938,7 @@ export async function sendInvoice(
       if (!client) {
         return { error: "Client not found" };
       }
+      const send = resolveSendOptions(normalized, client);
       if (client.bankAccountId) {
         const [bank] = await tx
           .select({ id: bankAccounts.id })
@@ -1022,9 +1036,16 @@ export async function sendInvoice(
       await tx.insert(activityLog).values({
         action: "sent",
         invoiceId,
-        metadata: { attachments },
+        metadata: { attachments, cc: send.cc, personalMessage: Boolean(send.message) },
         ...sourceFields(context),
       });
+      if (normalized) {
+        // Remembered per client, so the next send starts from the same note and copies.
+        await tx
+          .update(clients)
+          .set({ sendCc: send.cc, sendMessage: send.message, updatedAt: sentAt })
+          .where(eq(clients.id, client.id));
+      }
       if (!org.firstRunCompletedAt) {
         await tx
           .update(orgs)
@@ -1081,9 +1102,18 @@ export async function sendInvoice(
         }
       }
       await expireInvoiceProposals(tx, invoiceId);
-      await tx
-        .insert(jobs)
-        .values({ invoiceId, payload: { attachments, invoiceId }, type: "send_invoice_email" });
+      await tx.insert(jobs).values({
+        invoiceId,
+        payload: {
+          attachments,
+          cc: send.cc,
+          invoiceId,
+          message: send.message ?? undefined,
+          replyTo: sender?.email,
+          senderName: sender?.name,
+        },
+        type: "send_invoice_email",
+      });
       return { invoiceId, success: true };
     });
     if ("error" in result) {

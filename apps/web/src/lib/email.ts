@@ -10,12 +10,26 @@ import { getEmailEnv } from "@/lib/env";
 
 type Email = {
   attachments?: Array<{ content: string | Buffer; contentType?: string; filename: string }>;
+  cc?: Array<string>;
   from?: string;
   idempotencyKey?: string;
   react: ReactElement;
+  /** Where a reply lands: the person who sent it, not the app's address. */
+  replyTo?: string;
   subject: string;
   to: Array<string>;
 };
+
+/**
+ * A send on someone's behalf still leaves from the app's address (the domain
+ * that signs it), but is named after the person: "Marcel Fahle via Nota".
+ */
+export function senderFrom(name: string, from: { address: string; name: string }) {
+  const displayName = name.replaceAll(/["<>\r\n]/g, "").trim();
+  return displayName
+    ? `"${displayName} via ${from.name}" <${from.address}>`
+    : `${from.name} <${from.address}>`;
+}
 
 const acceptedSchema = z.object({
   messageId: z.uuid(),
@@ -56,6 +70,10 @@ export function createHeloSender(
             disposition: "attachment",
             fileName: filename,
           })),
+          // `cc` and `replyTo` follow the shape of `to` and `from`; the Helo
+          // docs for them were not reachable, so the field names are unverified.
+          ...(email.cc?.length ? { cc: email.cc.map((address) => ({ email: address })) } : {}),
+          ...(email.replyTo ? { replyTo: parseAddress(email.replyTo) } : {}),
           from: email.from
             ? parseAddress(email.from)
             : { email: config.EMAIL_FROM_ADDRESS, name: config.EMAIL_FROM_NAME },
@@ -123,8 +141,10 @@ export async function sendEmail(email: Email) {
           contentType,
           filename,
         })),
+        cc: email.cc,
         from: email.from ?? env.EMAIL_FROM,
         recordedAt: new Date().toISOString(),
+        replyTo: email.replyTo,
         subject: email.subject,
         to: email.to,
       }) + "\n",
@@ -136,8 +156,10 @@ export async function sendEmail(email: Email) {
     const html = await render(email.react);
     await nodemailer.createTransport(env.SMTP_URL!).sendMail({
       attachments,
+      cc: email.cc,
       from: email.from ?? env.EMAIL_FROM,
       html,
+      replyTo: email.replyTo,
       subject: email.subject,
       text: toPlainText(html),
       to: email.to,

@@ -388,7 +388,16 @@ curl -X POST "$NOTA_API_BASE_URL/invoices/invoice_uuid/duplicate" \
 
 ### POST /invoices/:id/send
 
-Sends a draft invoice.
+Sends a draft invoice. The body is optional:
+
+```json
+{ "message": "Hi both, here is October. Thanks as always!", "cc": ["accounting@example.com"] }
+```
+
+- `message` (up to 2000 characters) replaces the stock greeting and thanks in the email; line breaks are kept
+- `cc` (up to 5 addresses) receives a copy
+- both are remembered on the client and apply again when a later send carries no body
+- the email is sent from the app's address, named after the sending user, with replies going to that user
 
 Effects:
 

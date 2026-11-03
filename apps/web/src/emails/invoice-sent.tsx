@@ -25,6 +25,8 @@ type InvoiceSentEmailProps = {
   invoiceUrl: string | null;
   /** The document language: the customer reads this, not the sender. */
   locale?: AppLocale;
+  /** The sender's own words, shown instead of the stock greeting and thanks. */
+  message?: string | null;
   paymentLinkUrl: string | null;
   reminder?: boolean;
   /** A copy the sender mailed to themselves. It must never pass for a real invoice. */
@@ -71,6 +73,7 @@ export function InvoiceSentEmail({
   invoiceNumber,
   invoiceUrl,
   locale: language = "en",
+  message = null,
   paymentLinkUrl,
   reminder = false,
   testCopy = false,
@@ -106,13 +109,19 @@ export function InvoiceSentEmail({
 
           <Heading style={styles.heading}>{reminder ? t("reminderHeading") : t("heading")}</Heading>
 
-          <Text style={styles.text}>{t("greeting", { name: clientName })}</Text>
+          {message ? (
+            <Text style={{ ...styles.text, whiteSpace: "pre-line" }}>{message}</Text>
+          ) : (
+            <>
+              <Text style={styles.text}>{t("greeting", { name: clientName })}</Text>
 
-          <Text style={styles.text}>
-            {reminder
-              ? t("reminderIntro", { number: invoiceNumber })
-              : t("intro", { business: businessName })}
-          </Text>
+              <Text style={styles.text}>
+                {reminder
+                  ? t("reminderIntro", { number: invoiceNumber })
+                  : t("intro", { business: businessName })}
+              </Text>
+            </>
+          )}
 
           {xmlAttached ? <Text style={styles.text}>{t("xmlAttached")}</Text> : null}
 
@@ -139,7 +148,7 @@ export function InvoiceSentEmail({
             </Text>
           )}
 
-          {reminder ? null : (
+          {reminder || message ? null : (
             <Text style={{ ...styles.text, marginTop: "24px" }}>{t("thanks")}</Text>
           )}
 
