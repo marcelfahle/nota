@@ -75,11 +75,11 @@ export function createHeloSender(
       to: email.to.map((address) => ({ email: address })),
       tracking: { links: false, opens: false },
     };
-    // `cc` and `replyTo` follow the shape of `to` and `from`; the Helo docs
-    // for them were not reachable, so the field names are unverified.
+    // Shapes as in Helo's own SDKs (helo-sdk-js `MailAddress[]`): both `cc`
+    // and `replyTo` are lists of { email, name? }.
     const personal = {
       ...(email.cc?.length ? { cc: email.cc.map((address) => ({ email: address })) } : {}),
-      ...(email.replyTo ? { replyTo: parseAddress(email.replyTo) } : {}),
+      ...(email.replyTo ? { replyTo: [parseAddress(email.replyTo)] } : {}),
     };
     const hasPersonal = Object.keys(personal).length > 0;
 

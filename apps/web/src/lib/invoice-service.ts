@@ -325,6 +325,47 @@ async function createNextDocumentNumber(
   return number;
 }
 
+/**
+ * The number the next issuance would most likely allocate, read without a
+ * lock: shown on previews. The send itself allocates under the row lock.
+ */
+export async function peekNextDocumentNumber(orgId: string, kind: "credit_note" | "invoice") {
+  const [organization] = await db
+    .select({
+      creditNotePrefix: orgs.creditNotePrefix,
+      invoiceDigits: orgs.invoiceDigits,
+      invoicePrefix: orgs.invoicePrefix,
+      invoiceSeparator: orgs.invoiceSeparator,
+      nextCreditNoteNumber: orgs.nextCreditNoteNumber,
+      nextInvoiceNumber: orgs.nextInvoiceNumber,
+    })
+    .from(orgs)
+    .where(eq(orgs.id, orgId))
+    .limit(1);
+  if (!organization) {
+    return null;
+  }
+  let sequenceNumber =
+    kind === "credit_note" ? organization.nextCreditNoteNumber : organization.nextInvoiceNumber;
+  for (;;) {
+    const number = formatInvoiceNumber({
+      digits: organization.invoiceDigits,
+      number: sequenceNumber,
+      prefix: kind === "credit_note" ? organization.creditNotePrefix : organization.invoicePrefix,
+      separator: organization.invoiceSeparator,
+    });
+    const [existing] = await db
+      .select({ id: invoices.id })
+      .from(invoices)
+      .where(and(eq(invoices.orgId, orgId), eq(invoices.number, number)))
+      .limit(1);
+    if (!existing) {
+      return number;
+    }
+    sequenceNumber++;
+  }
+}
+
 async function issueDocumentNumber(
   tx: DbTransaction,
   context: InvoiceServiceContext,

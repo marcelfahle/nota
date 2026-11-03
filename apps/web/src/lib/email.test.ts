@@ -115,7 +115,7 @@ test("Helo carries CC copies and a reply-to, and names the sender on the From li
     replyTo: "marcel@example.com",
   });
   expect(payload.cc).toEqual([{ email: "cc@example.com" }, { email: "cc2@example.com" }]);
-  expect(payload.replyTo).toEqual({ email: "marcel@example.com" });
+  expect(payload.replyTo).toEqual([{ email: "marcel@example.com" }]);
   expect(payload.from).toEqual({
     email: config.EMAIL_FROM_ADDRESS,
     name: "Marcel Max Fahle via Nota",
@@ -156,7 +156,7 @@ test("Helo falls back to a send without cc and replyTo when it rejects them, onc
   }
   expect(bodies).toHaveLength(2);
   expect(bodies[0].cc).toEqual([{ email: "cc@example.com" }]);
-  expect(bodies[0].replyTo).toEqual({ email: "marcel@example.com" });
+  expect(bodies[0].replyTo).toEqual([{ email: "marcel@example.com" }]);
   expect(bodies[1].cc).toBeUndefined();
   expect(bodies[1].replyTo).toBeUndefined();
   expect(bodies[1].to).toEqual(bodies[0].to);

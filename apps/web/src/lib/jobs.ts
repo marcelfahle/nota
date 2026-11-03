@@ -1,3 +1,4 @@
+import { render } from "@react-email/components";
 import { and, asc, eq, isNull, lt, lte, or } from "drizzle-orm";
 
 import { InvoiceSentEmail, invoiceSentSubject } from "@/emails/invoice-sent";
@@ -16,11 +17,13 @@ import {
   users,
 } from "@/lib/db/schema";
 import { type InvoiceAttachment, parseInvoiceAttachments } from "@/lib/e-invoice-delivery";
-import { senderFrom, sendEmail } from "@/lib/email";
+import { sendEmail } from "@/lib/email";
 import { getAppEnv, getEmailEnv } from "@/lib/env";
 import { documentLocaleOf, getTranslator, isAppLocale, type AppLocale } from "@/lib/i18n";
-import type { InvoiceDocumentOrg } from "@/lib/invoice-document";
+import { type InvoiceDocumentOrg, loadInvoiceDocument } from "@/lib/invoice-document";
 import { loadInvoicePdf, loadInvoiceXml } from "@/lib/invoice-documents";
+import { invoiceEmailEnvelope, type PersonalSend } from "@/lib/invoice-email";
+import { buildInvoiceFilename } from "@/lib/invoice-filename";
 import { reminderPayloadSchema } from "@/lib/proposal-service";
 
 const JOB_LOCK_TIMEOUT_MS = 1000 * 60 * 10;
@@ -173,24 +176,27 @@ export async function renderInvoiceAttachments(
   return files;
 }
 
-async function sendInvoiceEmail(
+/** The invoice email as the customer gets it: subject, body and envelope, before any attachment is rendered. */
+async function buildInvoiceEmail(
   invoiceId: string,
   attachments: Array<InvoiceAttachment>,
-  recipient?: string,
-  idempotencyKey?: string,
-  personal: Pick<EmailJobPayload, "cc" | "message" | "replyTo" | "senderName"> = {},
+  recipient: string | undefined,
+  personal: PersonalSend,
+  /** On a preview of a draft: the number the send would allocate. */
+  number?: string,
 ) {
-  const { bankDetails, client, invoice, logoSrc, org } = await getInvoiceEmailContext(invoiceId);
+  const context = await getInvoiceEmailContext(invoiceId);
+  const { bankDetails, client, invoice, org } = context;
   const emailEnv = getEmailEnv();
 
   const businessName = org.legalName ?? org.businessName ?? org.name ?? APP_NAME;
-  const email = {
+  const props = {
     bankDetails,
     businessName,
     clientName: client.name,
     currency: invoice.currency ?? "EUR",
     dueAt: invoice.dueAt,
-    invoiceNumber: invoice.number,
+    invoiceNumber: number ?? invoice.number,
     invoiceUrl: getPublicInvoiceUrl(invoice.publicToken),
     locale: documentLocaleOf(invoice, org),
     message: personal.message ?? null,
@@ -200,23 +206,80 @@ async function sendInvoiceEmail(
     total: invoice.total ?? "0",
     xmlAttached: attachments.includes("xml"),
   };
+  return {
+    ...invoiceEmailEnvelope({
+      clientEmail: client.email,
+      from: { address: emailEnv.EMAIL_FROM_ADDRESS, name: emailEnv.EMAIL_FROM_NAME },
+      personal,
+      recipient,
+    }),
+    context,
+    react: InvoiceSentEmail(props),
+    subject: invoiceSentSubject(props),
+  };
+}
 
+/**
+ * Exactly what the customer would get if this invoice were sent now: the
+ * rendered body, the envelope and the file names, without rendering the
+ * files. Shown before the person confirms a send.
+ */
+export async function previewInvoiceEmail(
+  orgId: string,
+  invoiceId: string,
+  attachments: Array<InvoiceAttachment>,
+  personal: PersonalSend,
+  number?: string,
+) {
+  const email = await buildInvoiceEmail(invoiceId, attachments, undefined, personal, number);
+  if (email.context.org.id !== orgId) {
+    throw new Error("Invoice not found");
+  }
+  const document = await loadInvoiceDocument(email.context.org, invoiceId);
+  const emailEnv = getEmailEnv();
+  const filename = {
+    clientName: document.buyer.name,
+    issuedAt: document.invoice.issuedAt,
+    lineItems: document.items,
+    number: number ?? document.invoice.number,
+  };
+  return {
+    attachments: attachments.map((kind) =>
+      buildInvoiceFilename(filename, kind === "xml" ? "xml" : "pdf"),
+    ),
+    cc: email.cc ?? [],
+    from: email.from ?? emailEnv.EMAIL_FROM,
+    html: await render(email.react),
+    replyTo: email.replyTo ?? null,
+    subject: email.subject,
+    to: email.to,
+  };
+}
+
+async function sendInvoiceEmail(
+  invoiceId: string,
+  attachments: Array<InvoiceAttachment>,
+  recipient?: string,
+  idempotencyKey?: string,
+  personal: PersonalSend = {},
+) {
+  const { cc, context, from, react, replyTo, subject, to } = await buildInvoiceEmail(
+    invoiceId,
+    attachments,
+    recipient,
+    personal,
+  );
   await sendEmail({
-    attachments: await renderInvoiceAttachments(org, invoiceId, attachments, { logoSrc }),
-    // A test copy goes to the sender alone; nobody in CC should see a draft.
-    cc: recipient ? undefined : personal.cc,
-    from:
-      personal.senderName && emailEnv.EMAIL_FROM_ADDRESS
-        ? senderFrom(personal.senderName, {
-            address: emailEnv.EMAIL_FROM_ADDRESS,
-            name: emailEnv.EMAIL_FROM_NAME,
-          })
-        : undefined,
+    attachments: await renderInvoiceAttachments(context.org, invoiceId, attachments, {
+      logoSrc: context.logoSrc,
+    }),
+    cc,
+    from,
     idempotencyKey,
-    react: InvoiceSentEmail(email),
-    replyTo: personal.replyTo,
-    subject: invoiceSentSubject(email),
-    to: [recipient ?? client.email],
+    react,
+    replyTo,
+    subject,
+    to,
   });
 }
 

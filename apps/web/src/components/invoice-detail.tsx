@@ -5,7 +5,7 @@ import { useTranslations } from "next-intl";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import posthog from "posthog-js";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import {
   cancelInvoice,
@@ -13,6 +13,7 @@ import {
   deleteInvoice,
   duplicateInvoice,
   markInvoiceSent,
+  previewInvoiceEmail,
   recordInvoicePayment,
   sendInvoice,
   sendReminder,
@@ -66,6 +67,16 @@ type ActivityEntry = {
   metadata: unknown;
   source: "api" | "chat" | "cli" | "mcp" | "system" | "web";
   sourceClient: string | null;
+};
+
+type EmailPreview = {
+  attachments: Array<string>;
+  cc: Array<string>;
+  from: string;
+  html: string;
+  replyTo: string | null;
+  subject: string;
+  to: Array<string>;
 };
 
 type StoredDocument = {
@@ -264,6 +275,36 @@ export function InvoiceDetailView({
   const [sendOpen, setSendOpen] = useState(false);
   const [sendMessage, setSendMessage] = useState(invoice.client.sendMessage ?? "");
   const [sendCc, setSendCc] = useState((invoice.client.sendCc ?? []).join(", "));
+  const [preview, setPreview] = useState<EmailPreview | null>(null);
+  const [previewError, setPreviewError] = useState<string | null>(null);
+
+  // The preview is the email: rendered by the server from the same props a
+  // send would use, refreshed shortly after the person stops typing.
+  useEffect(() => {
+    if (!sendOpen) {
+      return;
+    }
+    let cancelled = false;
+    const timer = setTimeout(async () => {
+      const result = await previewInvoiceEmail(invoice.id, {
+        cc: parseCcInput(sendCc),
+        message: sendMessage,
+      });
+      if (cancelled) {
+        return;
+      }
+      if ("preview" in result && result.preview) {
+        setPreview(result.preview);
+        setPreviewError(null);
+      } else {
+        setPreviewError("error" in result ? result.error : null);
+      }
+    }, 350);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [invoice.id, sendCc, sendMessage, sendOpen]);
   const [pending, setPending] = useState<string | null>(null);
   const [message, setMessage] = useState<{ kind: "error" | "notice"; text: string } | null>(null);
 
@@ -722,54 +763,101 @@ export function InvoiceDetailView({
       </div>
 
       <Dialog onOpenChange={setSendOpen} open={sendOpen}>
-        <DialogContent>
+        <DialogContent className="max-h-[92dvh] overflow-y-auto sm:max-w-5xl">
           <form onSubmit={handleSend}>
             <DialogHeader>
               <DialogTitle>{t("send.title", { number: numberLabel })}</DialogTitle>
-              <DialogDescription>
-                {t("send.description", { email: invoice.client.email })}
-              </DialogDescription>
+              <DialogDescription>{t("send.description")}</DialogDescription>
             </DialogHeader>
-            <div className="grid gap-5 py-6">
-              <div className="grid gap-2">
-                <Label htmlFor="send-message">
-                  {t("send.message")}{" "}
-                  <span className="font-normal text-muted-foreground">{t("payment.optional")}</span>
-                </Label>
-                <textarea
-                  autoFocus
-                  className="min-h-32 w-full rounded-md border border-input bg-transparent px-3 py-2 text-base shadow-xs outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 md:text-sm dark:bg-input/30"
-                  data-testid="invoice-send-message"
-                  id="send-message"
-                  maxLength={SEND_MESSAGE_MAX_LENGTH}
-                  onChange={(event) => setSendMessage(event.target.value)}
-                  placeholder={t("send.messagePlaceholder")}
-                  value={sendMessage}
-                />
-                <p className="text-xs text-muted-foreground">{t("send.messageHint")}</p>
+            <div className="grid gap-6 py-6 lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
+              <div className="grid content-start gap-5">
+                <div className="grid gap-2">
+                  <Label htmlFor="send-message">
+                    {t("send.message")}{" "}
+                    <span className="font-normal text-muted-foreground">
+                      {t("payment.optional")}
+                    </span>
+                  </Label>
+                  <textarea
+                    autoFocus
+                    className="min-h-40 w-full rounded-md border border-input bg-transparent px-3 py-2 text-base shadow-xs outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 md:text-sm dark:bg-input/30"
+                    data-testid="invoice-send-message"
+                    id="send-message"
+                    maxLength={SEND_MESSAGE_MAX_LENGTH}
+                    onChange={(event) => setSendMessage(event.target.value)}
+                    placeholder={t("send.messagePlaceholder")}
+                    value={sendMessage}
+                  />
+                  <p className="text-xs text-muted-foreground">{t("send.messageHint")}</p>
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="send-cc">
+                    {t("send.cc")}{" "}
+                    <span className="font-normal text-muted-foreground">
+                      {t("payment.optional")}
+                    </span>
+                  </Label>
+                  <Input
+                    data-testid="invoice-send-cc"
+                    id="send-cc"
+                    inputMode="email"
+                    onChange={(event) => setSendCc(event.target.value)}
+                    placeholder="name@example.com, …"
+                    value={sendCc}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    {t("send.ccHint", { max: SEND_CC_MAX })}
+                  </p>
+                </div>
+                {message?.kind === "error" && pending === null ? (
+                  <p className="text-sm text-destructive" role="alert">
+                    {message.text}
+                  </p>
+                ) : null}
               </div>
-              <div className="grid gap-2">
-                <Label htmlFor="send-cc">
-                  {t("send.cc")}{" "}
-                  <span className="font-normal text-muted-foreground">{t("payment.optional")}</span>
-                </Label>
-                <Input
-                  data-testid="invoice-send-cc"
-                  id="send-cc"
-                  inputMode="email"
-                  onChange={(event) => setSendCc(event.target.value)}
-                  placeholder="name@example.com, …"
-                  value={sendCc}
-                />
-                <p className="text-xs text-muted-foreground">
-                  {t("send.ccHint", { max: SEND_CC_MAX })}
-                </p>
-              </div>
-              {message?.kind === "error" && pending === null ? (
-                <p className="text-sm text-destructive" role="alert">
-                  {message.text}
-                </p>
-              ) : null}
+              <section
+                aria-label={t("send.preview")}
+                className="min-w-0 rounded-lg border bg-muted/40"
+                data-testid="invoice-send-preview"
+              >
+                <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-1 border-b px-4 py-3 text-xs">
+                  {(
+                    [
+                      ["from", preview?.from ?? null],
+                      ["to", preview?.to.join(", ") ?? invoice.client.email],
+                      ["ccLine", preview?.cc.length ? preview.cc.join(", ") : null],
+                      ["replyTo", preview?.replyTo ?? null],
+                      ["subject", preview?.subject ?? null],
+                      ["attachments", preview?.attachments.join(", ") ?? null],
+                    ] as const
+                  ).map(([key, value]) =>
+                    value ? (
+                      <div className="contents" key={key}>
+                        <dt className="text-muted-foreground">{t(`send.${key}`)}</dt>
+                        <dd className="truncate font-medium" title={value}>
+                          {value}
+                        </dd>
+                      </div>
+                    ) : null,
+                  )}
+                </dl>
+                {previewError ? (
+                  <p className="px-4 py-6 text-sm text-destructive" role="alert">
+                    {previewError}
+                  </p>
+                ) : preview ? (
+                  <iframe
+                    className="h-[460px] w-full rounded-b-lg bg-white"
+                    sandbox=""
+                    srcDoc={preview.html}
+                    title={t("send.preview")}
+                  />
+                ) : (
+                  <p className="px-4 py-6 text-sm text-muted-foreground" role="status">
+                    {t("send.previewLoading")}
+                  </p>
+                )}
+              </section>
             </div>
             <DialogFooter>
               <Button
@@ -780,8 +868,15 @@ export function InvoiceDetailView({
               >
                 {t("send.cancel")}
               </Button>
-              <Button data-testid="invoice-send-submit" disabled={pending === "send"} type="submit">
-                <Send /> {pending === "send" ? t("send.sending") : t("send.submit")}
+              <Button
+                data-testid="invoice-send-submit"
+                disabled={pending === "send" || !preview}
+                type="submit"
+              >
+                <Send />{" "}
+                {pending === "send"
+                  ? t("send.sending")
+                  : t("send.submitTo", { email: preview?.to[0] ?? invoice.client.email })}
               </Button>
             </DialogFooter>
           </form>

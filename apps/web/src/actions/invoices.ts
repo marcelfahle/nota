@@ -5,6 +5,7 @@ import { z } from "zod";
 
 import { localizeError, localizeMutationError } from "@/lib/action-errors";
 import { getCurrentUser } from "@/lib/auth";
+import { invoiceAttachmentsFor } from "@/lib/e-invoice-delivery";
 import {
   cancelInvoice as cancelInvoiceService,
   createCreditNote as createCreditNoteService,
@@ -14,11 +15,14 @@ import {
   markInvoicePaid as markInvoicePaidService,
   markInvoiceSent as markInvoiceSentService,
   recordInvoicePayment as recordInvoicePaymentService,
+  peekNextDocumentNumber,
   sendInvoice as sendInvoiceService,
   sendReminder as sendReminderService,
   type InvoiceServiceContext,
   updateInvoice as updateInvoiceService,
 } from "@/lib/invoice-service";
+import { previewInvoiceEmail as previewInvoiceEmailJob } from "@/lib/jobs";
+import { normalizeSendOptions } from "@/lib/send-options";
 import { TAX_TREATMENTS } from "@/lib/tax-treatment";
 
 const lineItemSchema = z.object({
@@ -138,6 +142,43 @@ const sendOptionsSchema = z.object({
   cc: z.array(z.string().trim()).optional(),
   message: z.string().optional(),
 });
+
+/**
+ * The email exactly as the customer would get it from a send with these
+ * options: shown in the send dialog so the preview is the confirmation.
+ */
+export async function previewInvoiceEmail(
+  invoiceId: string,
+  options: { cc?: Array<string>; message?: string },
+) {
+  const parsed = sendOptionsSchema.safeParse(options);
+  if (!parsed.success) {
+    return { error: await localizeError(parsed.error.issues[0].message) };
+  }
+  const normalized = normalizeSendOptions(parsed.data);
+  if ("error" in normalized) {
+    return { error: await localizeError(normalized.error) };
+  }
+  const { org, user } = await getCurrentUser();
+  try {
+    const preview = await previewInvoiceEmailJob(
+      org.id,
+      invoiceId,
+      invoiceAttachmentsFor(org.eInvoiceDelivery),
+      {
+        cc: normalized.cc,
+        message: normalized.message ?? undefined,
+        replyTo: user.email,
+        senderName: user.name ?? undefined,
+      },
+      // A draft is numbered at send; the preview shows the number it would get.
+      (await peekNextDocumentNumber(org.id, "invoice")) ?? undefined,
+    );
+    return { preview };
+  } catch {
+    return { error: await localizeError("Invoice not found") };
+  }
+}
 
 /**
  * Sends a draft. With `options` the person chose a note and copies for this
