@@ -1,4 +1,4 @@
-import { expect, test } from "bun:test";
+import { expect, spyOn, test } from "bun:test";
 
 import { PasswordResetEmail } from "@/emails/password-reset";
 import { createHeloSender, senderFrom } from "@/lib/email";
@@ -127,4 +127,67 @@ test("Helo carries CC copies and a reply-to, and names the sender on the From li
   expect(senderFrom("", { address: "hello@withnota.com", name: "Nota" })).toBe(
     "Nota <hello@withnota.com>",
   );
+});
+
+test("Helo falls back to a send without cc and replyTo when it rejects them, once", async () => {
+  const bodies: Array<Record<string, unknown>> = [];
+  const keys: Array<string | null> = [];
+  const sender = createHeloSender(config, (async (_url, options) => {
+    bodies.push(JSON.parse(String(options?.body)));
+    keys.push(new Headers(options?.headers).get("X-Helo-Idempotency-Key"));
+    return bodies.length === 1
+      ? Response.json({ detail: "unknown field" }, { status: 422 })
+      : Response.json({ messageId, status: "accepted" });
+  }) as typeof fetch);
+  const warn = spyOn(console, "warn").mockImplementation(() => {});
+  let warned: Array<string> = [];
+  try {
+    expect(
+      await sender({
+        ...email,
+        cc: ["cc@example.com"],
+        idempotencyKey: messageId,
+        replyTo: "marcel@example.com",
+      }),
+    ).toEqual({ messageId, status: "accepted" });
+    warned = warn.mock.calls.map((call) => String(call[0]));
+  } finally {
+    warn.mockRestore();
+  }
+  expect(bodies).toHaveLength(2);
+  expect(bodies[0].cc).toEqual([{ email: "cc@example.com" }]);
+  expect(bodies[0].replyTo).toEqual({ email: "marcel@example.com" });
+  expect(bodies[1].cc).toBeUndefined();
+  expect(bodies[1].replyTo).toBeUndefined();
+  expect(bodies[1].to).toEqual(bodies[0].to);
+  expect(keys).toEqual([messageId, messageId]);
+  expect(warned).toHaveLength(1);
+  expect(warned[0]).toContain("retrying without cc and replyTo");
+
+  // A second rejection is final.
+  const stubborn = createHeloSender(config, (async () =>
+    Response.json({}, { status: 422 })) as typeof fetch);
+  await expect(stubborn({ ...email, replyTo: "marcel@example.com" })).rejects.toThrow(
+    "Helo rejected the email (HTTP 422)",
+  );
+});
+
+test("Helo server errors are not retried without cc and replyTo", async () => {
+  let attempts = 0;
+  const sender = createHeloSender(config, (async () => {
+    attempts += 1;
+    return Response.json({}, { status: 500 });
+  }) as typeof fetch);
+  await expect(
+    sender({ ...email, cc: ["cc@example.com"], replyTo: "marcel@example.com" }),
+  ).rejects.toThrow("Helo rejected the email (HTTP 500)");
+  expect(attempts).toBe(1);
+  // Without the unverified fields there is nothing to drop, so a 422 is final too.
+  attempts = 0;
+  const plain = createHeloSender(config, (async () => {
+    attempts += 1;
+    return Response.json({}, { status: 422 });
+  }) as typeof fetch);
+  await expect(plain(email)).rejects.toThrow("Helo rejected the email (HTTP 422)");
+  expect(attempts).toBe(1);
 });
