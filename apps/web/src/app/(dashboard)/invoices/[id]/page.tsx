@@ -10,10 +10,10 @@ import { getCurrentUser } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { clients, invoices } from "@/lib/db/schema";
 import { documentLocaleOf } from "@/lib/i18n";
-import { orgCountryCode } from "@/lib/invoice-compliance";
+import { loadInvoiceDocument } from "@/lib/invoice-document";
+import { invoiceNumberLabel } from "@/lib/invoice-number";
 import { getInvoiceDetail } from "@/lib/invoice-service";
-import { displayedSellerAddress } from "@/lib/issued-snapshot";
-import { formatClientAddress, isDomestic } from "@/lib/postal-address";
+import { invoiceSheetProps } from "@/lib/invoice-sheet";
 
 const loadInvoiceWithClient = cache(async (orgId: string, invoiceId: string) => {
   const [record] = await db
@@ -37,9 +37,10 @@ export async function generateMetadata({
 }): Promise<Metadata> {
   const { id } = await params;
   const { org } = await getCurrentUser();
-  const [record, t] = await Promise.all([
+  const [record, t, tCommon] = await Promise.all([
     loadInvoiceWithClient(org.id, id),
     getTranslations("invoiceDetail"),
+    getTranslations("common"),
   ]);
 
   return {
@@ -47,7 +48,7 @@ export async function generateMetadata({
       ? t("pageTitle", {
           app: APP_NAME,
           client: record.clientName ?? t("kind.invoice"),
-          number: record.invoice.number,
+          number: invoiceNumberLabel(record.invoice.number, tCommon("draft")),
         })
       : t("pageTitleFallback", { app: APP_NAME }),
   };
@@ -71,12 +72,15 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
     notFound();
   }
 
-  // The preview prints addresses the way the document does: country named in
-  // the document language, and left out when both parties are in one country.
-  const address = {
-    locale: documentLocaleOf(invoice, org),
-    omitCountry: isDomestic({ countryCode: orgCountryCode(org) }, invoice.client ?? {}),
-  };
+  // The preview is drawn from the same loaded document as the PDF: frozen
+  // parties on an issued invoice, live rows on a draft.
+  const document = await loadInvoiceDocument(org, id);
+  const documentLocale = documentLocaleOf(invoice, org);
+  const sheet = invoiceSheetProps(
+    document,
+    documentLocale,
+    document.seller.logoUrl ? { src: document.seller.logoUrl } : null,
+  );
 
   return (
     <InvoiceDetailView
@@ -88,13 +92,7 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
         source: a.source,
         sourceClient: a.sourceClient,
       }))}
-      business={{
-        address: displayedSellerAddress(invoice, org, address),
-        brandColor: org.brandColor,
-        logoUrl: org.logoUrl,
-        name: org.businessName || org.name,
-      }}
-      documentLocale={address.locale}
+      documentLocale={documentLocale}
       documents={invoice.documents.map((document) => ({
         byteSize: document.byteSize,
         createdAt: document.createdAt.toISOString(),
@@ -104,12 +102,11 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
       }))}
       invoice={{
         ...invoice,
-        client: invoice.client
-          ? { ...invoice.client, address: formatClientAddress(invoice.client, address) }
-          : { email: "", name: t("unknownClient") },
+        client: invoice.client ?? { email: "", name: t("unknownClient") },
       }}
       locale={user.locale}
       role={role}
+      sheet={sheet}
     />
   );
 }

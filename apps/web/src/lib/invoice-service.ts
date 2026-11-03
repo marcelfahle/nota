@@ -44,6 +44,7 @@ import {
   isInvoiceSendFinalized,
   normalizeInvoiceStatus,
 } from "@/lib/invoice-lifecycle";
+import { draftIdentifier } from "@/lib/invoice-number";
 import { formatInvoiceNumber } from "@/lib/invoice-number";
 import { buildIssuedSnapshot, displayedBuyer } from "@/lib/issued-snapshot";
 import { processPendingEmailJobs } from "@/lib/jobs";
@@ -337,10 +338,6 @@ async function issueDocumentNumber(
     ...sourceFields(context),
   });
   return number;
-}
-
-function draftIdentifier(id: string) {
-  return `DRAFT-${id}`;
 }
 
 function isCalendarDate(value: string) {

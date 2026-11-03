@@ -17,6 +17,8 @@ import {
   sendInvoice,
   sendReminder,
 } from "@/actions/invoices";
+import { InvoiceSheet } from "@/components/invoice-sheet";
+import { PaperScaler } from "@/components/paper-scaler";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -43,7 +45,9 @@ import {
   canCancelInvoice as canCancelStatus,
   normalizeInvoiceStatus,
 } from "@/lib/invoice-lifecycle";
+import { invoiceNumberLabel } from "@/lib/invoice-number";
 import { translateProblem } from "@/lib/invoice-problems";
+import type { InvoiceSheetProps } from "@/lib/invoice-sheet";
 import {
   canCancelInvoice,
   canDeleteInvoice,
@@ -51,15 +55,8 @@ import {
   canSendInvoice,
   canSendInvoiceReminder,
 } from "@/lib/roles";
-import { type TaxTreatment, taxTreatmentNote } from "@/lib/tax-treatment";
-import {
-  cn,
-  formatCurrency,
-  formatDate,
-  formatNumber,
-  formatQuantity,
-  type Locale,
-} from "@/lib/utils";
+import type { TaxTreatment } from "@/lib/tax-treatment";
+import { formatCurrency, formatDate, formatNumber, type Locale } from "@/lib/utils";
 
 type ActivityEntry = {
   action: string;
@@ -80,12 +77,6 @@ type StoredDocument = {
 
 type InvoiceDetailProps = {
   activities: Array<ActivityEntry>;
-  business: {
-    address: string | null;
-    brandColor: string | null;
-    logoUrl: string | null;
-    name: string;
-  };
   /** The language the document is written in: statutory notes follow it, not the UI. */
   documentLocale: AppLocale;
   /** Issued originals, exactly as the customer received them. */
@@ -137,6 +128,8 @@ type InvoiceDetailProps = {
   /** The member's UI language; the document itself keeps its own. */
   locale: AppLocale;
   role: AuthenticatedRole;
+  /** The document exactly as the PDF draws it. */
+  sheet: InvoiceSheetProps;
 };
 
 const ACTIVITY_ACTIONS = [
@@ -169,15 +162,6 @@ function relatedInvoiceId(metadata: unknown) {
     metadata && typeof metadata === "object" ? (metadata as Record<string, unknown>) : null;
   const id = record?.creditNoteId ?? record?.creditsInvoiceId;
   return typeof id === "string" ? id : null;
-}
-
-function formatServicePeriod(start: string | null, end: string | null, locale: Locale) {
-  if (!start || !end) {
-    return null;
-  }
-  return start === end
-    ? formatDate(start, locale)
-    : `${formatDate(start, locale)} – ${formatDate(end, locale)}`;
 }
 
 function daysUntil(value: string) {
@@ -242,14 +226,15 @@ function activityText(activity: ActivityEntry, currency: string, locale: Locale,
 
 export function InvoiceDetailView({
   activities,
-  business,
   documentLocale,
   documents,
   invoice,
   locale: language,
   role,
+  sheet,
 }: InvoiceDetailProps) {
   const t = useTranslations("invoiceDetail");
+  const tCommon = useTranslations("common");
   const tTreatment = useTranslations("taxTreatment");
   const tProblems = useTranslations("problems");
   const router = useRouter();
@@ -372,13 +357,6 @@ export function InvoiceDetailView({
     setPending(null);
   }
 
-  const servicePeriod = formatServicePeriod(
-    invoice.servicePeriodStart,
-    invoice.servicePeriodEnd,
-    locale,
-  );
-  const taxNote = taxTreatmentNote(invoice.taxTreatment, documentLocale);
-  const showVat = invoice.taxTreatment !== "exempt_small_business";
   const stamp =
     invoice.kind === "credit_note"
       ? status === "cancelled"
@@ -432,7 +410,7 @@ export function InvoiceDetailView({
         </Link>
         <div className="flex flex-col justify-between gap-4 lg:flex-row lg:items-end">
           <h1 className="break-words" id="invoice-title">
-            {invoice.number}{" "}
+            {invoiceNumberLabel(invoice.number, tCommon("draft"))}{" "}
             <span className="font-normal text-muted-foreground">{invoice.client.name}</span>
           </h1>
           <div aria-label={t("actions")} className="flex flex-wrap gap-2">
@@ -546,167 +524,21 @@ export function InvoiceDetailView({
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1.45fr)_minmax(280px,0.55fr)]">
         <section
           aria-label={t("preview")}
-          className="overflow-hidden rounded-lg border p-4 sm:p-8"
+          className="min-w-0 overflow-hidden rounded-lg border p-3 sm:p-6"
           style={{
             backgroundColor: "var(--paper-2)",
             backgroundImage: "radial-gradient(var(--line) 1px, transparent 1px)",
             backgroundSize: "8px 8px",
           }}
         >
-          <div
-            className={cn(
-              "invoice-paper relative mx-auto min-h-[720px] max-w-[720px] border p-7 shadow-sm sm:p-12",
-              // The pay bar sits at the foot of the paper; long notes must not run under it.
-              invoice.kind === "invoice" && "pb-28 sm:pb-32",
-            )}
-          >
-            <div className="flex items-start justify-between gap-8 border-b pb-8">
-              <div className="flex items-start gap-3">
-                {business.logoUrl ? (
-                  <img alt="" className="size-10 object-contain" src={business.logoUrl} />
-                ) : (
-                  <span
-                    aria-hidden="true"
-                    className="grid size-10 place-items-center rounded-md text-lg font-bold text-white"
-                    style={{ backgroundColor: business.brandColor || "#1f1b16" }}
-                  >
-                    {business.name.slice(0, 1)}
-                  </span>
-                )}
-                <div>
-                  <p className="font-semibold">{business.name}</p>
-                  <p className="mt-1 max-w-52 text-xs leading-relaxed whitespace-pre-line text-zinc-500">
-                    {business.address}
-                  </p>
-                </div>
-              </div>
-              <div className="text-right">
-                <p className="text-3xl font-semibold">{t(`kind.${invoice.kind}`)}</p>
-                <p className="mt-1 font-mono text-sm text-zinc-500">{invoice.number}</p>
-              </div>
-            </div>
-
-            <dl className="grid gap-6 border-b py-7 text-sm sm:grid-cols-3">
-              <div>
-                <dt className="nota-label text-zinc-500">{t("billedTo")}</dt>
-                <dd className="mt-2 font-semibold">
-                  {invoice.client.company || invoice.client.name}
-                </dd>
-                <dd className="mt-1 text-xs leading-relaxed whitespace-pre-line text-zinc-500">
-                  {invoice.client.address?.replaceAll(String.raw`\n`, "\n")}
-                </dd>
-              </div>
-              <div>
-                <dt className="nota-label text-zinc-500">{t("issued")}</dt>
-                <dd className="mt-2 font-mono text-xs">{formatDate(invoice.issuedAt, locale)}</dd>
-              </div>
-              <div>
-                <dt className="nota-label text-zinc-500">{t("due")}</dt>
-                <dd className="mt-2 font-mono text-xs">{formatDate(invoice.dueAt, locale)}</dd>
-              </div>
-              {servicePeriod ? (
-                <div>
-                  <dt className="nota-label text-zinc-500">
-                    {invoice.servicePeriodStart === invoice.servicePeriodEnd
-                      ? t("serviceDate")
-                      : t("servicePeriod")}
-                  </dt>
-                  <dd className="mt-2 font-mono text-xs" data-testid="invoice-service-period">
-                    {servicePeriod}
-                  </dd>
-                </div>
-              ) : null}
-              {invoice.buyerReference ? (
-                <div>
-                  <dt className="nota-label text-zinc-500">{t("buyerReference")}</dt>
-                  <dd className="mt-2 font-mono text-xs">{invoice.buyerReference}</dd>
-                </div>
-              ) : null}
-            </dl>
-
-            <div className="py-7">
-              <table className="w-full table-fixed text-sm">
-                <thead>
-                  <tr className="nota-label border-b text-left text-zinc-500">
-                    <th className="pb-3 font-medium">{t("description")}</th>
-                    <th className="w-16 pb-3 text-right font-medium">{t("quantity")}</th>
-                    <th className="w-28 pb-3 text-right font-medium">{t("amount")}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {invoice.lineItems.map((item) => (
-                    <tr className="border-b" key={item.id}>
-                      <td className="py-5 pr-4">
-                        <span className="font-medium">{item.description}</span>
-                        <span className="mt-1 block font-mono text-xs text-zinc-500">
-                          {t("each", {
-                            price: formatCurrency(Number(item.unitPrice), currency, locale),
-                          })}
-                        </span>
-                      </td>
-                      <td className="py-5 text-right font-mono text-xs whitespace-nowrap">
-                        {formatQuantity(item.quantity, locale)}
-                      </td>
-                      <td className="py-5 text-right font-mono text-xs whitespace-nowrap">
-                        {formatCurrency(Number(item.amount), currency, locale)}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-              <dl className="mt-6 ml-auto w-full max-w-64 space-y-2 font-mono text-xs">
-                <div className="flex justify-between">
-                  <dt className="text-zinc-500">{t("subtotal")}</dt>
-                  <dd>{formatCurrency(Number(invoice.subtotal), currency, locale)}</dd>
-                </div>
-                {showVat ? (
-                  <div className="flex justify-between">
-                    <dt className="text-zinc-500">
-                      {t("vat", { rate: formatNumber(Number(invoice.taxRate ?? 0), locale) })}
-                    </dt>
-                    <dd>{formatCurrency(Number(invoice.taxAmount), currency, locale)}</dd>
-                  </div>
-                ) : null}
-                <div className="mt-3 flex justify-between border-t pt-3 text-sm font-bold">
-                  <dt>{t("total")}</dt>
-                  <dd>{formatCurrency(total, currency, locale)}</dd>
-                </div>
-              </dl>
-              {taxNote ? (
-                <p className="mt-4 pb-4 text-xs text-zinc-500" data-testid="invoice-tax-note">
-                  {taxNote}
-                </p>
-              ) : null}
-            </div>
-
-            {stamp ? (
-              <div className="rubber-stamp ml-8" data-testid="invoice-status">
-                {stamp}
-              </div>
-            ) : (
-              <span className="sr-only" data-testid="invoice-status">
-                {status[0].toUpperCase() + status.slice(1).replaceAll("_", " ")}
-              </span>
-            )}
-            {invoice.notes ? (
-              <p className="mt-auto border-t pt-5 text-xs leading-relaxed text-zinc-500">
-                {invoice.notes}
-              </p>
-            ) : null}
-            {invoice.kind === "invoice" ? (
-              <div
-                className="absolute right-7 bottom-7 left-7 flex items-center justify-between rounded-md px-5 py-4 text-sm font-semibold text-white sm:right-12 sm:left-12"
-                style={{ backgroundColor: business.brandColor || "#1f1b16" }}
-              >
-                <span>
-                  {balance > 0
-                    ? t("amountDue", { amount: formatCurrency(balance, currency, locale) })
-                    : t("settled")}
-                </span>
-                <span aria-hidden="true">→</span>
-              </div>
-            ) : null}
-          </div>
+          <PaperScaler className="invoice-paper mx-auto max-w-[840px] overflow-hidden border shadow-sm">
+            <InvoiceSheet {...sheet} stamp={stamp} />
+          </PaperScaler>
+          {stamp ? null : (
+            <span className="sr-only" data-testid="invoice-status">
+              {status[0].toUpperCase() + status.slice(1).replaceAll("_", " ")}
+            </span>
+          )}
         </section>
 
         <aside aria-label={t("details")} className="space-y-8">

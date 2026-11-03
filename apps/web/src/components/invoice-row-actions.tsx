@@ -45,6 +45,7 @@ import {
   canSendInvoiceReminder as canSendInvoiceReminderStatus,
   normalizeInvoiceStatus,
 } from "@/lib/invoice-lifecycle";
+import { invoiceNumberLabel } from "@/lib/invoice-number";
 import {
   canMarkInvoicePaid as canMarkInvoicePaidRole,
   canSendInvoice as canSendInvoiceRole,
@@ -95,6 +96,7 @@ function runInvoiceAction(action: ConfirmAction, invoiceId: string) {
 
 export function InvoiceRowActions({ invoice, role }: InvoiceRowActionsProps) {
   const t = useTranslations("invoices.actions");
+  const tCommon = useTranslations("common");
   const router = useRouter();
   const [confirmAction, setConfirmAction] = useState<ConfirmAction | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -202,7 +204,7 @@ export function InvoiceRowActions({ invoice, role }: InvoiceRowActionsProps) {
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-52">
               <DropdownMenuLabel className="font-mono text-xs text-zinc-500">
-                {invoice.number}
+                {invoiceNumberLabel(invoice.number, tCommon("draft"))}
               </DropdownMenuLabel>
               <DropdownMenuItem asChild>
                 <Link href={`/invoices/${invoice.id}`}>{t("view")}</Link>

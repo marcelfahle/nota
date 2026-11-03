@@ -1,5 +1,6 @@
 {
   "pdf": {
+    "draft": "Draft",
     "invoice": "Invoice",
     "creditNote": "Credit note",
     "forInvoice": "For invoice {number}",
@@ -140,6 +141,7 @@
     }
   },
   "common": {
+    "draft": "Draft",
     "cancel": "Cancel",
     "save": "Save",
     "saving": "Saving…",
@@ -1280,6 +1282,7 @@
       "send_invoice_reminder": "Send reminder"
     },
     "cards": {
+      "draft": "Draft",
       "zip": "{count, plural, one {# invoice} other {# invoices}} · ZIP",
       "downloadArchive": "Download archive",
       "history": "Invoice history",

@@ -18,6 +18,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { invoiceNumberLabel } from "@/lib/invoice-number";
 import { formatClientAddress } from "@/lib/postal-address";
 import { formatTaxIdentifier, taxIdentifierFromColumns } from "@/lib/tax-identifier";
 import { formatCurrency, formatDate, type Locale } from "@/lib/utils";
@@ -73,6 +74,7 @@ export function ClientDetailView({
   locale?: Locale;
 }) {
   const t = useTranslations("clients");
+  const tCommon = useTranslations("common");
   const [editing, setEditing] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -192,7 +194,9 @@ export function ClientDetailView({
                 key={inv.id}
               >
                 <div className="flex items-center gap-4">
-                  <span className="font-mono text-sm">{inv.number}</span>
+                  <span className="font-mono text-sm">
+                    {invoiceNumberLabel(inv.number, tCommon("draft"))}
+                  </span>
                   {inv.status && <StatusBadge status={inv.status} />}
                 </div>
                 <div className="text-right">
