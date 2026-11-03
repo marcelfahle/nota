@@ -22,6 +22,7 @@ import { ChatMarkdown } from "@/components/chat-markdown";
 import { NotaGlyph } from "@/components/nota-marks";
 import { Button } from "@/components/ui/button";
 import type { ChatActivity } from "@/lib/chat-store";
+import { invoiceNumberLabel } from "@/lib/invoice-number";
 import { formatCurrency, type Locale } from "@/lib/utils";
 import { cn } from "@/lib/utils";
 
@@ -340,7 +341,9 @@ function ToolResultCard({
             {output.invoice.status ?? "draft"}
           </span>
         </div>
-        <p className="font-mono text-sm font-semibold text-zinc-950">{output.invoice.number}</p>
+        <p className="font-mono text-sm font-semibold text-zinc-950">
+          {invoiceNumberLabel(output.invoice.number, t("cards.draft"))}
+        </p>
         <p className="mt-1 text-sm text-zinc-600">
           {output.invoice.clientName ?? t("cards.unknownClient")}
         </p>
@@ -392,7 +395,9 @@ function ToolResultCard({
               key={invoice.id ?? invoice.number}
             >
               <div>
-                <p className="font-mono text-zinc-950">{invoice.number}</p>
+                <p className="font-mono text-zinc-950">
+                  {invoiceNumberLabel(invoice.number, t("cards.draft"))}
+                </p>
                 <p className="text-xs text-zinc-500">
                   {invoice.clientName ?? t("cards.unknownClient")}
                 </p>

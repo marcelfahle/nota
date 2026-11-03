@@ -244,6 +244,11 @@
     background: var(--sheet);
     color: var(--ink);
   }
+  /* The on-screen sheet is set exactly like the PDF: same face, same points. */
+  .invoice-sheet {
+    font-family: var(--font-inter), Inter, sans-serif;
+    font-variation-settings: normal;
+  }
   .highlighter-swipe {
     background: linear-gradient(transparent 18%, #d1fd39 18%, #d1fd39 90%, transparent 90%);
     color: #1f1b16;

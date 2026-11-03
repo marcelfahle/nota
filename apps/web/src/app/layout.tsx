@@ -1,7 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { NextIntlClientProvider } from "next-intl";
 import { getLocale } from "next-intl/server";
-import { Archivo, Geist_Mono, Newsreader } from "next/font/google";
+import { Archivo, Geist_Mono, Inter, Newsreader } from "next/font/google";
 
 import { APP_NAME } from "@/lib/app-brand";
 import { getCurrentUserOrNull } from "@/lib/auth";
@@ -17,6 +17,13 @@ const sans = Archivo({
 const mono = Geist_Mono({
   subsets: ["latin"],
   variable: "--font-geist-mono",
+});
+
+// Documents on screen use the face the PDF is set in, so the preview is the invoice.
+const document = Inter({
+  subsets: ["latin"],
+  variable: "--font-inter",
+  weight: ["400", "500", "600"],
 });
 
 const voice = Newsreader({
@@ -60,7 +67,9 @@ export default async function RootLayout({
           <meta content={theme === "dark" ? "#181512" : "#fbf9f4"} name="theme-color" />
         )}
       </head>
-      <body className={`${sans.variable} ${mono.variable} ${voice.variable} antialiased`}>
+      <body
+        className={`${sans.variable} ${mono.variable} ${voice.variable} ${document.variable} antialiased`}
+      >
         <NextIntlClientProvider>{children}</NextIntlClientProvider>
       </body>
     </html>

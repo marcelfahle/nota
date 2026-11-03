@@ -16,6 +16,7 @@ import {
   getInvoiceListStatus,
   matchesInvoiceSearch,
 } from "@/lib/invoice-list";
+import { invoiceNumberLabel } from "@/lib/invoice-number";
 import { formatCurrency, formatDate } from "@/lib/utils";
 
 const FILTERS = ["all", "draft", "open", "overdue", "paid"] as const;
@@ -32,7 +33,7 @@ export default async function InvoicesPage({
   const query = first(params.q)?.trim() ?? "";
   const { org, role, user } = await getCurrentUser();
   const locale = toIntlLocale(user.locale);
-  const t = await getTranslations("invoices");
+  const [t, tCommon] = await Promise.all([getTranslations("invoices"), getTranslations("common")]);
 
   const invoiceList = await db
     .select({
@@ -236,7 +237,7 @@ export default async function InvoicesPage({
                     >
                       <td className="px-3 py-2.5">
                         <Link className="font-mono text-xs font-medium hover:underline" href={href}>
-                          {invoice.number}
+                          {invoiceNumberLabel(invoice.number, tCommon("draft"))}
                         </Link>
                       </td>
                       <td className="max-w-[260px] px-3 py-2.5">

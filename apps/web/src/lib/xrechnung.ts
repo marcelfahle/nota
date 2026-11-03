@@ -256,7 +256,7 @@ export function generateXRechnung(data: XRechnungData): string {
   const { business, client, invoice } = data;
   const cur = escapeXml(invoice.currency);
   const tax = taxCategory(invoice.taxTreatment, invoice.taxRate);
-  const buyerName = escapeXml(client.company || client.name);
+  const buyerName = escapeXml(client.company?.trim() || client.name);
   const iban = paymentIban({ details: business.bankDetails, iban: business.iban });
   const bic = business.bic || null;
   const isCreditNote = invoice.kind === "credit_note";

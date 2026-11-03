@@ -42,7 +42,7 @@ function parseClientFormData(formData: FormData) {
     address: (formData.get("address") as string) || null,
     bankAccountId: bankAccountId && bankAccountId !== "" ? bankAccountId : null,
     city: (formData.get("city") as string) || null,
-    company: (formData.get("company") as string) || null,
+    company: ((formData.get("company") as string) || "").trim() || null,
     countryCode: (formData.get("countryCode") as string) || null,
     defaultBuyerReference: (formData.get("defaultBuyerReference") as string) || null,
     defaultCurrency: (formData.get("defaultCurrency") as string) || undefined,

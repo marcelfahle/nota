@@ -11,6 +11,7 @@ import { getCurrentUser, getViewAs } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { bankAccounts, clients, invoices, jobs, payments, proposals } from "@/lib/db/schema";
 import { toIntlLocale } from "@/lib/i18n";
+import { invoiceNumberLabel } from "@/lib/invoice-number";
 import { getInvoiceDetail } from "@/lib/invoice-service";
 import { formatCurrency, type Locale } from "@/lib/utils";
 
@@ -19,7 +20,7 @@ const balance = sql<string>`greatest(coalesce(${invoices.total}::numeric, 0) - c
 export default async function HomePage() {
   const [{ org, user }, viewAs] = await Promise.all([getCurrentUser(), getViewAs()]);
   const locale = toIntlLocale(user.locale);
-  const t = await getTranslations("home");
+  const [t, tCommon] = await Promise.all([getTranslations("home"), getTranslations("common")]);
 
   if (!org.firstRunCompletedAt) {
     if (viewAs) {
@@ -282,7 +283,7 @@ export default async function HomePage() {
                   href={`/invoices/${invoice.id}`}
                 >
                   <span className="col-start-1 row-start-1 font-mono text-xs text-muted-foreground">
-                    {invoice.number}
+                    {invoiceNumberLabel(invoice.number, tCommon("draft"))}
                   </span>
                   <span className="col-start-1 row-start-2 truncate font-medium sm:col-start-2 sm:row-start-1">
                     {invoice.clientName}

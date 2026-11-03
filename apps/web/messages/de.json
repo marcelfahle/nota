@@ -1,5 +1,6 @@
 {
   "pdf": {
+    "draft": "Entwurf",
     "invoice": "Rechnung",
     "creditNote": "Rechnungskorrektur / Gutschrift",
     "forInvoice": "Zu Rechnung Nr. {number}",
@@ -140,6 +141,7 @@
     }
   },
   "common": {
+    "draft": "Entwurf",
     "cancel": "Abbrechen",
     "save": "Speichern",
     "saving": "Wird gespeichert…",
@@ -1280,6 +1282,7 @@
       "send_invoice_reminder": "Erinnerung senden"
     },
     "cards": {
+      "draft": "Entwurf",
       "zip": "{count, plural, one {# Rechnung} other {# Rechnungen}} · ZIP",
       "downloadArchive": "Archiv herunterladen",
       "history": "Rechnungsverlauf",

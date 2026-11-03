@@ -1,9 +1,12 @@
 import { Document, Font, Image, Link, Page, StyleSheet, Text, View } from "@react-pdf/renderer";
 
-import { getTranslator, toIntlLocale, type AppLocale } from "@/lib/i18n";
+import { getTranslator, toIntlLocale } from "@/lib/i18n";
 import { formatIbanDisplay } from "@/lib/iban";
-import { formatTaxIdentifier, type TaxIdentifier } from "@/lib/tax-identifier";
-import { type TaxTreatment, taxTreatmentNote } from "@/lib/tax-treatment";
+import { LOGO_BOX } from "@/lib/image-size";
+import { isDraftNumber } from "@/lib/invoice-number";
+import { clientCompanyLine, type InvoiceSheetProps } from "@/lib/invoice-sheet";
+import { formatTaxIdentifier } from "@/lib/tax-identifier";
+import { taxTreatmentNote } from "@/lib/tax-treatment";
 import { formatCurrency, formatDate, formatNumber, formatQuantity, type Locale } from "@/lib/utils";
 
 // ---------------------------------------------------------------------------
@@ -29,57 +32,6 @@ Font.register({
 
 // Disable hyphenation for cleaner text
 Font.registerHyphenationCallback((word) => [word]);
-
-// ---------------------------------------------------------------------------
-// Types
-// ---------------------------------------------------------------------------
-type LineItem = {
-  amount: string;
-  description: string;
-  quantity: string;
-  unitPrice: string;
-};
-
-type InvoicePdfProps = {
-  business: {
-    address?: string | null;
-    bankDetails?: string | null;
-    bic?: string | null;
-    brandColor?: string | null;
-    iban?: string | null;
-    logoSrc?: string | null;
-    name?: string | null;
-    taxIdentifier?: TaxIdentifier | null;
-  };
-  client: {
-    address?: string | null;
-    company?: string | null;
-    email: string;
-    name: string;
-    taxIdentifier?: TaxIdentifier | null;
-  };
-  invoice: {
-    buyerReference?: string | null;
-    currency: string;
-    dueAt: string;
-    issuedAt: string;
-    kind?: "credit_note" | "invoice";
-    lineItems: Array<LineItem>;
-    notes?: string | null;
-    number: string;
-    originalNumber?: string | null;
-    paymentLinkUrl?: string | null;
-    servicePeriodEnd?: string | null;
-    servicePeriodStart?: string | null;
-    subtotal: string;
-    taxAmount: string;
-    taxRate: string;
-    taxTreatment: TaxTreatment;
-    total: string;
-  };
-  /** The language the document is written in, with its number and date formats. */
-  locale?: AppLocale;
-};
 
 // ---------------------------------------------------------------------------
 // Color palette — monochrome, Vercel-inspired
@@ -219,10 +171,8 @@ const styles = StyleSheet.create({
   lineItemQty: { color: c.secondary, textAlign: "right" as const, width: "15%" },
   lineItemRate: { color: c.secondary, textAlign: "right" as const, width: "20%" },
   logoImage: {
-    height: 44,
     marginBottom: 12,
     objectFit: "contain" as const,
-    width: 44,
   },
   notes: {
     marginTop: 32,
@@ -390,7 +340,7 @@ export function InvoicePdf({
   client,
   invoice,
   locale: language = "en",
-}: InvoicePdfProps) {
+}: InvoiceSheetProps) {
   const currency = invoice.currency;
   const locale = toIntlLocale(language);
   const t = getTranslator(language, "pdf");
@@ -398,6 +348,10 @@ export function InvoicePdf({
   const hasPaymentDetails = business.iban || business.bankDetails || invoice.paymentLinkUrl;
   const accent = /^#[\da-f]{6}$/i.test(business.brandColor ?? "") ? business.brandColor! : c.text;
   const isCreditNote = invoice.kind === "credit_note";
+  // A draft has no number yet; the document says so instead of printing the identifier.
+  const number = isDraftNumber(invoice.number) ? t("draft") : invoice.number;
+  const companyLine = clientCompanyLine(client);
+  const logo = business.logo;
   const servicePeriod = formatServicePeriod(
     invoice.servicePeriodStart,
     invoice.servicePeriodEnd,
@@ -415,7 +369,15 @@ export function InvoicePdf({
         {/* ── Header ── */}
         <View style={styles.header}>
           <View style={styles.headerLeft}>
-            {business.logoSrc && <Image src={business.logoSrc} style={styles.logoImage} />}
+            {logo ? (
+              <Image
+                src={logo.src}
+                style={[
+                  styles.logoImage,
+                  { height: logo.height ?? LOGO_BOX.height, width: logo.width ?? LOGO_BOX.height },
+                ]}
+              />
+            ) : null}
             {business.name && <Text style={styles.businessName}>{business.name}</Text>}
             {business.address &&
               business.address.split("\n").map((line, i) => (
@@ -425,7 +387,7 @@ export function InvoicePdf({
               ))}
           </View>
           <View style={styles.headerRight}>
-            <Text style={[styles.invoiceNumber, { color: accent }]}>{invoice.number}</Text>
+            <Text style={[styles.invoiceNumber, { color: accent }]}>{number}</Text>
             <Text style={styles.invoiceLabel}>{isCreditNote ? t("creditNote") : t("invoice")}</Text>
             {invoice.originalNumber ? (
               <Text style={styles.invoiceLabel}>
@@ -440,9 +402,7 @@ export function InvoicePdf({
           <View style={{ maxWidth: 260 }}>
             <Text style={styles.sectionLabel}>{t("billTo")}</Text>
             <Text style={styles.clientName}>{client.name}</Text>
-            {client.company && client.company !== client.name && (
-              <Text style={styles.clientCompany}>{client.company}</Text>
-            )}
+            {companyLine ? <Text style={styles.clientCompany}>{companyLine}</Text> : null}
             <Text style={styles.clientEmail}>{client.email}</Text>
             {client.address &&
               client.address.split("\n").map((line, i) => (
@@ -573,9 +533,7 @@ export function InvoicePdf({
             ) : null}
             <View style={[styles.paymentRow, { marginBottom: 0 }]}>
               <Text style={styles.paymentLabel}>{t("reference")}</Text>
-              <Text style={styles.paymentValue}>
-                {t("referenceValue", { number: invoice.number })}
-              </Text>
+              <Text style={styles.paymentValue}>{t("referenceValue", { number })}</Text>
             </View>
           </View>
         )}

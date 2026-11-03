@@ -599,7 +599,7 @@ export function createChatTools(auth: ChatToolContext) {
             .values({
               address: input.address,
               city: input.city,
-              company: input.company,
+              company: input.company?.trim() || null,
               countryCode: input.countryCode?.toUpperCase(),
               defaultBuyerReference: input.defaultBuyerReference,
               defaultCurrency: input.defaultCurrency ?? auth.org.defaultCurrency ?? "EUR",
