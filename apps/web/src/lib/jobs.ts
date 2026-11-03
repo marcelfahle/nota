@@ -16,8 +16,8 @@ import {
   users,
 } from "@/lib/db/schema";
 import { type InvoiceAttachment, parseInvoiceAttachments } from "@/lib/e-invoice-delivery";
-import { sendEmail } from "@/lib/email";
-import { getAppEnv } from "@/lib/env";
+import { senderFrom, sendEmail } from "@/lib/email";
+import { getAppEnv, getEmailEnv } from "@/lib/env";
 import { documentLocaleOf, getTranslator, isAppLocale, type AppLocale } from "@/lib/i18n";
 import type { InvoiceDocumentOrg } from "@/lib/invoice-document";
 import { loadInvoicePdf, loadInvoiceXml } from "@/lib/invoice-documents";
@@ -31,13 +31,21 @@ type EmailJobType =
   | "send_invoice_reminder_email"
   | "send_payment_received_email";
 
-type EmailJobPayload = {
+export type EmailJobPayload = {
   /** Decided at send time, so a settings change later never alters what was promised. */
   attachments: Array<InvoiceAttachment>;
+  /** Copies for the people the sender named. */
+  cc?: Array<string>;
   invoiceId: string;
+  /** The sender's own words for the body. */
+  message?: string;
   proposalId?: string;
   recipient?: string;
   reminder?: ReturnType<typeof reminderPayloadSchema.parse>;
+  /** Replies go to the person who sent it. */
+  replyTo?: string;
+  /** Named on the From line: "Marcel Fahle via Nota". */
+  senderName?: string;
   source?: "api" | "chat" | "cli" | "mcp" | "system" | "web";
   sourceClient?: string | null;
 };
@@ -46,7 +54,11 @@ function getRetryDelayMs(attempts: number) {
   return Math.min(60, 5 * 2 ** Math.max(attempts - 1, 0)) * 60 * 1000;
 }
 
-function parseEmailJobPayload(payload: Record<string, unknown>): EmailJobPayload | null {
+function optionalString(value: unknown) {
+  return typeof value === "string" && value.trim() ? value : undefined;
+}
+
+export function parseEmailJobPayload(payload: Record<string, unknown>): EmailJobPayload | null {
   if (typeof payload.invoiceId !== "string") {
     return null;
   }
@@ -54,12 +66,19 @@ function parseEmailJobPayload(payload: Record<string, unknown>): EmailJobPayload
   if (typeof payload.proposalId === "string" && !reminder.success) {
     return null;
   }
+  const cc = Array.isArray(payload.cc)
+    ? payload.cc.filter((address): address is string => typeof address === "string")
+    : [];
   return {
     attachments: parseInvoiceAttachments(payload.attachments),
+    cc: cc.length ? cc : undefined,
     invoiceId: payload.invoiceId,
+    message: optionalString(payload.message),
     proposalId: typeof payload.proposalId === "string" ? payload.proposalId : undefined,
     recipient: typeof payload.recipient === "string" ? payload.recipient : undefined,
     reminder: reminder.success ? reminder.data : undefined,
+    replyTo: optionalString(payload.replyTo),
+    senderName: optionalString(payload.senderName),
     source:
       typeof payload.source === "string" &&
       ["api", "chat", "cli", "mcp", "system", "web"].includes(payload.source)
@@ -159,8 +178,10 @@ async function sendInvoiceEmail(
   attachments: Array<InvoiceAttachment>,
   recipient?: string,
   idempotencyKey?: string,
+  personal: Pick<EmailJobPayload, "cc" | "message" | "replyTo" | "senderName"> = {},
 ) {
   const { bankDetails, client, invoice, logoSrc, org } = await getInvoiceEmailContext(invoiceId);
+  const emailEnv = getEmailEnv();
 
   const businessName = org.legalName ?? org.businessName ?? org.name ?? APP_NAME;
   const email = {
@@ -172,6 +193,7 @@ async function sendInvoiceEmail(
     invoiceNumber: invoice.number,
     invoiceUrl: getPublicInvoiceUrl(invoice.publicToken),
     locale: documentLocaleOf(invoice, org),
+    message: personal.message ?? null,
     paymentLinkUrl: invoice.stripePaymentLinkUrl,
     // A copy sent to the sender is labelled as one in the subject and the body.
     testCopy: Boolean(recipient),
@@ -181,8 +203,18 @@ async function sendInvoiceEmail(
 
   await sendEmail({
     attachments: await renderInvoiceAttachments(org, invoiceId, attachments, { logoSrc }),
+    // A test copy goes to the sender alone; nobody in CC should see a draft.
+    cc: recipient ? undefined : personal.cc,
+    from:
+      personal.senderName && emailEnv.EMAIL_FROM_ADDRESS
+        ? senderFrom(personal.senderName, {
+            address: emailEnv.EMAIL_FROM_ADDRESS,
+            name: emailEnv.EMAIL_FROM_NAME,
+          })
+        : undefined,
     idempotencyKey,
     react: InvoiceSentEmail(email),
+    replyTo: personal.replyTo,
     subject: invoiceSentSubject(email),
     to: [recipient ?? client.email],
   });
@@ -340,14 +372,14 @@ async function sendPaymentReceivedEmail(invoiceId: string, idempotencyKey?: stri
 async function performEmailJob(type: EmailJobType, payload: EmailJobPayload, jobId: string) {
   switch (type) {
     case "send_invoice_email":
-      await sendInvoiceEmail(payload.invoiceId, payload.attachments, undefined, jobId);
+      await sendInvoiceEmail(payload.invoiceId, payload.attachments, undefined, jobId, payload);
       return;
     case "send_invoice_test_email":
       if (!payload.recipient) {
         throw new Error("Test invoice recipient is missing");
       }
       // A test copy of a draft may still be incomplete, so it carries the PDF only.
-      await sendInvoiceEmail(payload.invoiceId, ["pdf"], payload.recipient, jobId);
+      await sendInvoiceEmail(payload.invoiceId, ["pdf"], payload.recipient, jobId, payload);
       return;
     case "send_invoice_reminder_email":
       await sendInvoiceReminderEmail(payload.invoiceId, payload.reminder, payload, jobId);

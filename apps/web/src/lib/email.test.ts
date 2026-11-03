@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 
 import { PasswordResetEmail } from "@/emails/password-reset";
-import { createHeloSender } from "@/lib/email";
+import { createHeloSender, senderFrom } from "@/lib/email";
 
 const config = {
   EMAIL_FROM_ADDRESS: "hello@withnota.com",
@@ -97,4 +97,34 @@ test("Helo surfaces network failures and timeouts safely without retrying a send
     );
     expect(attempts).toBe(1);
   }
+});
+
+test("Helo carries CC copies and a reply-to, and names the sender on the From line", async () => {
+  let payload: Record<string, unknown> = {};
+  const sender = createHeloSender(config, (async (_url, options) => {
+    payload = JSON.parse(String(options?.body));
+    return Response.json({ messageId, status: "accepted" });
+  }) as typeof fetch);
+  await sender({
+    ...email,
+    cc: ["cc@example.com", "cc2@example.com"],
+    from: senderFrom('Marcel "Max" <Fahle>', {
+      address: config.EMAIL_FROM_ADDRESS,
+      name: config.EMAIL_FROM_NAME,
+    }),
+    replyTo: "marcel@example.com",
+  });
+  expect(payload.cc).toEqual([{ email: "cc@example.com" }, { email: "cc2@example.com" }]);
+  expect(payload.replyTo).toEqual({ email: "marcel@example.com" });
+  expect(payload.from).toEqual({
+    email: config.EMAIL_FROM_ADDRESS,
+    name: "Marcel Max Fahle via Nota",
+  });
+
+  await sender(email);
+  expect(payload.cc).toBeUndefined();
+  expect(payload.replyTo).toBeUndefined();
+  expect(senderFrom("", { address: "hello@withnota.com", name: "Nota" })).toBe(
+    "Nota <hello@withnota.com>",
+  );
 });

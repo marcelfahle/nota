@@ -463,7 +463,19 @@
     "unknownClient": "Unknown client",
     "download": "Download",
     "open": "Open",
-    "documentDetail": "{date} · sha256 {sha} · {size}"
+    "documentDetail": "{date} · sha256 {sha} · {size}",
+    "send": {
+      "title": "Send {number}",
+      "description": "The invoice goes to {email} with the PDF attached. Replies come back to you.",
+      "message": "Your message",
+      "messageHint": "In your own words. It replaces the standard greeting; the invoice box and button stay.",
+      "messagePlaceholder": "Hi both, here is the invoice for October. Thanks as always!",
+      "cc": "CC",
+      "ccHint": "Up to {max} addresses, separated by commas. Remembered for this client.",
+      "cancel": "Cancel",
+      "submit": "Send invoice",
+      "sending": "Sending…"
+    }
   },
   "invoiceForm": {
     "newInvoice": "New invoice",

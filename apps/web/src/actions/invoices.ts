@@ -134,9 +134,29 @@ export async function deleteInvoice(invoiceId: string) {
   return { success: true };
 }
 
-export async function sendInvoice(invoiceId: string) {
+const sendOptionsSchema = z.object({
+  cc: z.array(z.string().trim()).optional(),
+  message: z.string().optional(),
+});
+
+/**
+ * Sends a draft. With `options` the person chose a note and copies for this
+ * send; without them the client's remembered ones apply.
+ */
+export async function sendInvoice(
+  invoiceId: string,
+  options?: { cc?: Array<string>; message?: string },
+) {
+  const parsedOptions = options === undefined ? undefined : sendOptionsSchema.safeParse(options);
+  if (parsedOptions && !parsedOptions.success) {
+    return { error: await localizeError(parsedOptions.error.issues[0].message) };
+  }
   const currentUser = await getCurrentUser();
-  const serviceResult = await sendInvoiceService(buildServiceContext(currentUser), invoiceId);
+  const serviceResult = await sendInvoiceService(
+    buildServiceContext(currentUser),
+    invoiceId,
+    parsedOptions?.data,
+  );
   if ("error" in serviceResult) {
     return { error: await localizeMutationError(serviceResult) };
   }

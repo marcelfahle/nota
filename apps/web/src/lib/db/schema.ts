@@ -283,6 +283,9 @@ export const clients = pgTable("clients", {
   postalCode: text("postal_code"),
   // German public-sector buyers must receive an XRechnung with their Leitweg-ID.
   publicSector: boolean("public_sector").notNull().default(false),
+  // What the last send to this client carried; prefilled next time.
+  sendCc: text("send_cc").array(),
+  sendMessage: text("send_message"),
   street: text(),
   taxIdentifierCanonicalValue: text("tax_identifier_canonical_value"),
   taxIdentifierCountryCode: text("tax_identifier_country_code"),

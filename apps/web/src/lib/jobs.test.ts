@@ -74,7 +74,7 @@ async function keep(kind: "pdf" | "xrechnung", content: string) {
   });
 }
 
-const { renderInvoiceAttachments } = await import("./jobs");
+const { parseEmailJobPayload, renderInvoiceAttachments } = await import("./jobs");
 const org = { id: "org_1" } as Parameters<typeof renderInvoiceAttachments>[0];
 
 test("a German send carries the PDF and the XML under the same base name", async () => {
@@ -124,4 +124,34 @@ test("a recorded original whose file is gone fails the job rather than re-render
     "missing from storage",
   );
   storedRows = [];
+});
+
+test("a send job carries the personal message, copies and reply-to, and tolerates their absence", () => {
+  expect(
+    parseEmailJobPayload({
+      attachments: ["pdf"],
+      cc: ["cc@example.com", 7, "boss@example.com"],
+      invoiceId: "inv_1",
+      message: "Hi both, here is October.",
+      replyTo: "marcel@example.com",
+      senderName: "Marcel Fahle",
+    }),
+  ).toMatchObject({
+    cc: ["cc@example.com", "boss@example.com"],
+    invoiceId: "inv_1",
+    message: "Hi both, here is October.",
+    replyTo: "marcel@example.com",
+    senderName: "Marcel Fahle",
+  });
+  const plain = parseEmailJobPayload({
+    attachments: ["pdf"],
+    cc: [],
+    invoiceId: "inv_1",
+    message: " ",
+  });
+  expect(plain).toMatchObject({ invoiceId: "inv_1" });
+  expect(plain?.cc).toBeUndefined();
+  expect(plain?.message).toBeUndefined();
+  expect(plain?.replyTo).toBeUndefined();
+  expect(plain?.senderName).toBeUndefined();
 });

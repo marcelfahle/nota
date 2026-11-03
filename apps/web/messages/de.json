@@ -463,7 +463,19 @@
     "unknownClient": "Unbekannter Kunde",
     "download": "Herunterladen",
     "open": "Öffnen",
-    "documentDetail": "{date} · sha256 {sha} · {size}"
+    "documentDetail": "{date} · sha256 {sha} · {size}",
+    "send": {
+      "title": "{number} senden",
+      "description": "Die Rechnung geht mit PDF an {email}. Antworten landen bei dir.",
+      "message": "Deine Nachricht",
+      "messageHint": "In deinen Worten. Sie ersetzt die Standardbegrüßung; Rechnungsbox und Button bleiben.",
+      "messagePlaceholder": "Hallo zusammen, anbei die Rechnung für Oktober. Wie immer vielen Dank!",
+      "cc": "CC",
+      "ccHint": "Bis zu {max} Adressen, durch Kommas getrennt. Wird für diesen Kunden gemerkt.",
+      "cancel": "Abbrechen",
+      "submit": "Rechnung senden",
+      "sending": "Wird gesendet…"
+    }
   },
   "invoiceForm": {
     "newInvoice": "Neue Rechnung",

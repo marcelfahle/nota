@@ -1024,11 +1024,16 @@ export function createChatTools(auth: ChatToolContext) {
       }),
     }),
     send_invoice: tool({
-      description: "Send a draft invoice.",
+      description:
+        "Send a draft invoice. Optionally with a personal message in the sender's own words (shown instead of the stock greeting) and CC addresses; without them, the note and copies from the client's last send apply.",
       execute: (input) =>
         withRetry(async () => {
           const invoice = await resolveInvoice(auth, input);
-          const result = await sendInvoice(buildServiceContext(auth), invoice.id);
+          const options =
+            input.message === undefined && input.cc === undefined
+              ? undefined
+              : { cc: input.cc, message: input.message };
+          const result = await sendInvoice(buildServiceContext(auth), invoice.id, options);
           if ("error" in result) {
             throw new Error(result.error);
           }
@@ -1044,8 +1049,10 @@ export function createChatTools(auth: ChatToolContext) {
           };
         }, MUTATION_RETRIES),
       inputSchema: z.object({
+        cc: z.array(z.string().trim()).max(5).optional(),
         invoiceId: z.string().uuid().optional(),
         invoiceNumber: z.string().trim().optional(),
+        message: z.string().max(2000).optional(),
       }),
     }),
     send_invoice_reminder: tool({

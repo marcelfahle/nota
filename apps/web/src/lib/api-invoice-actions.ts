@@ -14,6 +14,7 @@ import {
   type InvoiceMutationInput,
   type InvoiceMutationResult,
   type InvoiceServiceContext,
+  type SendInvoiceOptions,
   updateInvoice as updateInvoiceService,
 } from "@/lib/invoice-service";
 import { getInsufficientPermissionsError } from "@/lib/roles";
@@ -130,10 +131,11 @@ export async function deleteInvoiceFromApi(
 export async function sendInvoiceFromApi(
   auth: ApiRequestAuthContext,
   invoiceId: string,
+  options?: SendInvoiceOptions,
 ): Promise<InvoiceActionResult> {
   return toInvoiceActionResult(
     auth,
-    await sendInvoiceService(buildServiceContext(auth), invoiceId),
+    await sendInvoiceService(buildServiceContext(auth), invoiceId, options),
   );
 }
 
