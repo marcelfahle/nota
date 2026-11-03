@@ -239,6 +239,8 @@ export function InvoiceDetailView({
 }: InvoiceDetailProps) {
   const t = useTranslations("invoiceDetail");
   const tCommon = useTranslations("common");
+  // What people see as the number: a draft is called a draft, never its identifier.
+  const numberLabel = invoiceNumberLabel(invoice.number, tCommon("draft"));
   const tTreatment = useTranslations("taxTreatment");
   const tProblems = useTranslations("problems");
   const router = useRouter();
@@ -355,8 +357,8 @@ export function InvoiceDetailView({
   async function handleDestructiveAction(action: "cancel" | "delete") {
     const question =
       action === "delete"
-        ? t("confirmDelete", { number: invoice.number })
-        : t("confirmCancel", { number: invoice.number });
+        ? t("confirmDelete", { number: numberLabel })
+        : t("confirmCancel", { number: numberLabel });
     if (!window.confirm(question)) {
       return;
     }
@@ -431,7 +433,7 @@ export function InvoiceDetailView({
         </Link>
         <div className="flex flex-col justify-between gap-4 lg:flex-row lg:items-end">
           <h1 className="break-words" id="invoice-title">
-            {invoiceNumberLabel(invoice.number, tCommon("draft"))}{" "}
+            {numberLabel}{" "}
             <span className="font-normal text-muted-foreground">{invoice.client.name}</span>
           </h1>
           <div aria-label={t("actions")} className="flex flex-wrap gap-2">
@@ -723,7 +725,7 @@ export function InvoiceDetailView({
         <DialogContent>
           <form onSubmit={handleSend}>
             <DialogHeader>
-              <DialogTitle>{t("send.title", { number: invoice.number })}</DialogTitle>
+              <DialogTitle>{t("send.title", { number: numberLabel })}</DialogTitle>
               <DialogDescription>
                 {t("send.description", { email: invoice.client.email })}
               </DialogDescription>
