@@ -123,6 +123,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
         pending: emailJobSummary?.pending ?? 0,
         processing: emailJobSummary?.processing ?? 0,
       }}
+      faviconUrl={org.faviconUrl}
       locale={toIntlLocale(user.locale)}
       logoUrl={org.logoUrl}
       navCounts={{

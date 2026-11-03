@@ -36,3 +36,24 @@ test("a personal message replaces the stock greeting and thanks, kept verbatim a
   expect(stock).toContain("Hi Max Kunde");
   expect(stock).toContain("Thank you for your business.");
 });
+
+test("the sender is the brand: their logo heads the email, their colour paints the button, Nota signs off", async () => {
+  const html = await render(
+    InvoiceSentEmail({
+      ...props,
+      brandColor: "#d1fd39",
+      logo: { height: 24, src: "https://cdn.test/wordmark.png", width: 200 },
+    }),
+  );
+  expect(html).toContain('src="https://cdn.test/wordmark.png"');
+  expect(html).toContain('width="200"');
+  expect(html).toContain('height="24"');
+  expect(html).toContain("background-color:#d1fd39");
+  expect(html).toContain("color:#1f1b16");
+  expect(html).toContain("Sent with");
+  expect(html).toContain("https://withnota.com");
+  // Without a logo the business name heads the email, never the app's name.
+  const plain = await render(InvoiceSentEmail(props));
+  expect(plain).toContain("Studio Beispiel");
+  expect(plain).not.toMatch(/>nota</);
+});

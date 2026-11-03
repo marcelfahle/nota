@@ -57,7 +57,7 @@ export function PublicInvoiceView({ invoice, token }: { invoice: PublicInvoice; 
               {invoice.organization.logoUrl ? (
                 <img
                   alt={t("logoAlt", { business: businessName })}
-                  className="size-10 shrink-0 rounded-md object-contain sm:size-12"
+                  className="h-10 w-auto max-w-40 shrink-0 object-contain object-left sm:h-12 sm:max-w-48"
                   src={invoice.organization.logoUrl}
                 />
               ) : (

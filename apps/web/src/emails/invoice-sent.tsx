@@ -6,17 +6,28 @@ import {
   Heading,
   Hr,
   Html,
+  Img,
+  Link,
   Preview,
   Section,
   Text,
 } from "@react-email/components";
 
-import { APP_NAME } from "@/lib/app-brand";
+import { APP_NAME, HOME_URL } from "@/lib/app-brand";
+import { hexColor, readableTextColor } from "@/lib/color";
 import { getTranslator, toIntlLocale, type AppLocale } from "@/lib/i18n";
 import { formatCurrency, formatDate, type Locale } from "@/lib/utils";
 
+/** The sender's logo, fitted for the email header; width and height keep mail clients from stretching it. */
+export type EmailLogo = { height: number; src: string; width: number };
+
+/** The box the sender's logo is fitted into at the top of an email, in CSS pixels. */
+export const EMAIL_LOGO_BOX = { height: 48, width: 200 };
+
 type InvoiceSentEmailProps = {
   bankDetails?: string | null;
+  /** The sender's brand colour: the button wears it. */
+  brandColor?: string | null;
   businessName: string;
   clientName: string;
   currency: string;
@@ -25,6 +36,8 @@ type InvoiceSentEmailProps = {
   invoiceUrl: string | null;
   /** The document language: the customer reads this, not the sender. */
   locale?: AppLocale;
+  /** The sender's logo; without one the business name heads the email. */
+  logo?: EmailLogo | null;
   /** The sender's own words, shown instead of the stock greeting and thanks. */
   message?: string | null;
   paymentLinkUrl: string | null;
@@ -66,6 +79,7 @@ export function invoiceSentSubject(
 
 export function InvoiceSentEmail({
   bankDetails,
+  brandColor,
   businessName,
   clientName,
   currency,
@@ -73,6 +87,7 @@ export function InvoiceSentEmail({
   invoiceNumber,
   invoiceUrl,
   locale: language = "en",
+  logo = null,
   message = null,
   paymentLinkUrl,
   reminder = false,
@@ -83,6 +98,8 @@ export function InvoiceSentEmail({
   const locale = toIntlLocale(language);
   const t = getTranslator(language, "emails.invoiceSent");
   const actionUrl = invoiceUrl ?? paymentLinkUrl;
+  // The sender is the brand the customer sees; the app signs off at the bottom.
+  const accent = hexColor(brandColor, "#18181b");
   const subject = invoiceSentSubject({
     businessName,
     currency,
@@ -100,7 +117,17 @@ export function InvoiceSentEmail({
       <Body style={styles.body}>
         <Container style={styles.container}>
           <Section style={styles.logoSection}>
-            <Text style={styles.logo}>{APP_NAME}</Text>
+            {logo ? (
+              <Img
+                alt={businessName}
+                height={logo.height}
+                src={logo.src}
+                style={styles.logoImage}
+                width={logo.width}
+              />
+            ) : (
+              <Text style={styles.logo}>{businessName}</Text>
+            )}
           </Section>
 
           {testCopy ? (
@@ -136,7 +163,14 @@ export function InvoiceSentEmail({
 
           {actionUrl ? (
             <Section style={styles.buttonSection}>
-              <Button href={actionUrl} style={styles.button}>
+              <Button
+                href={actionUrl}
+                style={{
+                  ...styles.button,
+                  backgroundColor: accent,
+                  color: readableTextColor(accent),
+                }}
+              >
                 {invoiceUrl ? t("viewInvoice") : t("payNow")}
               </Button>
             </Section>
@@ -155,6 +189,12 @@ export function InvoiceSentEmail({
           <Hr style={styles.hr} />
 
           <Text style={styles.footer}>{businessName}</Text>
+          <Text style={styles.sentWith}>
+            {t("sentWith")}{" "}
+            <Link href={HOME_URL} style={styles.sentWithLink}>
+              Nota.
+            </Link>
+          </Text>
         </Container>
       </Body>
     </Html>
@@ -256,8 +296,24 @@ const styles = {
     margin: "0 0 24px",
     textAlign: "center" as const,
   },
+  logoImage: {
+    display: "inline-block" as const,
+    margin: "0 auto 24px",
+  },
   logoSection: {
     textAlign: "center" as const,
+  },
+  sentWith: {
+    color: "#a1a1aa",
+    fontSize: "12px",
+    lineHeight: "1.5",
+    margin: "8px 0 0",
+    textAlign: "center" as const,
+  },
+  sentWithLink: {
+    color: "#71717a",
+    fontWeight: "700",
+    textDecoration: "none",
   },
   testCopy: {
     backgroundColor: "#d1fd39",

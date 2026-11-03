@@ -74,6 +74,7 @@
   },
   "emails": {
     "invoiceSent": {
+      "sentWith": "Gesendet mit",
       "subject": "Rechnung Nr. {number} von {business}",
       "testSubject": "Testkopie: Rechnung Nr. {number} von {business}",
       "reminderSubject": "Zahlungserinnerung: Rechnung Nr. {number} – {amount} offen",

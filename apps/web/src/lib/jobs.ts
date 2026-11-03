@@ -1,7 +1,7 @@
 import { render } from "@react-email/components";
 import { and, asc, eq, isNull, lt, lte, or } from "drizzle-orm";
 
-import { InvoiceSentEmail, invoiceSentSubject } from "@/emails/invoice-sent";
+import { EMAIL_LOGO_BOX, InvoiceSentEmail, invoiceSentSubject } from "@/emails/invoice-sent";
 import { PaymentReceivedEmail, paymentReceivedSubject } from "@/emails/payment-received";
 import { APP_NAME } from "@/lib/app-brand";
 import { getPdfLogoSrc } from "@/lib/branding";
@@ -20,6 +20,7 @@ import { type InvoiceAttachment, parseInvoiceAttachments } from "@/lib/e-invoice
 import { sendEmail } from "@/lib/email";
 import { getAppEnv, getEmailEnv } from "@/lib/env";
 import { documentLocaleOf, getTranslator, isAppLocale, type AppLocale } from "@/lib/i18n";
+import { fitImage, imageSizeFromDataUri } from "@/lib/image-size";
 import { type InvoiceDocumentOrg, loadInvoiceDocument } from "@/lib/invoice-document";
 import { loadInvoicePdf, loadInvoiceXml } from "@/lib/invoice-documents";
 import { invoiceEmailEnvelope, type PersonalSend } from "@/lib/invoice-email";
@@ -101,6 +102,22 @@ function storedLocale(value: string | undefined): AppLocale {
 
 function getPublicInvoiceUrl(token: string | null) {
   return token ? new URL(`/i/${encodeURIComponent(token)}`, getAppEnv().APP_URL).toString() : null;
+}
+
+/**
+ * What makes an email the sender's: their colour and their logo, fitted for
+ * the header. The logo is the public upload (mail clients drop data URIs);
+ * its bytes are only read to learn the aspect ratio.
+ */
+async function emailBrandFor(org: { brandColor: string | null; logoUrl: string | null }) {
+  const logoSrc = org.logoUrl ? await getPdfLogoSrc(org.logoUrl) : null;
+  return {
+    brandColor: org.brandColor,
+    logo:
+      org.logoUrl && logoSrc
+        ? { src: org.logoUrl, ...fitImage(imageSizeFromDataUri(logoSrc), EMAIL_LOGO_BOX) }
+        : null,
+  };
 }
 
 async function getInvoiceEmailContext(invoiceId: string) {
@@ -191,6 +208,7 @@ async function buildInvoiceEmail(
 
   const businessName = org.legalName ?? org.businessName ?? org.name ?? APP_NAME;
   const props = {
+    ...(await emailBrandFor(org)),
     bankDetails,
     businessName,
     clientName: client.name,
@@ -293,6 +311,7 @@ async function sendInvoiceReminderEmail(
     const [[invoice], [proposal]] = await Promise.all([
       db
         .select({
+          orgId: invoices.orgId,
           publicToken: invoices.publicToken,
           revision: invoices.revision,
           status: invoices.status,
@@ -322,9 +341,17 @@ async function sendInvoiceReminderEmail(
       }
       return;
     }
+    const [org] = invoice.orgId
+      ? await db
+          .select({ brandColor: orgs.brandColor, logoUrl: orgs.logoUrl })
+          .from(orgs)
+          .where(eq(orgs.id, invoice.orgId))
+          .limit(1)
+      : [];
     await sendEmail({
       idempotencyKey,
       react: InvoiceSentEmail({
+        ...(org ? await emailBrandFor(org) : {}),
         businessName: stored.businessName,
         clientName: stored.clientName,
         currency: stored.currency,

@@ -74,6 +74,7 @@
   },
   "emails": {
     "invoiceSent": {
+      "sentWith": "Sent with",
       "subject": "Invoice {number} from {business}",
       "testSubject": "Test copy: Invoice {number} from {business}",
       "reminderSubject": "Reminder: Invoice {number} — {amount} due",

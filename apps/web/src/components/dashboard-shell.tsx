@@ -41,6 +41,7 @@ export function DashboardShell({
   domain,
   emailJobItems,
   emailJobSummary,
+  faviconUrl,
   locale,
   logoUrl,
   navCounts,
@@ -55,6 +56,8 @@ export function DashboardShell({
   domain: string | null;
   emailJobItems: Array<EmailJobDockItem>;
   emailJobSummary: EmailJobDockSummary;
+  /** The small square mark, when the workspace uploaded one. */
+  faviconUrl: string | null;
   locale: Locale;
   logoUrl: string | null;
   navCounts: { overdue: number; proposals: number };
@@ -86,6 +89,19 @@ export function DashboardShell({
   const [panelOpen, setPanelOpen] = useState(false);
   const [opsOpen, setOpsOpen] = useState(false);
   const [imageFailed, setImageFailed] = useState(false);
+  // A wide logo is a wordmark and stands on its own; a square one is a mark
+  // and gets the name next to it, like the uploaded favicon does.
+  const [wordmark, setWordmark] = useState(false);
+  const logoRef = useRef<HTMLImageElement>(null);
+  const mark = faviconUrl ?? (wordmark ? null : logoUrl);
+  // A cached image can finish loading before hydration, so its load event
+  // never reaches React; read the shape once mounted as well.
+  useEffect(() => {
+    const image = logoRef.current;
+    if (image?.complete && image.naturalWidth) {
+      setWordmark(image.naturalWidth > image.naturalHeight * 1.6);
+    }
+  }, [logoUrl]);
   const chatInput = useRef<HTMLTextAreaElement>(null);
 
   const focusChat = useCallback(() => {
@@ -165,12 +181,31 @@ export function DashboardShell({
         <div className="flex h-full flex-col gap-5 p-4">
           <div className="flex items-center justify-between gap-2">
             <Link className="flex min-w-0 items-center gap-3 px-2 py-1" href="/home">
-              {logoUrl && !imageFailed ? (
+              {logoUrl && !imageFailed && !faviconUrl ? (
+                <img
+                  alt={wordmark ? brandName : ""}
+                  className={cn(
+                    "shrink-0 object-contain",
+                    wordmark
+                      ? "h-7 w-auto max-w-[9.5rem] object-left dark:rounded-md dark:bg-[#fffefb] dark:px-1.5 dark:py-1"
+                      : "size-8 rounded-md",
+                  )}
+                  data-testid="workspace-logo"
+                  onError={() => setImageFailed(true)}
+                  onLoad={(event) => {
+                    const image = event.currentTarget;
+                    setWordmark(image.naturalWidth > image.naturalHeight * 1.6);
+                  }}
+                  ref={logoRef}
+                  src={logoUrl}
+                />
+              ) : mark && !imageFailed ? (
                 <img
                   alt=""
-                  className="size-8 rounded-md object-cover"
+                  className="size-8 shrink-0 rounded-md object-contain"
+                  data-testid="workspace-logo"
                   onError={() => setImageFailed(true)}
-                  src={logoUrl}
+                  src={mark}
                 />
               ) : (
                 <span
@@ -180,14 +215,16 @@ export function DashboardShell({
                   {brandName.slice(0, 1)}
                 </span>
               )}
-              <span className="min-w-0">
-                <span className="block truncate text-sm font-semibold">{brandName}</span>
-                {domain ? (
-                  <span className="block truncate font-mono text-[11px] text-muted-foreground">
-                    {domain}
-                  </span>
-                ) : null}
-              </span>
+              {wordmark && !faviconUrl && !imageFailed ? null : (
+                <span className="min-w-0">
+                  <span className="block truncate text-sm font-semibold">{brandName}</span>
+                  {domain ? (
+                    <span className="block truncate font-mono text-[11px] text-muted-foreground">
+                      {domain}
+                    </span>
+                  ) : null}
+                </span>
+              )}
             </Link>
             <Button
               aria-controls="workspace-navigation"
