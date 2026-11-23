@@ -40,6 +40,7 @@ type ActionState = {
 } | null;
 
 type Client = {
+  bankAccountId?: string | null;
   defaultBuyerReference?: string | null;
   defaultCurrency: string | null;
   email: string;
@@ -50,8 +51,10 @@ type Client = {
 
 type InvoiceFormProps = {
   action: (state: ActionState, formData: FormData) => Promise<ActionState>;
+  bankAccounts: Array<{ iban: string | null; id: string; isDefault: boolean; name: string }>;
   clients: Array<Client>;
   defaultValues?: {
+    bankAccountId?: string | null;
     buyerReference?: string | null;
     clientId?: string;
     currency?: string;
@@ -108,6 +111,7 @@ function defaultDueDate(): string {
 
 export function InvoiceForm({
   action,
+  bankAccounts,
   clients,
   defaultValues,
   locale = "en-US",
@@ -148,6 +152,9 @@ export function InvoiceForm({
   );
 
   const selectedClient = clients.find((client) => client.id === clientId);
+  const inheritedBank =
+    bankAccounts.find((bank) => bank.id === selectedClient?.bankAccountId) ??
+    bankAccounts.find((bank) => bank.isDefault);
   const zeroRated = requiresZeroRate(taxTreatment);
   const german = org.countryCode === "DE";
   const period = editedPeriod ?? defaultServicePeriod(items, issuedAt) ?? { end: "", start: "" };
@@ -461,6 +468,29 @@ export function InvoiceForm({
           </div>
         </div>
       </div>
+
+      {bankAccounts.length > 0 && (
+        <div className="space-y-2">
+          <Label htmlFor="invoice-bank">{t("paymentAccount")}</Label>
+          <select
+            className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+            defaultValue={defaultValues?.bankAccountId ?? ""}
+            id="invoice-bank"
+            name="bankAccountId"
+          >
+            <option value="">
+              {t("inheritedAccount")}
+              {inheritedBank ? ` · ${inheritedBank.name}` : ""}
+            </option>
+            {bankAccounts.map((bank) => (
+              <option key={bank.id} value={bank.id}>
+                {bank.name}
+                {bank.iban ? ` · …${bank.iban.slice(-4)}` : ""}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
 
       {/* Notes */}
       <div className="grid gap-4 sm:grid-cols-2">

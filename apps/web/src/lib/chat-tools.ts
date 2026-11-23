@@ -18,6 +18,7 @@ import {
   invoiceStatusEnum,
   lineItems as invoiceLineItems,
 } from "@/lib/db/schema";
+import { listWorkspaceBankAccounts } from "@/lib/invoice-document";
 import {
   INVOICE_PERIOD_KEYS,
   type InvoicePeriod,
@@ -36,6 +37,7 @@ import {
   sendReminder,
   type InvoiceMutationInput,
 } from "@/lib/invoice-service";
+import { updateDraftPaymentDetails } from "@/lib/invoice-service";
 import { TAX_TREATMENTS, type TaxTreatment } from "@/lib/tax-treatment";
 import { clientTaxIdentifierFields } from "@/lib/vat";
 
@@ -475,6 +477,7 @@ export function buildChatSystemPrompt(
     `Known clients: ${clientSummary}`,
     `Recent invoices: ${recentInvoiceSummary}`,
     "Use tools whenever the user asks for live data or wants to change data.",
+    "For a requested payment account, list workspace bank accounts and match by name or IBAN (ignore spaces). Ask if unclear. Pass its bankAccountId to create_invoice or update_draft_payment_details so Payment Details and the PDF use it. Never substitute payment instructions in Notes. Only change notes when asked. Read the current invoice status before changing it: payment details and notes can be edited on drafts only. Never cancel, replace, issue or send a document unless asked.",
     "Available invoice actions include creating drafts, listing, loading details, sending, reminding, duplicating, marking paid, cancelling, deleting draft or cancelled invoices, analyzing performance, explaining client history, and preparing ZIP downloads.",
     "For questions about revenue, collections, overdue exposure, trends, or top clients, use get_invoice_analytics. Keep currencies separate and distinguish issued, collected, outstanding, overdue, and draft value. Collected means payments received during the requested period; collection rate means the share of that period's issued value that is now paid.",
     "For questions about one customer, use get_client_insights. For requested invoice files, use download_invoice_archive and give the user its download link; do not claim the file downloaded automatically.",
@@ -493,6 +496,44 @@ export function buildChatSystemPrompt(
 /* eslint-disable perfectionist/sort-objects -- Keep related read tools next to the data they build on. */
 export function createChatTools(auth: ChatToolContext) {
   return {
+    list_bank_accounts: tool({
+      description:
+        "List saved payment accounts in this workspace with IDs, names, IBANs and default flag.",
+      inputSchema: z.object({}),
+      execute: async () => ({
+        accounts: await listWorkspaceBankAccounts(auth.org.id),
+        kind: "bank-accounts",
+      }),
+    }),
+    update_draft_payment_details: tool({
+      description:
+        "Change only a draft's payment account and/or customer-visible notes. Empty notes clear them; null bankAccountId restores the inherited account.",
+      inputSchema: z.object({
+        invoiceId: z.uuid().optional(),
+        invoiceNumber: z.string().trim().optional(),
+        bankAccountId: z.uuid().nullable().optional(),
+        notes: z.string().trim().optional(),
+      }),
+      execute: async (input) => {
+        if (input.bankAccountId === undefined && input.notes === undefined) {
+          throw new Error("Choose a bank account or provide notes.");
+        }
+        const invoice = await resolveInvoice(auth, input);
+        const result = await updateDraftPaymentDetails(buildServiceContext(auth), invoice.id, {
+          bankAccountId: input.bankAccountId,
+          notes: input.notes,
+        });
+        if ("error" in result) {
+          throw new Error(result.error);
+        }
+        revalidateInvoiceViews(invoice.id);
+        return {
+          kind: "invoice",
+          invoice: toInvoiceSummary(await loadInvoiceSummary(auth, invoice.id)),
+          message: "Updated draft.",
+        };
+      },
+    }),
     change_invoice_due_date: tool({
       description:
         "Change only an invoice's due date. Supports short invoice numbers such as 97 for 0000097. Drafts are editable by members; sent/overdue invoices require admin or owner. Paid/cancelled invoices are immutable. This does not email the client.",
@@ -755,6 +796,7 @@ export function createChatTools(auth: ChatToolContext) {
                   }
                 : null;
           const mutationInput: InvoiceMutationInput = {
+            bankAccountId: input.bankAccountId,
             buyerReference: input.buyerReference,
             clientId: client.id,
             currency:
@@ -802,6 +844,7 @@ export function createChatTools(auth: ChatToolContext) {
         }, MUTATION_RETRIES),
       inputSchema: z.object({
         amount: z.number().positive().optional(),
+        bankAccountId: z.uuid().optional(),
         clientId: z.string().uuid().optional(),
         clientName: z.string().trim().optional(),
         copyPreviousInvoice: z.boolean().optional(),
@@ -914,6 +957,8 @@ export function createChatTools(auth: ChatToolContext) {
           const invoice = await resolveInvoice(auth, input);
 
           return {
+            bankAccountId: invoice.bankAccountId,
+            notes: invoice.notes,
             downloadUrl: `/api/invoices/${invoice.id}/pdf`,
             invoice: toInvoiceSummary(invoice),
             kind: "invoice",

@@ -321,6 +321,9 @@ export const jobTypeEnum = pgEnum("job_type", [
 export const invoices = pgTable(
   "invoices",
   {
+    bankAccountId: uuid("bank_account_id").references(() => bankAccounts.id, {
+      onDelete: "set null",
+    }),
     // BT-10. Leitweg-ID for public-sector buyers; falls back to the invoice number otherwise.
     buyerReference: text("buyer_reference"),
     clientId: uuid("client_id")

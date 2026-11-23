@@ -490,6 +490,8 @@
     }
   },
   "invoiceForm": {
+    "paymentAccount": "Payment details",
+    "inheritedAccount": "Use client or workspace default",
     "newInvoice": "New invoice",
     "editInvoice": "Edit {number}",
     "backToInvoices": "Back to invoices",

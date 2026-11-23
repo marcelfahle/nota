@@ -100,6 +100,7 @@ export type InvoiceLineItemInput = {
 };
 
 export type InvoiceMutationInput = {
+  bankAccountId?: string | null;
   /** Leitweg-ID or the reference the buyer asked for. Defaults to the client's. */
   buyerReference?: string | null;
   clientId: string;
@@ -587,7 +588,7 @@ export async function getInvoiceDetail(orgId: string, invoiceId: string) {
             client,
             invoice,
             items.length,
-            await loadInvoiceBankAccount(db, orgId, client.bankAccountId),
+            await loadInvoiceBankAccount(db, orgId, invoice.bankAccountId ?? client.bankAccountId),
           ),
           org.eInvoiceDelivery,
         )
@@ -629,6 +630,18 @@ export async function getInvoiceDetail(orgId: string, invoiceId: string) {
   };
 }
 
+async function ownsBankAccount(tx: DbTransaction, orgId: string, bankAccountId?: string | null) {
+  if (!bankAccountId) {
+    return true;
+  }
+  const [account] = await tx
+    .select({ id: bankAccounts.id })
+    .from(bankAccounts)
+    .where(and(eq(bankAccounts.id, bankAccountId), eq(bankAccounts.orgId, orgId)))
+    .for("key share");
+  return Boolean(account);
+}
+
 export async function createInvoice(
   context: InvoiceServiceContext,
   input: InvoiceMutationInput,
@@ -668,6 +681,9 @@ export async function createInvoice(
   }
 
   const insertedInvoice = await db.transaction(async (tx) => {
+    if (!(await ownsBankAccount(tx, context.orgId, input.bankAccountId))) {
+      return null;
+    }
     const id = randomUUID();
     const number = draftIdentifier(id);
     const [invoice] = await tx
@@ -713,10 +729,44 @@ export async function createInvoice(
     return invoice;
   });
 
+  if (!insertedInvoice) {
+    return { error: "Assigned bank account not found" };
+  }
   return {
     invoiceId: insertedInvoice.id,
     success: true,
   };
+}
+
+export async function updateDraftPaymentDetails(
+  context: InvoiceServiceContext,
+  invoiceId: string,
+  changes: { bankAccountId?: string | null; notes?: string },
+): Promise<InvoiceMutationResult> {
+  if (!canEditDraft(context.role)) {
+    return { error: getInsufficientPermissionsError() };
+  }
+  return db.transaction(async (tx) => {
+    if (!(await ownsBankAccount(tx, context.orgId, changes.bankAccountId))) {
+      return { error: "Assigned bank account not found" };
+    }
+    const [updated] = await tx
+      .update(invoices)
+      .set({ ...changes, revision: sql`${invoices.revision} + 1`, updatedAt: new Date() })
+      .where(
+        and(
+          eq(invoices.id, invoiceId),
+          eq(invoices.orgId, context.orgId),
+          eq(invoices.status, "draft"),
+        ),
+      )
+      .returning({ id: invoices.id });
+    if (!updated) {
+      return { error: "Only draft invoices can be edited" };
+    }
+    await expireInvoiceProposals(tx, invoiceId);
+    return { invoiceId, success: true };
+  });
 }
 
 export async function updateInvoice(
@@ -767,8 +817,11 @@ export async function updateInvoice(
     return legal;
   }
 
-  await db.transaction(async (tx) => {
-    await tx
+  return db.transaction(async (tx) => {
+    if (!(await ownsBankAccount(tx, context.orgId, input.bankAccountId))) {
+      return { error: "Assigned bank account not found" };
+    }
+    const [updated] = await tx
       .update(invoices)
       .set({
         ...invoiceData,
@@ -777,7 +830,17 @@ export async function updateInvoice(
         revision: sql`${invoices.revision} + 1`,
         updatedAt: new Date(),
       })
-      .where(and(eq(invoices.id, invoiceId), eq(invoices.orgId, context.orgId)));
+      .where(
+        and(
+          eq(invoices.id, invoiceId),
+          eq(invoices.orgId, context.orgId),
+          eq(invoices.status, "draft"),
+        ),
+      )
+      .returning({ id: invoices.id });
+    if (!updated) {
+      return { error: "Only draft invoices can be edited" };
+    }
 
     await tx.delete(lineItems).where(eq(lineItems.invoiceId, invoiceId));
 
@@ -792,12 +855,8 @@ export async function updateInvoice(
       })),
     );
     await expireInvoiceProposals(tx, invoiceId);
+    return { invoiceId, success: true };
   });
-
-  return {
-    invoiceId,
-    success: true,
-  };
 }
 
 export async function changeInvoiceDueDate(
@@ -980,13 +1039,12 @@ export async function sendInvoice(
         return { error: "Client not found" };
       }
       const send = resolveSendOptions(normalized, client);
-      if (client.bankAccountId) {
+      const assignedId = invoice.bankAccountId ?? client.bankAccountId;
+      if (assignedId) {
         const [bank] = await tx
           .select({ id: bankAccounts.id })
           .from(bankAccounts)
-          .where(
-            and(eq(bankAccounts.id, client.bankAccountId), eq(bankAccounts.orgId, context.orgId)),
-          );
+          .where(and(eq(bankAccounts.id, assignedId), eq(bankAccounts.orgId, context.orgId)));
         if (!bank) {
           return { error: "Assigned bank account not found" };
         }
@@ -997,7 +1055,7 @@ export async function sendInvoice(
         .where(eq(lineItems.invoiceId, invoiceId));
       // The XML is validated here, before anything is queued, so the email job
       // only ever renders a document that is known to be complete.
-      const bankAccount = await loadInvoiceBankAccount(tx, context.orgId, client.bankAccountId);
+      const bankAccount = await loadInvoiceBankAccount(tx, context.orgId, assignedId);
       const problems = validateForSending(
         complianceInput(org, client, invoice, lineItemCount, bankAccount),
         org.eInvoiceDelivery,
@@ -1244,6 +1302,7 @@ export async function duplicateInvoice(
     const [invoice] = await tx
       .insert(invoices)
       .values({
+        bankAccountId: original.bankAccountId,
         buyerReference: original.buyerReference,
         clientId: original.clientId,
         currency: original.currency,
@@ -1356,6 +1415,7 @@ export async function createCreditNote(
     const [credit] = await tx
       .insert(invoices)
       .values({
+        bankAccountId: original.bankAccountId,
         buyerReference: original.buyerReference,
         clientId: original.clientId,
         creditsInvoiceId: original.id,
@@ -1720,7 +1780,11 @@ export async function markInvoiceSent(
       .select({ lineItemCount: count() })
       .from(lineItems)
       .where(eq(lineItems.invoiceId, invoiceId));
-    const bankAccount = await loadInvoiceBankAccount(tx, context.orgId, client.bankAccountId);
+    const bankAccount = await loadInvoiceBankAccount(
+      tx,
+      context.orgId,
+      invoice.bankAccountId ?? client.bankAccountId,
+    );
     const problems = validateForIssuance(
       complianceInput(organization, client, invoice, lineItemCount, bankAccount),
     );

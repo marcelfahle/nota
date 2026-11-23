@@ -48,7 +48,7 @@ export function InviteEmail({ inviteUrl, locale = "en", orgName, role }: InviteE
               app: APP_NAME,
               org: orgName,
               role: t(`roles.${role}`),
-              strong: (chunks) => <strong>{chunks}</strong>,
+              strong: (chunks: React.ReactNode) => <strong>{chunks}</strong>,
             })}
           </Text>
 

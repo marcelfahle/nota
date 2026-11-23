@@ -490,6 +490,8 @@
     }
   },
   "invoiceForm": {
+    "paymentAccount": "Zahlungsdaten",
+    "inheritedAccount": "Kunden- oder Workspace-Standard verwenden",
     "newInvoice": "Neue Rechnung",
     "editInvoice": "{number} bearbeiten",
     "backToInvoices": "Zurück zu den Rechnungen",

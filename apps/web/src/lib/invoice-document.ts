@@ -35,7 +35,20 @@ export type InvoiceDocumentOrg = Pick<
 
 export type InvoiceDocumentDatabase = Pick<typeof db, "select">;
 
-/** The account an invoice is paid to: the client's assigned one, else the workspace default. */
+export function listWorkspaceBankAccounts(orgId: string) {
+  return db
+    .select({
+      iban: bankAccounts.iban,
+      id: bankAccounts.id,
+      isDefault: bankAccounts.isDefault,
+      name: bankAccounts.name,
+    })
+    .from(bankAccounts)
+    .where(eq(bankAccounts.orgId, orgId))
+    .orderBy(asc(bankAccounts.name));
+}
+
+/** Resolve the draft's selected account or its inherited workspace default. */
 export async function loadInvoiceBankAccount(
   database: InvoiceDocumentDatabase,
   orgId: string,
@@ -119,7 +132,7 @@ export async function loadInvoiceDocument(
   const frozen = invoice.status !== "draft" ? invoice.issuedSnapshot : null;
   const bankAccount = frozen
     ? null
-    : await loadInvoiceBankAccount(database, org.id, client.bankAccountId);
+    : await loadInvoiceBankAccount(database, org.id, invoice.bankAccountId ?? client.bankAccountId);
   const snapshot =
     frozen ??
     buildIssuedSnapshot({

@@ -9,23 +9,28 @@ import { getCurrentUser } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { clients } from "@/lib/db/schema";
 import { toIntlLocale } from "@/lib/i18n";
+import { listWorkspaceBankAccounts } from "@/lib/invoice-document";
 
 export default async function NewInvoicePage() {
   const { org, user } = await getCurrentUser();
   const t = await getTranslations("invoiceForm");
 
-  const clientList = await db
-    .select({
-      defaultBuyerReference: clients.defaultBuyerReference,
-      defaultCurrency: clients.defaultCurrency,
-      email: clients.email,
-      id: clients.id,
-      name: clients.name,
-      publicSector: clients.publicSector,
-    })
-    .from(clients)
-    .where(eq(clients.orgId, org.id))
-    .orderBy(asc(clients.name));
+  const [accounts, clientList] = await Promise.all([
+    listWorkspaceBankAccounts(org.id),
+    db
+      .select({
+        bankAccountId: clients.bankAccountId,
+        defaultBuyerReference: clients.defaultBuyerReference,
+        defaultCurrency: clients.defaultCurrency,
+        email: clients.email,
+        id: clients.id,
+        name: clients.name,
+        publicSector: clients.publicSector,
+      })
+      .from(clients)
+      .where(eq(clients.orgId, org.id))
+      .orderBy(asc(clients.name)),
+  ]);
 
   return (
     <div>
@@ -42,6 +47,7 @@ export default async function NewInvoicePage() {
       <div className="max-w-3xl">
         <InvoiceForm
           action={createInvoice}
+          bankAccounts={accounts}
           clients={clientList}
           locale={toIntlLocale(user.locale)}
           org={{ countryCode: org.countryCode, defaultTaxTreatment: org.defaultTaxTreatment }}

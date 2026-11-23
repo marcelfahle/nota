@@ -110,6 +110,7 @@ export async function POST(request: Request) {
       typeof body.pageContext?.entityId === "string" ? body.pageContext.entityId : undefined,
     route: typeof body.pageContext?.route === "string" ? body.pageContext.route : undefined,
   };
+  const currentEntity = pageContext.route?.match(/^\/(invoices|clients)\/([\da-f-]{36})(?:\/|$)/i);
   await saveChatMessage(thread.id, incoming, pageContext);
   logChatGenerationStarted(messages.length);
   after(flushPostHogLogs);
@@ -137,7 +138,12 @@ export async function POST(request: Request) {
               ? { anthropic: { effort: "low", thinking: { type: "adaptive" } } }
               : undefined,
           stopWhen: stepCountIs(6),
-          system: buildChatSystemPrompt(auth, context),
+          system: [
+            buildChatSystemPrompt(auth, context),
+            currentEntity
+              ? `The page currently open is ${currentEntity[1]}/${currentEntity[2]}. Use this ID when the user refers to the open record.`
+              : "",
+          ].join("\n"),
           tools: createChatTools(auth),
         });
       },

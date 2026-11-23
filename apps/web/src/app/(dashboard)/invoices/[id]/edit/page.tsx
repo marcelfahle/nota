@@ -10,6 +10,7 @@ import { getCurrentUser } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { clients, invoices, lineItems } from "@/lib/db/schema";
 import { toIntlLocale } from "@/lib/i18n";
+import { listWorkspaceBankAccounts } from "@/lib/invoice-document";
 
 export default async function EditInvoicePage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -30,18 +31,22 @@ export default async function EditInvoicePage({ params }: { params: Promise<{ id
     notFound();
   }
 
-  const clientList = await db
-    .select({
-      defaultBuyerReference: clients.defaultBuyerReference,
-      defaultCurrency: clients.defaultCurrency,
-      email: clients.email,
-      id: clients.id,
-      name: clients.name,
-      publicSector: clients.publicSector,
-    })
-    .from(clients)
-    .where(eq(clients.orgId, org.id))
-    .orderBy(asc(clients.name));
+  const [accounts, clientList] = await Promise.all([
+    listWorkspaceBankAccounts(org.id),
+    db
+      .select({
+        bankAccountId: clients.bankAccountId,
+        defaultBuyerReference: clients.defaultBuyerReference,
+        defaultCurrency: clients.defaultCurrency,
+        email: clients.email,
+        id: clients.id,
+        name: clients.name,
+        publicSector: clients.publicSector,
+      })
+      .from(clients)
+      .where(eq(clients.orgId, org.id))
+      .orderBy(asc(clients.name)),
+  ]);
 
   const items = await db
     .select()
@@ -66,8 +71,10 @@ export default async function EditInvoicePage({ params }: { params: Promise<{ id
       <div className="max-w-3xl">
         <InvoiceForm
           action={boundUpdateAction}
+          bankAccounts={accounts}
           clients={clientList}
           defaultValues={{
+            bankAccountId: invoice.bankAccountId,
             buyerReference: invoice.buyerReference,
             clientId: invoice.clientId,
             currency: invoice.currency ?? "EUR",

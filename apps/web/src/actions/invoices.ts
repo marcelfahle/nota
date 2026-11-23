@@ -32,6 +32,7 @@ const lineItemSchema = z.object({
 });
 
 const invoiceSchema = z.object({
+  bankAccountId: z.uuid().nullable().optional(),
   buyerReference: z.string().trim().max(200).optional(),
   clientId: z.string().uuid("Invalid client"),
   currency: z.string().default("EUR"),
@@ -55,15 +56,18 @@ const paymentSchema = z.object({
 
 function parseInvoiceFormData(formData: FormData) {
   return {
+    bankAccountId: formData.has("bankAccountId")
+      ? formData.get("bankAccountId") || null
+      : undefined,
     // The form always sends the field, so an empty value clears the reference.
     buyerReference: (formData.get("buyerReference") as string) ?? "",
     clientId: formData.get("clientId") as string,
     currency: (formData.get("currency") as string) || "EUR",
     dueAt: formData.get("dueAt") as string,
-    internalNotes: (formData.get("internalNotes") as string) || undefined,
+    internalNotes: formData.get("internalNotes") ?? undefined,
     issuedAt: formData.get("issuedAt") as string,
     lineItems: JSON.parse((formData.get("lineItems") as string) || "[]"),
-    notes: (formData.get("notes") as string) || undefined,
+    notes: formData.get("notes") ?? undefined,
     servicePeriodEnd: (formData.get("servicePeriodEnd") as string) || undefined,
     servicePeriodStart: (formData.get("servicePeriodStart") as string) || undefined,
     taxRate: formData.get("taxRate") as string,
