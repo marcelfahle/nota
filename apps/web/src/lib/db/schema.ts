@@ -623,8 +623,13 @@ export const chatMessages = pgTable(
   {
     createdAt: timestamp("created_at").defaultNow().notNull(),
     id: text().primaryKey(),
-    pageContext: jsonb("page_context").$type<{ entityId?: string; route?: string }>(),
+    pageContext: jsonb("page_context").$type<{
+      entityId?: string;
+      mentions?: Array<{ id: string; kind: "invoice" | "bank" | "client"; label: string }>;
+      route?: string;
+    }>(),
     parts: jsonb().$type<Array<unknown>>().notNull(),
+    rating: text("rating", { enum: ["up", "down"] }),
     role: text().notNull(),
     threadId: uuid("thread_id")
       .notNull()

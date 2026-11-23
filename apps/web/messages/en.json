@@ -1268,6 +1268,16 @@
     }
   },
   "chat": {
+    "newChat": "New chat",
+    "history": "Chat history",
+    "emptyHistory": "Your conversations will appear here.",
+    "helpful": "Helpful reply",
+    "unhelpful": "Unhelpful reply",
+    "ratingFailed": "Couldn’t save your rating. Try again.",
+    "loadFailed": "Couldn’t load the conversation. Retry",
+    "resize": "Resize chat panel",
+    "mentions": "Mention a workspace item",
+    "entity": { "bank": "Account", "client": "Client", "invoice": "Invoice" },
     "starters": {
       "draft": "Create a draft invoice",
       "owes": "Who still owes me money?",
@@ -1334,7 +1344,7 @@
       "sayWhatYouDid": "Say what you did",
       "askNota": "Ask Nota",
       "placeholderHome": "Invoice Oxide for 46 hours of consulting in September, same rate as last time",
-      "placeholderPanel": "Bill, chase, quote or ask…",
+      "placeholderPanel": "Ask Nota, or type @ to mention…",
       "csvLabel": "Client CSV file",
       "attachCsv": "Attach client CSV",
       "enterToSend": "Enter to send",

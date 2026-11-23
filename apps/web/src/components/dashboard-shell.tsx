@@ -367,7 +367,12 @@ export function DashboardShell({
           </div>
         </div>
       </aside>
-      <div className={cn("min-w-0", !isHome && chatOpen && "xl:pr-[340px]")}>
+      <div
+        className={cn(
+          "min-w-0",
+          !isHome && chatOpen && "xl:pr-[var(--nota-chat-width,clamp(360px,32vw,600px))]",
+        )}
+      >
         <div
           className={cn(
             "justify-end pt-5 pr-[max(1rem,env(safe-area-inset-right))] pl-[max(1rem,env(safe-area-inset-left))] sm:px-8",

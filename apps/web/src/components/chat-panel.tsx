@@ -8,14 +8,18 @@ import {
   ChevronUp,
   Download,
   FileArchive,
+  History,
   LoaderCircle,
+  SquarePen,
+  ThumbsDown,
+  ThumbsUp,
   Paperclip,
   Send,
 } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useRouter } from "next/navigation";
 import { usePathname } from "next/navigation";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { ChatClientImport } from "@/components/chat-client-import";
 import { ChatMarkdown } from "@/components/chat-markdown";
@@ -25,6 +29,15 @@ import type { ChatActivity } from "@/lib/chat-store";
 import { invoiceNumberLabel } from "@/lib/invoice-number";
 import { formatCurrency, type Locale } from "@/lib/utils";
 import { cn } from "@/lib/utils";
+
+type Rating = "up" | "down";
+type ChatThread = { id: string; title: string; updatedAt: string };
+type Mention = {
+  detail: string | null;
+  id: string;
+  kind: "bank" | "client" | "invoice";
+  label: string;
+};
 
 type ToolOutputShape = {
   client?: {
@@ -104,6 +117,9 @@ type InvoiceAnalysisSummary = {
 const transport = new DefaultChatTransport({
   api: "/api/chat",
   credentials: "same-origin",
+  prepareSendMessagesRequest: ({ body, messages }) => ({
+    body: { ...body, messages: messages.slice(-1) },
+  }),
 });
 
 // Below this width the first-run chat docks to the bottom edge, under the invoice.
@@ -226,7 +242,7 @@ function ToolResultCard({
 
   if (output.kind === "invoice-archive" && output.downloadUrl) {
     return (
-      <div className="rounded-2xl border border-zinc-200/80 bg-white px-3 py-3 shadow-sm">
+      <div className="border-l-2 border-border py-1 pl-3">
         <div className="flex items-start gap-3">
           <div className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-zinc-100 text-zinc-700">
             <FileArchive className="size-4" />
@@ -254,7 +270,7 @@ function ToolResultCard({
   if ((output.kind === "invoice-analysis" || output.kind === "client-insights") && output.summary) {
     const currencies = output.summary.currencies ?? [];
     return (
-      <div className="rounded-2xl border border-zinc-200/80 bg-white px-3 py-3 shadow-sm">
+      <div className="border-l-2 border-border py-1 pl-3">
         <div className="flex items-start justify-between gap-3">
           <div>
             <p className="text-[11px] font-medium tracking-[0.2em] text-zinc-500 uppercase">
@@ -330,43 +346,50 @@ function ToolResultCard({
     );
   }
 
+  if (output.kind === "bank-accounts") {
+    return null;
+  }
   if (output.invoice?.number) {
+    const invoice = output.invoice;
+    const name = invoiceNumberLabel(output.invoice.number, t("cards.draft"));
     return (
-      <div className="rounded-2xl border border-zinc-200/80 bg-white px-3 py-3 shadow-sm">
-        <div className="mb-1 flex items-center justify-between gap-2">
-          <p className="text-[11px] font-medium tracking-[0.2em] text-zinc-500 uppercase">
-            {label}
-          </p>
-          <span className="rounded-full bg-zinc-100 px-2 py-0.5 text-[10px] font-medium text-zinc-600 uppercase">
-            {output.invoice.status ?? "draft"}
+      <div className="border-l-2 border-border py-1 pl-3">
+        <div className="flex items-baseline justify-between gap-3 text-sm">
+          {invoice.id ? (
+            <a
+              className="font-semibold underline decoration-border underline-offset-2"
+              href={`/invoices/${invoice.id}`}
+            >
+              {name}
+            </a>
+          ) : (
+            <strong>{name}</strong>
+          )}
+          <span className="shrink-0 tabular-nums">
+            {formatInvoiceAmount(invoice.total, invoice.currency, locale)}
           </span>
         </div>
-        <p className="font-mono text-sm font-semibold text-zinc-950">
-          {invoiceNumberLabel(output.invoice.number, t("cards.draft"))}
+        <p className="text-sm text-muted-foreground">
+          {invoice.clientName}
+          {invoice.status && invoice.status !== "draft" ? ` · ${invoice.status}` : ""}
         </p>
-        <p className="mt-1 text-sm text-zinc-600">
-          {output.invoice.clientName ?? t("cards.unknownClient")}
-        </p>
-        <div className="mt-3 flex items-center justify-between text-sm text-zinc-700">
-          <span>{formatInvoiceAmount(output.invoice.total, output.invoice.currency, locale)}</span>
-          <span>{output.invoice.dueAt ?? t("cards.noDueDate")}</span>
-        </div>
-        {output.downloadUrl ? (
-          <Button asChild className="mt-3 w-full" size="sm" variant="outline">
-            <a href={output.downloadUrl}>
-              <Download />
-              {t("cards.downloadPdf")}
-            </a>
-          </Button>
-        ) : null}
-        {output.warning ? <p className="mt-2 text-xs text-amber-700">{output.warning}</p> : null}
+        {output.downloadUrl && (
+          <a
+            className="mt-1 inline-flex items-center gap-1 text-xs underline underline-offset-2"
+            href={output.downloadUrl}
+          >
+            <Download size={13} />
+            {t("cards.downloadPdf")}
+          </a>
+        )}
+        {output.warning && <p className="text-xs text-amber-700">{output.warning}</p>}
       </div>
     );
   }
 
   if (output.client?.name) {
     return (
-      <div className="rounded-2xl border border-zinc-200/80 bg-white px-3 py-3 shadow-sm">
+      <div className="border-l-2 border-border py-1 pl-3">
         <p className="text-[11px] font-medium tracking-[0.2em] text-zinc-500 uppercase">{label}</p>
         <p className="mt-1 text-sm font-semibold text-zinc-950">{output.client.name}</p>
         <p className="text-sm text-zinc-600">{output.client.email ?? t("cards.noEmail")}</p>
@@ -379,7 +402,7 @@ function ToolResultCard({
 
   if (output.kind === "invoice-list" && output.invoices) {
     return (
-      <div className="rounded-2xl border border-zinc-200/80 bg-white px-3 py-3 shadow-sm">
+      <div className="border-l-2 border-border py-1 pl-3">
         <div className="mb-2 flex items-center justify-between gap-2">
           <p className="text-[11px] font-medium tracking-[0.2em] text-zinc-500 uppercase">
             {label}
@@ -417,7 +440,7 @@ function ToolResultCard({
 
   if (output.kind === "client-list" && output.clients) {
     return (
-      <div className="rounded-2xl border border-zinc-200/80 bg-white px-3 py-3 shadow-sm">
+      <div className="border-l-2 border-border py-1 pl-3">
         <div className="mb-2 flex items-center justify-between gap-2">
           <p className="text-[11px] font-medium tracking-[0.2em] text-zinc-500 uppercase">
             {label}
@@ -442,7 +465,7 @@ function ToolResultCard({
 
   if (output.kind === "dashboard" && output.counts) {
     return (
-      <div className="rounded-2xl border border-zinc-200/80 bg-white px-3 py-3 shadow-sm">
+      <div className="border-l-2 border-border py-1 pl-3">
         <p className="text-[11px] font-medium tracking-[0.2em] text-zinc-500 uppercase">{label}</p>
         <div className="mt-2 grid grid-cols-3 gap-2 text-sm">
           {Object.entries(output.counts).map(([key, value]) => (
@@ -457,7 +480,7 @@ function ToolResultCard({
   }
 
   return (
-    <div className="rounded-2xl border border-zinc-200/80 bg-white px-3 py-3 shadow-sm">
+    <div className="py-1 text-muted-foreground">
       <p className="text-[11px] font-medium tracking-[0.2em] text-zinc-500 uppercase">{label}</p>
       <p className="mt-1 text-sm text-zinc-700">{output.message ?? t("cards.completed")}</p>
     </div>
@@ -510,7 +533,7 @@ function ToolPart({
 
   if (part.state === "input-streaming" || part.state === "input-available") {
     return (
-      <div className="flex items-center gap-2 rounded-2xl border border-zinc-200 bg-zinc-50 px-3 py-3 text-sm text-zinc-600">
+      <div className="flex items-center gap-2 py-1 text-sm text-muted-foreground">
         <LoaderCircle className="size-4 animate-spin" />
         <span>{label}…</span>
       </div>
@@ -530,33 +553,61 @@ function ToolPart({
   return null;
 }
 
-function MessageBubble({ locale, message }: { locale: Locale; message: UIMessage }) {
+function MessageBubble({
+  canRate,
+  locale,
+  message,
+  onRate,
+  rating,
+}: {
+  canRate: boolean;
+  locale: Locale;
+  message: UIMessage;
+  onRate: (rating: Rating | null) => Promise<void>;
+  rating: Rating | null;
+}) {
+  const t = useTranslations("chat");
+  const [saving, setSaving] = useState(false);
+  const [failed, setFailed] = useState(false);
+  async function rate(value: Rating) {
+    setSaving(true);
+    setFailed(false);
+    try {
+      await onRate(value === rating ? null : value);
+    } catch {
+      setFailed(true);
+    } finally {
+      setSaving(false);
+    }
+  }
   const isUser = message.role === "user";
-  const hasText = message.parts.some((part) => isTextUIPart(part));
+  const textParts = message.parts.filter(isTextUIPart);
+  // Completed multi-step replies finish with the answer, after any progress updates.
+  const lastStep = message.parts.findLastIndex((part) => part.type === "step-start");
+  const finalText = message.parts.slice(lastStep + 1).filter(isTextUIPart);
+  const visibleText = !isUser && finalText.length ? finalText : textParts;
   const hasTools = message.parts.some((part) => isToolOrDynamicToolUIPart(part));
 
   return (
     <div className={cn("flex", isUser ? "justify-end" : "justify-start")}>
       <div
         className={cn(
-          "max-w-[88%] space-y-2",
+          "min-w-0 space-y-2",
           isUser
-            ? "rounded-lg bg-secondary px-4 py-3 text-secondary-foreground"
-            : "rounded-lg border bg-card px-4 py-3 text-card-foreground",
+            ? "max-w-[90%] rounded-lg bg-secondary px-3.5 py-2 text-secondary-foreground"
+            : "w-full text-foreground",
         )}
       >
-        {hasText ? (
+        {visibleText.length ? (
           <div className="space-y-2 text-sm leading-6">
-            {message.parts.map((part, index) =>
-              isTextUIPart(part) ? (
-                isUser ? (
-                  <p className="whitespace-pre-wrap" key={`${message.id}-text-${index}`}>
-                    {part.text}
-                  </p>
-                ) : (
-                  <ChatMarkdown key={`${message.id}-text-${index}`}>{part.text}</ChatMarkdown>
-                )
-              ) : null,
+            {visibleText.map((part, index) =>
+              isUser ? (
+                <p className="whitespace-pre-wrap" key={`${message.id}-text-${index}`}>
+                  {part.text}
+                </p>
+              ) : (
+                <ChatMarkdown key={`${message.id}-text-${index}`}>{part.text}</ChatMarkdown>
+              ),
             )}
           </div>
         ) : null}
@@ -564,9 +615,37 @@ function MessageBubble({ locale, message }: { locale: Locale; message: UIMessage
         {hasTools ? (
           <div className="space-y-2">
             {message.parts.map((part, index) =>
-              isToolOrDynamicToolUIPart(part) ? (
+              isToolOrDynamicToolUIPart(part) &&
+              !(
+                finalText.length &&
+                part.state === "output-available" &&
+                (part.output as ToolOutputShape | null)?.kind === "needs-input"
+              ) ? (
                 <ToolPart key={`${message.id}-tool-${index}`} locale={locale} part={part} />
               ) : null,
+            )}
+          </div>
+        ) : null}
+        {!isUser && canRate ? (
+          <div className="flex items-center gap-1 text-muted-foreground">
+            {(["up", "down"] as const).map((value) => (
+              <button
+                aria-label={t(value === "up" ? "helpful" : "unhelpful")}
+                aria-pressed={rating === value}
+                className="grid size-8 place-items-center rounded hover:bg-secondary aria-pressed:bg-secondary aria-pressed:text-foreground"
+                disabled={saving}
+                key={value}
+                onClick={() => void rate(value)}
+                title={t(value === "up" ? "helpful" : "unhelpful")}
+                type="button"
+              >
+                {value === "up" ? <ThumbsUp size={14} /> : <ThumbsDown size={14} />}
+              </button>
+            ))}
+            {failed && (
+              <span className="text-xs" role="alert">
+                {t("ratingFailed")}
+              </span>
             )}
           </div>
         ) : null}
@@ -614,6 +693,20 @@ export function ChatPanel({
   const [csvFile, setCsvFile] = useState<File | null>(null);
   const [historyLoaded, setHistoryLoaded] = useState(false);
   const [importBusy, setImportBusy] = useState(false);
+  const [threads, setThreads] = useState<ChatThread[] | null>(null);
+  const [threadId, setThreadId] = useState<string>();
+  const [threadError, setThreadError] = useState(false);
+  const [ratings, setRatings] = useState<Record<string, Rating | null>>({});
+  const [panelWidth, setPanelWidth] = useState<number | null>(null);
+  const activityAt = useRef(Date.now());
+  const [mentionQuery, setMentionQuery] = useState<{
+    end: number;
+    start: number;
+    text: string;
+  } | null>(null);
+  const [suggestions, setSuggestions] = useState<Array<Mention>>([]);
+  const [highlight, setHighlight] = useState(0);
+  const selectedMentions = useRef<Array<Mention>>([]);
   const fileInput = useRef<HTMLInputElement>(null);
   const backButton = useRef<HTMLButtonElement>(null);
   const closeButton = useRef<HTMLButtonElement>(null);
@@ -755,38 +848,153 @@ export function ChatPanel({
 
   const isBusy = !historyLoaded || status === "submitted" || status === "streaming" || importBusy;
 
-  useEffect(() => {
-    let active = true;
-    void fetch("/api/chat")
-      .then((response) => (response.ok ? response.json() : null))
-      .then(
-        (
-          data: {
-            activity?: Array<ChatActivity>;
-            available?: boolean;
-            messages?: Array<UIMessage>;
-          } | null,
-        ) => {
-          if (active && data?.available === false) {
-            setAvailable(false);
+  const currentLoad = useRef<symbol | null>(null);
+  const loadThread = useCallback(
+    async (choice?: string) => {
+      const request = Symbol();
+      currentLoad.current = request;
+      setHistoryLoaded(false);
+      setThreadError(false);
+      try {
+        let id = choice;
+        if (choice === "new") {
+          const created = await fetch("/api/chat", {
+            body: JSON.stringify({ action: "new" }),
+            headers: { "Content-Type": "application/json" },
+            method: "POST",
+          });
+          if (!created.ok) {
+            throw new Error();
           }
-          if (active && data?.activity) {
-            setActivity(data.activity);
-          }
-          if (active && data?.messages) {
-            setMessages(data.messages);
-          }
-        },
-      )
-      .finally(() => {
-        if (active) {
+          id = (await created.json()).threadId;
+        }
+        const response = await fetch(
+          id ? `/api/chat?threadId=${encodeURIComponent(id)}` : "/api/chat",
+        );
+        if (!response.ok) {
+          throw new Error();
+        }
+        const data = await response.json();
+        if (request !== currentLoad.current) {
+          return undefined;
+        }
+        setAvailable(data.available !== false);
+        setActivity(data.activity ?? []);
+        setMessages(data.messages ?? []);
+        setThreadId(data.threadId);
+        setThreads(null);
+        setRatings({});
+        clearError();
+        activityAt.current = choice ? Date.now() : Date.parse(data.updatedAt) || Date.now();
+        if (choice) {
+          setInput("");
+          setMentionQuery(null);
+          selectedMentions.current = [];
+        }
+        return data.threadId as string | undefined;
+      } catch {
+        if (request === currentLoad.current) {
+          setThreadError(true);
+        }
+        return undefined;
+      } finally {
+        if (request === currentLoad.current) {
           setHistoryLoaded(true);
         }
-      });
+      }
+    },
+    [setMessages, clearError],
+  );
+
+  useEffect(() => {
+    void loadThread();
     return () => {
-      active = false;
+      // Invalidate outstanding loads, including a conversation switch after mount.
+      currentLoad.current = null;
     };
-  }, [setMessages]);
+  }, [loadThread]);
+
+  useEffect(() => {
+    if (open && Date.now() - activityAt.current >= 86_400_000) {
+      activityAt.current = Date.now();
+      void loadThread();
+    }
+  }, [open, loadThread]);
+
+  async function showHistory() {
+    if (threads) {
+      setThreads(null);
+      return;
+    }
+    setHistoryLoaded(false);
+    setThreadError(false);
+    try {
+      const res = await fetch("/api/chat?history=1");
+      if (!res.ok) {
+        throw new Error();
+      }
+      setThreads((await res.json()).threads);
+    } catch {
+      setThreadError(true);
+    } finally {
+      setHistoryLoaded(true);
+    }
+  }
+
+  useEffect(() => {
+    setSuggestions([]);
+    setHighlight(0);
+    if (!mentionQuery) {
+      return;
+    }
+    const controller = new AbortController();
+    const timer = setTimeout(async () => {
+      try {
+        const res = await fetch(`/api/chat/mentions?q=${encodeURIComponent(mentionQuery.text)}`, {
+          signal: controller.signal,
+        });
+        if (res.ok && !controller.signal.aborted) {
+          const matches = await res.json();
+          if (!controller.signal.aborted) {
+            setSuggestions(matches);
+          }
+        }
+      } catch {
+        /* Typing can cancel an earlier search. */
+      }
+    }, 120);
+    return () => {
+      controller.abort();
+      clearTimeout(timer);
+    };
+  }, [mentionQuery]);
+
+  function chooseMention(item: Mention) {
+    if (!mentionQuery) {
+      return;
+    }
+    const text = `@${item.label} `;
+    setInput(input.slice(0, mentionQuery.start) + text + input.slice(mentionQuery.end));
+    selectedMentions.current = [...selectedMentions.current.filter((m) => m.id !== item.id), item];
+    const cursor = mentionQuery.start + text.length;
+    setMentionQuery(null);
+    requestAnimationFrame(() => {
+      inputRef.current?.focus();
+      inputRef.current?.setSelectionRange(cursor, cursor);
+    });
+  }
+
+  async function rateReply(id: string, rating: Rating | null) {
+    const res = await fetch("/api/chat", {
+      body: JSON.stringify({ messageId: id, rating }),
+      headers: { "Content-Type": "application/json" },
+      method: "PATCH",
+    });
+    if (!res.ok) {
+      throw new Error();
+    }
+    setRatings((previous) => ({ ...previous, [id]: rating }));
+  }
 
   useEffect(() => {
     const latestToolMessage = [...messages]
@@ -820,6 +1028,16 @@ export function ChatPanel({
       return;
     }
 
+    let target = threadId;
+    if ((!open && Date.now() - activityAt.current >= 86_400_000) || (threadError && !threadId)) {
+      target = await loadThread();
+      if (!target) {
+        return;
+      }
+    }
+    activityAt.current = Date.now();
+    setThreads(null);
+    setMentionQuery(null);
     clearError();
     if (!open && isDocked(mode)) {
       // Stay on the invoice: put the keyboard away so the draft is seen landing.
@@ -834,9 +1052,18 @@ export function ChatPanel({
       // Clear at once so the sent words do not sit in the composer while Nota works.
       lastSent.current = value;
       setInput("");
+      const mentions = selectedMentions.current
+        .filter((m) => trimmedValue.includes(`@${m.label}`))
+        .map(({ id, kind, label }) => ({ id, kind, label }));
       await sendMessage(
         { text: trimmedValue },
-        { body: { pageContext: { entityId, route: pathname } } },
+        {
+          body: {
+            mentions,
+            pageContext: { entityId, route: pathname },
+            threadId: target,
+          },
+        },
       );
     } catch {
       setInput((current) => current || value);
@@ -886,7 +1113,11 @@ export function ChatPanel({
         onSubmit={handleSubmit}
       >
         <label
-          className={cn("nota-label block px-2 text-foreground", dock && "max-lg:sr-only")}
+          className={cn(
+            "nota-label block px-2 text-foreground",
+            (!homePrompt || dock) && "max-lg:sr-only",
+            !homePrompt && "sr-only",
+          )}
           htmlFor="nota-chat-input"
         >
           {homePrompt ? (prompt?.label ?? t("composer.whatDidYouDo")) : t("composer.sayWhatYouDid")}
@@ -904,8 +1135,45 @@ export function ChatPanel({
           )}
           data-testid="chat-panel-input"
           id="nota-chat-input"
-          onChange={(event) => setInput(event.target.value)}
+          onChange={(event) => {
+            const { selectionStart, value } = event.target;
+            setInput(value);
+            const match = value.slice(0, selectionStart).match(/(?:^|\s)@([^@\n]{0,64})$/);
+            setMentionQuery(
+              match &&
+                !selectedMentions.current.some((item) => match[1].startsWith(item.label + " "))
+                ? {
+                    end: selectionStart,
+                    start: selectionStart - match[1].length - 1,
+                    text: match[1],
+                  }
+                : null,
+            );
+          }}
           onKeyDown={(event) => {
+            if (mentionQuery && event.key === "Escape") {
+              event.preventDefault();
+              event.stopPropagation();
+              setMentionQuery(null);
+              return;
+            }
+            if (
+              mentionQuery &&
+              suggestions.length &&
+              ["ArrowDown", "ArrowUp", "Enter"].includes(event.key) &&
+              !event.shiftKey
+            ) {
+              event.preventDefault();
+              if (event.key === "Enter") {
+                chooseMention(suggestions[highlight]);
+              } else {
+                setHighlight(
+                  (highlight + (event.key === "ArrowDown" ? 1 : suggestions.length - 1)) %
+                    suggestions.length,
+                );
+              }
+              return;
+            }
             if (event.key === "Enter" && !event.shiftKey && input.trim() && !isBusy) {
               event.preventDefault();
               void submitInput(input);
@@ -920,6 +1188,32 @@ export function ChatPanel({
           rows={3}
           value={input}
         />
+        {mentionQuery && suggestions.length > 0 && (
+          <div
+            aria-label={t("mentions")}
+            className="col-span-full max-h-40 overflow-y-auto border-y"
+            role="group"
+          >
+            {suggestions.map((item, index) => (
+              <button
+                className={cn(
+                  "flex w-full items-baseline gap-2 px-2 py-1.5 text-left text-sm",
+                  index === highlight && "bg-secondary",
+                )}
+                key={item.id}
+                onClick={() => chooseMention(item)}
+                onMouseDown={(e) => e.preventDefault()}
+                type="button"
+              >
+                <span className="text-xs text-muted-foreground">{t(`entity.${item.kind}`)}</span>
+                <span className="min-w-0 flex-1 truncate">{item.label}</span>
+                <span className="max-w-[40%] truncate text-xs text-muted-foreground">
+                  {item.detail}
+                </span>
+              </button>
+            ))}
+          </div>
+        )}
         {homePrompt ? (
           <div className={cn("mb-3 flex flex-wrap gap-1.5 px-2", dock && "max-lg:hidden")}>
             {prompts.map((prompt) => (
@@ -971,7 +1265,7 @@ export function ChatPanel({
               dock ? "lg:inline" : "sm:inline",
             )}
           >
-            {homePrompt ? t("composer.enterToSend") : t("composer.shortcut")}
+            {homePrompt ? t("composer.enterToSend") : null}
           </span>
           <Button
             className={cn(dock && "max-lg:h-12 max-lg:px-4")}
@@ -985,6 +1279,14 @@ export function ChatPanel({
         </div>
       </form>
     );
+  }
+
+  function resizePanel(width: number) {
+    const next = Math.round(Math.max(340, Math.min(width, window.innerWidth * 0.55, 760)));
+    dialog.current
+      ?.closest<HTMLElement>(".app-shell")
+      ?.style.setProperty("--nota-chat-width", `clamp(340px, ${next}px, 55vw)`);
+    setPanelWidth(next);
   }
 
   const header = (
@@ -1008,40 +1310,106 @@ export function ChatPanel({
             </p>
           </div>
         )}
-        {mode === "panel" ? (
+        <div className="ml-auto flex items-center gap-1">
           <Button
-            aria-label={t("closeChat")}
-            onClick={closePanel}
-            ref={closeButton}
+            aria-label={t("history")}
+            aria-pressed={threads !== null}
+            disabled={isBusy || Boolean(csvFile)}
+            onClick={() => void showHistory()}
             size="icon-sm"
-            type="button"
-            variant="outline"
+            title={t("history")}
+            variant="ghost"
           >
-            <ArrowRight />
+            <History />
           </Button>
-        ) : null}
+          <Button
+            aria-label={t("newChat")}
+            disabled={isBusy || Boolean(csvFile)}
+            onClick={() => void loadThread("new")}
+            size="icon-sm"
+            title={t("newChat")}
+            variant="ghost"
+          >
+            <SquarePen />
+          </Button>
+          {mode === "panel" ? (
+            <Button
+              aria-label={t("closeChat")}
+              onClick={closePanel}
+              ref={closeButton}
+              size="icon-sm"
+              type="button"
+              variant="outline"
+            >
+              <ArrowRight />
+            </Button>
+          ) : null}
+        </div>
       </header>
+      {threadError && (
+        <button
+          className="px-4 py-2 text-left text-sm text-destructive"
+          onClick={() => void loadThread()}
+          type="button"
+        >
+          {t("loadFailed")}
+        </button>
+      )}
     </>
   );
 
   function renderMessages(hidden = false) {
+    if (threads) {
+      return (
+        <section
+          aria-label={t("history")}
+          className="min-h-0 flex-1 overflow-auto px-4 py-4"
+          hidden={hidden}
+        >
+          <h2 className="mb-3 text-sm font-semibold">{t("history")}</h2>
+          {threads.length === 0 && (
+            <p className="text-sm text-muted-foreground">{t("emptyHistory")}</p>
+          )}
+          {threads.map((thread) => (
+            <button
+              className="block w-full border-b py-3 text-left hover:bg-secondary"
+              disabled={isBusy}
+              key={thread.id}
+              onClick={() => void loadThread(thread.id)}
+            >
+              <span className="block truncate text-sm">{thread.title || t("conversation")}</span>
+              <time className="text-xs text-muted-foreground" dateTime={thread.updatedAt}>
+                {new Date(thread.updatedAt).toLocaleDateString(locale, {
+                  day: "numeric",
+                  month: "short",
+                  year: "numeric",
+                })}
+              </time>
+            </button>
+          ))}
+        </section>
+      );
+    }
     return (
       <div
-        className="min-h-0 flex-1 space-y-4 overflow-x-hidden overflow-y-auto overscroll-contain px-4 py-5 [overflow-wrap:anywhere]"
+        className="min-h-0 flex-1 space-y-5 overflow-x-hidden overflow-y-auto overscroll-contain px-4 py-5 [overflow-wrap:anywhere]"
         hidden={hidden}
         ref={messagesContainer}
       >
         {activity.length > 0 ? (
-          <ol aria-label={t("recentActivity")} className="space-y-2">
-            {activity.map((item) => (
-              <li className="nota-label text-muted-foreground" key={item.id}>
-                {formatActivity(item, t, tActivity)}
-              </li>
-            ))}
-          </ol>
+          <details className="text-xs text-muted-foreground">
+            <summary className="cursor-pointer">{t("recentActivity")}</summary>
+            <ol aria-label={t("recentActivity")} className="space-y-2 py-2">
+              {activity.map((item) => (
+                <li className="nota-label text-muted-foreground" key={item.id}>
+                  {formatActivity(item, t, tActivity)}
+                </li>
+              ))}
+            </ol>
+          </details>
         ) : null}
         {messages.length === 0 ? (
-          <div className="space-y-4 rounded-md border border-dashed bg-background p-4 text-sm text-muted-foreground">
+          <div className="space-y-4 text-sm text-muted-foreground">
             <p className="font-medium text-foreground">{t("putToWork")}</p>
             <p className="font-voice text-base">{t("clientsInvoices")}</p>
             <div className="flex flex-wrap gap-1.5">
@@ -1060,7 +1428,18 @@ export function ChatPanel({
           </div>
         ) : (
           messages.map((message) => (
-            <MessageBubble key={message.id} locale={locale} message={message} />
+            <MessageBubble
+              canRate={!isBusy && !message.id.startsWith("import-")}
+              key={message.id}
+              locale={locale}
+              message={message}
+              onRate={(value) => rateReply(message.id, value)}
+              rating={
+                Object.hasOwn(ratings, message.id)
+                  ? ratings[message.id]
+                  : ((message.metadata as { rating?: Rating } | undefined)?.rating ?? null)
+              }
+            />
           ))
         )}
 
@@ -1079,7 +1458,7 @@ export function ChatPanel({
                   role: "user",
                 },
                 {
-                  id: crypto.randomUUID(),
+                  id: `import-${crypto.randomUUID()}`,
                   parts: [
                     {
                       text: t("imported", {
@@ -1118,7 +1497,7 @@ export function ChatPanel({
     <>
       {header}
       {renderMessages()}
-      {csvFile ? null : renderComposer()}
+      {csvFile || threads ? null : renderComposer()}
     </>
   );
 
@@ -1290,7 +1669,7 @@ export function ChatPanel({
       </button>
       <dialog
         aria-label={t("chatLabel")}
-        className="fixed inset-x-0 top-[var(--chat-viewport-top,0px)] z-50 m-0 h-[var(--chat-viewport-height,100dvh)] max-h-none w-screen max-w-none flex-col overflow-hidden border bg-card p-0 text-foreground backdrop:bg-background/70 open:flex sm:inset-y-0 sm:right-0 sm:left-auto sm:h-dvh sm:w-[340px]"
+        className="fixed inset-x-0 top-[var(--chat-viewport-top,0px)] z-50 m-0 h-[var(--chat-viewport-height,100dvh)] max-h-none w-screen max-w-none flex-col overflow-hidden border bg-card p-0 text-foreground backdrop:bg-background/70 open:flex sm:inset-y-0 sm:right-0 sm:left-auto sm:h-dvh sm:w-[var(--nota-chat-width,clamp(360px,32vw,600px))]"
         onCancel={(event) => {
           event.preventDefault();
           closePanel();
@@ -1310,6 +1689,38 @@ export function ChatPanel({
         }}
         ref={dialog}
       >
+        <div
+          aria-label={t("resize")}
+          aria-orientation="vertical"
+          aria-valuemax={760}
+          aria-valuemin={340}
+          aria-valuenow={panelWidth ?? 400}
+          className="absolute inset-y-0 left-0 z-10 hidden w-1.5 cursor-col-resize touch-none hover:bg-border focus-visible:bg-border xl:block"
+          onKeyDown={(e) => {
+            if (e.key === "ArrowLeft" || e.key === "ArrowRight") {
+              e.preventDefault();
+              resizePanel(
+                (dialog.current?.offsetWidth ?? 400) + (e.key === "ArrowLeft" ? 32 : -32),
+              );
+            }
+          }}
+          onPointerDown={(e) => {
+            e.preventDefault();
+            e.currentTarget.setPointerCapture(e.pointerId);
+          }}
+          onPointerMove={(e) => {
+            if (e.currentTarget.hasPointerCapture(e.pointerId)) {
+              resizePanel(window.innerWidth - e.clientX);
+            }
+          }}
+          onPointerUp={(e) => {
+            if (e.currentTarget.hasPointerCapture(e.pointerId)) {
+              e.currentTarget.releasePointerCapture(e.pointerId);
+            }
+          }}
+          role="separator"
+          tabIndex={0}
+        />
         {conversation}
       </dialog>
     </>

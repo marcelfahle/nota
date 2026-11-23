@@ -1268,6 +1268,16 @@
     }
   },
   "chat": {
+    "newChat": "Neuer Chat",
+    "history": "Chatverlauf",
+    "emptyHistory": "Hier erscheinen deine Unterhaltungen.",
+    "helpful": "Hilfreiche Antwort",
+    "unhelpful": "Nicht hilfreiche Antwort",
+    "ratingFailed": "Bewertung konnte nicht gespeichert werden. Versuche es erneut.",
+    "loadFailed": "Chat konnte nicht geladen werden. Erneut versuchen",
+    "resize": "Chatbreite ändern",
+    "mentions": "Eintrag aus dem Workspace erwähnen",
+    "entity": { "bank": "Konto", "client": "Kunde", "invoice": "Rechnung" },
     "starters": {
       "draft": "Rechnungsentwurf anlegen",
       "owes": "Wer schuldet mir noch Geld?",
@@ -1334,7 +1344,7 @@
       "sayWhatYouDid": "Sag, was du gemacht hast",
       "askNota": "Nota fragen",
       "placeholderHome": "Oxide 46 Stunden Beratung im September berechnen, gleicher Satz wie beim letzten Mal",
-      "placeholderPanel": "Abrechnen, erinnern, anbieten oder fragen…",
+      "placeholderPanel": "Frag Nota oder tippe @ für eine Erwähnung…",
       "csvLabel": "Kunden-CSV-Datei",
       "attachCsv": "Kunden-CSV anhängen",
       "enterToSend": "Enter zum Senden",

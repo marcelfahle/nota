@@ -211,6 +211,13 @@
       "when": 1795441073983,
       "tag": "0029_invoice-payment-account",
       "breakpoints": true
+    },
+    {
+      "idx": 30,
+      "version": "7",
+      "when": 1795441239087,
+      "tag": "0030_chat-reply-rating",
+      "breakpoints": true
     }
   ]
 }
