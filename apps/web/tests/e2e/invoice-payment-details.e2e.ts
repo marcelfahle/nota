@@ -42,6 +42,12 @@ test("switches a draft's payment details and clears its old bank note", async ({
   ).toBeVisible();
   await expect(page.getByText("Default account instructions", { exact: true })).toHaveCount(0);
   await expect(page.getByText("Old payment note", { exact: true })).toHaveCount(0);
+  await page.getByTestId("invoice-send").click();
+  const emailBody = page
+    .frameLocator('[data-testid="invoice-send-preview"] iframe')
+    .locator("body");
+  await expect(emailBody).toContainText("Second account instructions");
+  await expect(emailBody).not.toContainText("Default account instructions");
   await page.goto(invoicePath + "/edit");
   await expect(page.locator("#notes")).toHaveValue("");
   await expect(page.getByLabel("Payment details")).toHaveValue(selected.id);

@@ -1,9 +1,10 @@
 import { and, desc, eq } from "drizzle-orm";
 
 import { db } from "@/lib/db";
-import { activityLog, bankAccounts, clients, invoices, orgs } from "@/lib/db/schema";
+import { activityLog, clients, invoices, orgs } from "@/lib/db/schema";
 import { attachesXRechnung } from "@/lib/e-invoice-delivery";
 import { complianceInput, validateForXRechnung } from "@/lib/invoice-compliance";
+import { invoicePaymentAccount } from "@/lib/invoice-document";
 import { getInvoiceDetail } from "@/lib/invoice-service";
 import { displayedBuyer, frozenSnapshot } from "@/lib/issued-snapshot";
 
@@ -62,27 +63,12 @@ export async function getPublicInvoice(token: string, recordView = false) {
     return null;
   }
 
-  let bankAccount = null;
-  if (context.client.bankAccountId) {
-    [bankAccount] = await db
-      .select()
-      .from(bankAccounts)
-      .where(
-        and(
-          eq(bankAccounts.id, context.client.bankAccountId),
-          eq(bankAccounts.orgId, identity.orgId),
-        ),
-      )
-      .limit(1);
-  }
-
-  if (!bankAccount) {
-    [bankAccount] = await db
-      .select()
-      .from(bankAccounts)
-      .where(and(eq(bankAccounts.orgId, identity.orgId), eq(bankAccounts.isDefault, true)))
-      .limit(1);
-  }
+  const bankAccount = await invoicePaymentAccount(
+    db,
+    identity.orgId,
+    invoice,
+    context.client.bankAccountId,
+  );
 
   const [original] = invoice.creditsInvoiceId
     ? await db
@@ -98,9 +84,7 @@ export async function getPublicInvoice(token: string, recordView = false) {
   const frozen = frozenSnapshot(invoice);
   return {
     ...invoice,
-    bankAccount: frozen
-      ? frozen.bank && { ...(bankAccount ?? {}), ...frozen.bank }
-      : (bankAccount ?? null),
+    bankAccount,
     client: displayedBuyer(invoice, context.client),
     organization: frozen
       ? {

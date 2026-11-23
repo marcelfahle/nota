@@ -4,7 +4,7 @@ import { db } from "@/lib/db";
 import { bankAccounts, clients, invoices, lineItems, orgs } from "@/lib/db/schema";
 import { complianceInput } from "@/lib/invoice-compliance";
 import { buildInvoiceFilename } from "@/lib/invoice-filename";
-import { buildIssuedSnapshot, complianceFromSnapshot } from "@/lib/issued-snapshot";
+import { buildIssuedSnapshot, complianceFromSnapshot, frozenSnapshot } from "@/lib/issued-snapshot";
 import { invoiceTaxIdentifier } from "@/lib/tax-identifier";
 
 export type InvoiceDocumentOrg = Pick<
@@ -73,6 +73,18 @@ export async function loadInvoiceBankAccount(
   return fallback ?? null;
 }
 
+export async function invoicePaymentAccount(
+  database: InvoiceDocumentDatabase,
+  orgId: string,
+  invoice: Pick<typeof invoices.$inferSelect, "bankAccountId" | "status" | "issuedSnapshot">,
+  clientAccountId: string | null,
+) {
+  const frozen = frozenSnapshot(invoice);
+  return frozen
+    ? frozen.bank
+    : loadInvoiceBankAccount(database, orgId, invoice.bankAccountId ?? clientAccountId);
+}
+
 export class InvoiceDocumentError extends Error {
   readonly status = 404;
 
@@ -129,10 +141,8 @@ export async function loadInvoiceDocument(
         .limit(1)
     : [];
 
-  const frozen = invoice.status !== "draft" ? invoice.issuedSnapshot : null;
-  const bankAccount = frozen
-    ? null
-    : await loadInvoiceBankAccount(database, org.id, invoice.bankAccountId ?? client.bankAccountId);
+  const frozen = frozenSnapshot(invoice);
+  const bankAccount = await invoicePaymentAccount(database, org.id, invoice, client.bankAccountId);
   const snapshot =
     frozen ??
     buildIssuedSnapshot({

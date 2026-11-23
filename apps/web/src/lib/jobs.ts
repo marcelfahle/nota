@@ -6,22 +6,17 @@ import { PaymentReceivedEmail, paymentReceivedSubject } from "@/emails/payment-r
 import { APP_NAME } from "@/lib/app-brand";
 import { getPdfLogoSrc } from "@/lib/branding";
 import { db } from "@/lib/db";
-import {
-  activityLog,
-  bankAccounts,
-  clients,
-  invoices,
-  jobs,
-  orgs,
-  proposals,
-  users,
-} from "@/lib/db/schema";
+import { activityLog, clients, invoices, jobs, orgs, proposals, users } from "@/lib/db/schema";
 import { type InvoiceAttachment, parseInvoiceAttachments } from "@/lib/e-invoice-delivery";
 import { sendEmail } from "@/lib/email";
 import { getAppEnv, getEmailEnv } from "@/lib/env";
 import { documentLocaleOf, getTranslator, isAppLocale, type AppLocale } from "@/lib/i18n";
 import { fitImage, imageSizeFromDataUri } from "@/lib/image-size";
-import { type InvoiceDocumentOrg, loadInvoiceDocument } from "@/lib/invoice-document";
+import {
+  type InvoiceDocumentOrg,
+  invoicePaymentAccount,
+  loadInvoiceDocument,
+} from "@/lib/invoice-document";
 import { loadInvoicePdf, loadInvoiceXml } from "@/lib/invoice-documents";
 import { invoiceEmailEnvelope, type PersonalSend } from "@/lib/invoice-email";
 import { buildInvoiceFilename } from "@/lib/invoice-filename";
@@ -140,29 +135,15 @@ async function getInvoiceEmailContext(invoiceId: string) {
     throw new Error("Organization not found");
   }
 
-  let bankDetails: string | null = null;
-  if (client.bankAccountId) {
-    const [assignedBankAccount] = await db
-      .select({ details: bankAccounts.details })
-      .from(bankAccounts)
-      .where(
-        and(eq(bankAccounts.id, client.bankAccountId), eq(bankAccounts.orgId, organization.id)),
-      )
-      .limit(1);
-    bankDetails = assignedBankAccount?.details ?? null;
-  }
-
-  if (!bankDetails) {
-    const [defaultBankAccount] = await db
-      .select({ details: bankAccounts.details })
-      .from(bankAccounts)
-      .where(and(eq(bankAccounts.orgId, organization.id), eq(bankAccounts.isDefault, true)))
-      .limit(1);
-    bankDetails = defaultBankAccount?.details ?? null;
-  }
+  const bankAccount = await invoicePaymentAccount(
+    db,
+    organization.id,
+    invoice,
+    client.bankAccountId,
+  );
 
   return {
-    bankDetails,
+    bankDetails: bankAccount?.details ?? null,
     client,
     invoice,
     logoSrc: await getPdfLogoSrc(organization.logoUrl),
